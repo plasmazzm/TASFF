@@ -12,7 +12,7 @@ if not game:IsLoaded() then game.Loaded:Wait() end
 -- Method B: Load from executor filesystem (if executor supports readfile).
 
 local USE_HTTP   = true      -- true = Method A (HttpGet), false = Method B (readfile)
-local BASE_URL   = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/"
+local BASE_URL   = "https://raw.githubusercontent.com/plasmazzm/TASFF/refs/heads/main/"
 -- ^ Replace with your actual GitHub raw base URL, e.g.:
 -- "https://raw.githubusercontent.com/tasf/TASFF/main/"
 -- Each file will be fetched as BASE_URL .. "TASFF_State.lua" etc.

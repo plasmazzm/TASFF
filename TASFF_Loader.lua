@@ -134,26 +134,43 @@ local function LoadModule(filename)
             return game:HttpGet(url)
         end)
         if not ok or not result or result == "" then
-            error("[TASFF Loader] Failed to fetch " .. filename .. " from:\n" .. url, 2)
+            error("[TASFF Loader] Failed to fetch " .. filename .. ". Check BASE_URL and that the repo is Public.")
         end
         source = result
     else
         -- Method B: load from executor filesystem
         if not isfile(filename) then
-            error("[TASFF Loader] File not found: " .. filename .. "\nPlace all TASFF .lua files in your executor's workspace folder.", 2)
+            error("[TASFF Loader] File not found: " .. filename .. " — place all TASFF .lua files in your executor workspace folder.")
         end
         source = readfile(filename)
     end
 
-    local fn, err = loadstring(source, "=" .. filename)
-    if not fn then
-        error("[TASFF Loader] Syntax error in " .. filename .. ":\n" .. tostring(err), 2)
+    -- Strip UTF-8 BOM (\xEF\xBB\xBF) — common when files are saved on Windows.
+    -- If present it causes "Expected ident" on line 1 since Lua sees garbage bytes first.
+    if source:sub(1, 3) == "\239\187\191" then
+        source = source:sub(4)
+        warn("[TASFF Loader] Stripped UTF-8 BOM from " .. filename)
     end
+
+    -- Guard: if the URL was wrong we might have received an HTML error page.
+    local peek = source:sub(1, 20):lower()
+    if peek:find("<!doctype") or peek:find("<html") or peek:find("404") then
+        error("[TASFF Loader] " .. filename .. " returned an HTML/error page. Check BASE_URL is correct and the repo is Public.")
+    end
+
+    -- Note: second arg (chunk name) intentionally omitted — some executors
+    -- mishandle it and append the level number to error messages.
+    local fn, compileErr = loadstring(source)
+    if not fn then
+        error("[TASFF Loader] Compile error in " .. filename .. ":\n" .. tostring(compileErr))
+    end
+
     local ok2, runErr = pcall(fn)
     if not ok2 then
-        error("[TASFF Loader] Runtime error in " .. filename .. ":\n" .. tostring(runErr), 2)
+        error("[TASFF Loader] Runtime error in " .. filename .. ":\n" .. tostring(runErr))
     end
-    print("[TASFF Loader] ✓ " .. filename .. " loaded.")
+
+    print("[TASFF Loader] OK: " .. filename)
 end
 
 -- // ── Load Modules in Order ───────────────────────────────────── // --

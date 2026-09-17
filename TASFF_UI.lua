@@ -1017,6 +1017,13 @@ UpdateLogTab:CreateLabel("- Re-structured the rendering loop to ensure visual ov
 UpdateLogTab:CreateLabel("- Added UTF-8 BOM stripping and HTML error detection to the module loader")
 UpdateLogTab:CreateLabel("- Corrected ConfigurationSaving folder path to match current version")
 
+UpdateLogTab:CreateSection("Version 1.5.5")
+UpdateLogTab:CreateLabel("- Version bump to V1.5.5 — hardening, bug fixes, and UI polish pass")
+UpdateLogTab:CreateLabel("- Fixed TargetFirstSeenTimestamps cleanup using pcall-guarded IsModelValid to prevent destroyed-model errors")
+UpdateLogTab:CreateLabel("- Added independent Snapline & OOF Arrow color control to the Theming tab")
+UpdateLogTab:CreateLabel("- Branded all notification titles under TASFF namespace (removed bare Error titles)")
+UpdateLogTab:CreateLabel("- Corrected ConfigurationSaving folder path to match current version")
+
 UpdateLogTab:CreateSection("Version 1.5.0")
 UpdateLogTab:CreateLabel("- Completely overhauled the UI layout into professional, structured categories (HUD, Tactical Overlays, etc.)")
 UpdateLogTab:CreateLabel("- Fixed a critical metamethod inversion that broke Silent Aim for native weapons and ruined wallchecks")

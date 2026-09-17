@@ -737,7 +737,7 @@ PresetsTab:CreateInput({
 
 local CustomizationTab = Window:CreateTab("Theming", "brush")
 
-CustomizationTab:CreateSection("Overlay Color Engine")
+CustomizationTab:CreateSection("Preset Colors")
 CustomizationTab:CreateParagraph({
     Title   = "Visual Synchronization",
     Content = "Select unified color profiles for your visual overlays. These settings apply instantly across all active geometric elements on your screen."

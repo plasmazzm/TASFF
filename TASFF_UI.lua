@@ -232,7 +232,7 @@ VisualTab:CreateParagraph({
     Content = "Focus Mode isolates visual clutter by only drawing ESP on Priority Targets. Stream-Proof Rendering forces tags to bypass capture software like OBS."
 })
 VisualTab:CreateDropdown({Name = "ESP Target Mode", Options = {"Single", "Multiple", "All"}, CurrentOption = {S.VisualMode}, Flag = "VisualMode", Callback = function(v)
-    S.VisualMode = v
+    S.VisualMode = type(v) == "table" and v[1] or v
     if S.ClearVisuals then S.ClearVisuals() end
 end})
 VisualTab:CreateToggle({Name = "Render Player ESP", CurrentValue = S.UseHighlight, Flag = "UseHighlight", Callback = function(v) S.UseHighlight = v end})
@@ -290,7 +290,7 @@ VisualTab:CreateToggle({Name = "Render Vector Crosshair", CurrentValue = S.Enabl
     if not v and S.ClearCrosshair then S.ClearCrosshair() end
 end})
 VisualTab:CreateDropdown({Name = "Vector Crosshair Style", Options = {"Plus", "Square", "Circle"}, CurrentOption = {S.CrosshairStyle}, Flag = "CrossStyle", Callback = function(v)
-    S.CrosshairStyle = v
+    S.CrosshairStyle = type(v) == "table" and v[1] or v
     if S.ClearCrosshair then S.ClearCrosshair() end
 end})
 VisualTab:CreateSlider({Name = "Vector Crosshair Size", Range = {2, 50}, Increment = 1, CurrentValue = S.CrosshairSize, Flag = "CrossSize", Callback = function(v) S.CrosshairSize = v end})
@@ -922,9 +922,8 @@ MiscTab:CreateButton({
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
-
 UpdateLogTab:CreateSection("Version 2.0.0 (Current Release)")
-UpdateLogTab:CreateLabel("- Version bump to V2.0.0 — modular refactor across 4 files (State/Core/UI/Loader)")
+UpdateLogTab:CreateLabel("- Version bump to V2.0.0 � modular refactor across 4 files (State/Core/UI/Loader)")
 UpdateLogTab:CreateLabel("- Resolved the Lua 200-local engine limit via _G.TASFF_State shared module pattern")
 UpdateLogTab:CreateLabel("- Restored the original TASFF black-and-red UI theme with complete monolith feature parity")
 UpdateLogTab:CreateLabel("- Completely decoupled ESP rendering from heavy targeting math for butter-smooth 60+ FPS visuals")
@@ -935,15 +934,6 @@ UpdateLogTab:CreateLabel("- Added Fine Control Color Pickers for precise Dynamic
 UpdateLogTab:CreateLabel("- Frame-scope scalar caching in render loop for reduced overhead")
 UpdateLogTab:CreateLabel("- Combined CharacterAdded handler (threat hook + tool observer in one connection)")
 UpdateLogTab:CreateLabel("- Re-structured the rendering loop to ensure visual overlays persist accurately on dropped frames")
-UpdateLogTab:CreateLabel("- Added UTF-8 BOM stripping and HTML error detection to the module loader")
-UpdateLogTab:CreateLabel("- Corrected ConfigurationSaving folder path to match current version")
-
-UpdateLogTab:CreateSection("Version 1.5.5")
-UpdateLogTab:CreateLabel("- Version bump to V1.5.5 â€” modular refactor across 4 files (State/Core/UI/Loader)")
-UpdateLogTab:CreateLabel("- Resolved the Lua 200-local engine limit via _G.TASFF_State shared module pattern")
-UpdateLogTab:CreateLabel("- Multi-hop penetrative wallcheck (up to 15 hops) for glass/decal penetration")
-UpdateLogTab:CreateLabel("- Frame-scope scalar caching in render loop for reduced overhead")
-UpdateLogTab:CreateLabel("- Combined CharacterAdded handler (threat hook + tool observer in one connection)")
 UpdateLogTab:CreateLabel("- Added UTF-8 BOM stripping and HTML error detection to the module loader")
 UpdateLogTab:CreateLabel("- Corrected ConfigurationSaving folder path to match current version")
 

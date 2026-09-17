@@ -193,7 +193,11 @@ MainTab:CreateDropdown({
     Options       = {"Head", "HumanoidRootPart", "Torso", "Visible On Screen"},
     CurrentOption = {S.TargetPart},
     Flag          = "TargetPart",
-    Callback      = function(v) S.TargetPart = v[1]; S.ActivePartName = v[1] end
+        Callback      = function(v)
+        local part = DropdownValue(v) or "Head"
+        S.TargetPart = part
+        S.ActivePartName = (part ~= "Visible On Screen") and part or "Head"
+    end
 })
 MainTab:CreateToggle({Name = "Randomize Hitboxes (Legit Variance)", CurrentValue = S.RandomizeHitboxEnabled, Flag = "RandomizeHitbox", Callback = function(v)
     S.RandomizeHitboxEnabled = v

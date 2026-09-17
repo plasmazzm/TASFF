@@ -1267,7 +1267,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local myRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
             local myPos  = myRoot and myRoot.Position or Vector3.new(0, 0, 0)
 
-            for _, t in ipairs(VisualList) do
+            for _, t in ipairs(S.LastVisualList) do
                 local isPriority = table.find(PriorityPlayers, t.Name) ~= nil
                 local isNemesis  = NemesisEnabled and NemesisMemory[t.Name] ~= nil
                 local inFocus    = not FocusMode or isPriority

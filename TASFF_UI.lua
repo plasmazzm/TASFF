@@ -171,9 +171,21 @@ MainTab:CreateToggle({Name = "Auto ADS (Automatic Scope)", CurrentValue = S.Auto
     S.AutoADSEnabled = v
     if not v and S.SetADSState then S.SetADSState(false) end
 end})
-MainTab:CreateKeybind({Name = "Auto ADS Input Key", CurrentKeybind = S.AutoADSKeybind or "MouseButton2", Flag = "AutoADSKey", Callback = function(key)
-    S.AutoADSKeybind = key
-end})
+MainTab:CreateDropdown({
+    Name          = "Auto ADS Input Key",
+    Options       = {
+        "MouseButton2", "MouseButton1",
+        "Q", "E", "F", "C", "X", "Z",
+        "LeftControl", "LeftShift", "LeftAlt",
+        "RightControl", "RightShift"
+    },
+    CurrentOption = {S.AutoADSKeybind or "MouseButton2"},
+    Flag          = "AutoADSKey",
+    Callback      = function(v)
+        local key = DropdownValue(v)
+        if key and key ~= "" then S.AutoADSKeybind = key end
+    end
+})
 
 MainTab:CreateSection("Target Selection & Sorting")
 MainTab:CreateDropdown({

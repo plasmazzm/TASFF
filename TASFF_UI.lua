@@ -635,13 +635,54 @@ PresetDropdownRef = PresetsTab:CreateDropdown({
     Callback      = function(v) SelectedPresetToManage = type(v) == "table" and v[1] or v end
 })
 
+local STO_FLAG = {
+    MasterEnabled = "MasterSwitch", TargetingEnabled = "TargetSystemToggle", Mode = "AimMethod",
+    AimbotKeybind = "AimbotKeybind", TargetPart = "TargetPart", PriorityMode = "PriorityMode",
+    VitalityMode = "VitalityMode", TargetNearCenter = "TargetNearCenter", Smoothness = "SmoothSpeed",
+    PredictionAmount = "PredIntense", SilentAimEnabled = "SilentAimEnabled", DynamicRecoilEnabled = "DynamicRecoil",
+    RandomizeHitboxEnabled = "RandomizeHitbox", TargetSwitchDelayEnabled = "TargetSwitchDelay", SwitchDelayMs = "SwitchDelayMs",
+    GracePeriodEnabled = "EnableGracePeriod", GracePeriodMs = "GracePeriodMs", AimbotRenderDistance = "AimbotRenderDist",
+    StickyAimEnabled = "StickyAim", AutoADSEnabled = "AutoADS", VisualMode = "VisualMode", UseHighlight = "UseHighlight",
+    UseNPCHighlight = "UseNPCHighlight", FocusMode = "FocusMode", StreamProofESP = "StreamProofESP",
+    VisibilityColorsEnabled = "VisibilityColorsEnabled", ESPRenderDistance = "ESPRenderDist", ChamsEnabled = "EnableChamsMode",
+    ChamsOpacity = "ChamsOpacity", BoxModeEnabled = "EnableBoxMode", SkeletonModeEnabled = "EnableSkeletonMode",
+    SnaplinesEnabled = "SnaplinesEnabled", SnaplineOrigin = "SnaplineOrigin", OOFArrowsEnabled = "OOFArrowsEnabled",
+    OOFArrowRadius = "OOFArrowRadius", UseInfoTag = "UseInfoTag", UseNPCInfoTag = "UseNPCInfoTag", ShowDisplayName = "ShowDisplay",
+    ShowToolCheck = "UseToolCheck", ShowFOV = "ShowFOV", InvisibleFOV = "InvisibleFOV", FOVSize = "FOVSize",
+    AimReferenceMode = "AimReferenceMode", EnableCrosshair = "UseCrosshair", CrosshairStyle = "CrossStyle",
+    CrosshairSize = "CrossSize", ManualCalibrationEnabled = "EnableCalibration", CalibrationOffsetX = "CalibrationX",
+    CalibrationOffsetY = "CalibrationY", AutoClickEnabled = "EnableTriggerbot", TriggerbotClickMode = "TriggerbotClickMode",
+    ClickMethod = "ClickMethod", ClickInterval = "ClickInterval", ThirdPersonTriggerbot = "ThirdPersonTriggerbot",
+    KeyTriggerbotEnabled = "KeyTriggerbotToggle", KeyTriggerMode = "KeyTriggerMode", MeleeModeEnabled = "EnableMeleeMode",
+    MeleeDetectionRange = "MeleeRange", MeleeClickInterval = "MeleeClickInterval", ThreatDetectorEnabled = "ThreatDetector",
+    NemesisEnabled = "NemesisEnabled", ThreatTimeout = "ThreatTimeout", BlacklistExpiredThreats = "BlacklistExpiredThreats",
+    ClickToMarkEnabled = "ClickToMark", MarkMethod = "MarkMethod", StrictPrioritize = "StrictPrioritize", WallCheck = "WallCheck",
+    NoCollisionCheck = "NoCollisionCheck", TransparencyCheck = "TransparencyCheck", TransparencyThreshold = "TransparencyThreshold",
+    DecalsCheck = "DecalsCheck", TargetPlayers = "TargetPlayers", TargetNPCs = "TargetNPCs", TeamCheck = "TeamCheck",
+    AutoEnableOnEquip = "AutoEquipAim", IgnoreDead = "IgnoreDead"
+}
+
 PresetsTab:CreateButton({
     Name     = "Load Selected Profile",
     Callback = function()
-        if SelectedPresetToManage and S.SavedPresets[SelectedPresetToManage] then
-            local data = S.SavedPresets[SelectedPresetToManage]
-            for key, value in pairs(data) do S[key] = value end
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Successfully loaded profile: " .. SelectedPresetToManage .. "\n(UI toggles may require manual syncing)", Duration = 4, Image = "folder-open"}) end
+        local selected = PresetDropdownRef and PresetDropdownRef.CurrentOption
+        if type(selected) == "table" then
+            local k,v = next(selected)
+            selected = (type(v) == "boolean" and v) and k or (type(v) == "string" and v) or selected[1]
+        end
+        if not selected or selected == "" then selected = SelectedPresetToManage end
+        
+        if selected and S.SavedPresets[selected] then
+            local data = S.SavedPresets[selected]
+            for key, value in pairs(data) do 
+                local flag = STO_FLAG[key]
+                if flag and Rayfield.Flags[flag] then
+                    pcall(function() Rayfield.Flags[flag]:Set(value) end)
+                else
+                    S[key] = value
+                end
+            end
+            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Successfully loaded profile: " .. selected .. "\nUI has been updated.", Duration = 4, Image = "folder-open"}) end
         else
             if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected.", Duration = 2, Image = "alert-circle"}) end
         end
@@ -651,14 +692,21 @@ PresetsTab:CreateButton({
 PresetsTab:CreateButton({
     Name     = "Delete Selected Profile",
     Callback = function()
-        if SelectedPresetToManage and SelectedPresetToManage ~= "No Profiles Found" and S.SavedPresets[SelectedPresetToManage] then
-            S.SavedPresets[SelectedPresetToManage] = nil
+        local selected = PresetDropdownRef and PresetDropdownRef.CurrentOption
+        if type(selected) == "table" then
+            local k,v = next(selected)
+            selected = (type(v) == "boolean" and v) and k or (type(v) == "string" and v) or selected[1]
+        end
+        if not selected or selected == "" then selected = SelectedPresetToManage end
+
+        if selected and selected ~= "No Profiles Found" and S.SavedPresets[selected] then
+            S.SavedPresets[selected] = nil
             if S.SavePresetsToFile then S.SavePresetsToFile() end
             if PresetDropdownRef and PresetDropdownRef.Refresh then
                 local list = GetPresetNamesList()
                 pcall(function() PresetDropdownRef:Refresh(list, true) end)
             end
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Deleted profile: " .. SelectedPresetToManage, Duration = 3, Image = "folder-minus"}) end
+            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Deleted profile: " .. selected, Duration = 3, Image = "folder-minus"}) end
             SelectedPresetToManage = ""
         else
             if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected to delete.", Duration = 2, Image = "alert-triangle"}) end
@@ -702,7 +750,7 @@ PresetsTab:CreateButton({
                 if PresetDropdownRef and PresetDropdownRef.Refresh then
                     pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
                 end
-                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Presets successfully imported and UI updated!", Duration = 3, Image = "clipboard-check"}) end
+                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Presets added to database! Select from dropdown to load.", Duration = 3, Image = "clipboard-check"}) end
             else
                 if S.Notify then S.Notify({Title = "Import Failed", Content = "Invalid JSON string format in clipboard.", Duration = 3, Image = "file-warning"}) end
             end
@@ -710,7 +758,7 @@ PresetsTab:CreateButton({
             if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Your executor does not support getclipboard.", Duration = 3, Image = "alert-octagon"}) end
         end
     end
-                    if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Presets successfully imported and UI updated!", Duration = 3, Image = "clipboard-check"}) end
+                    if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Presets added to database! Select from dropdown to load.", Duration = 3, Image = "clipboard-check"}) end
                 else
                     if S.Notify then S.Notify({Title = "Import Failed", Content = "Invalid preset data found in clipboard.", Duration = 3, Image = "file-warning"}) end
                 end
@@ -734,7 +782,7 @@ PresetsTab:CreateInput({
                 if PresetDropdownRef and PresetDropdownRef.Refresh then
                     pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
                 end
-                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Successfully imported profiles manually!", Duration = 3, Image = "file-check"}) end
+                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Profiles imported! Select them from the dropdown above to load.", Duration = 3, Image = "file-check"}) end
             else
                 if S.Notify then S.Notify({Title = "Import Failed", Content = "Syntax Error: Invalid JSON structure.", Duration = 3, Image = "file-x"}) end
             end
@@ -1027,4 +1075,3 @@ UpdateLogTab:CreateLabel("- Added Visible On Screen, located in target bodypart 
 Rayfield:LoadConfiguration()
 
 print("[TASFF UI] Interface constructed. Configuration loaded.")
-

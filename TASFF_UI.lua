@@ -232,7 +232,7 @@ VisualTab:CreateParagraph({
     Content = "Focus Mode isolates visual clutter by only drawing ESP on Priority Targets. Stream-Proof Rendering forces tags to bypass capture software like OBS."
 })
 VisualTab:CreateDropdown({Name = "ESP Target Mode", Options = {"Single", "Multiple", "All"}, CurrentOption = {S.VisualMode}, Flag = "VisualMode", Callback = function(v)
-    S.VisualMode = v
+    S.VisualMode = type(v) == "table" and v[1] or v
     if S.ClearVisuals then S.ClearVisuals() end
 end})
 VisualTab:CreateToggle({Name = "Render Player ESP", CurrentValue = S.UseHighlight, Flag = "UseHighlight", Callback = function(v) S.UseHighlight = v end})
@@ -290,7 +290,7 @@ VisualTab:CreateToggle({Name = "Render Vector Crosshair", CurrentValue = S.Enabl
     if not v and S.ClearCrosshair then S.ClearCrosshair() end
 end})
 VisualTab:CreateDropdown({Name = "Vector Crosshair Style", Options = {"Plus", "Square", "Circle"}, CurrentOption = {S.CrosshairStyle}, Flag = "CrossStyle", Callback = function(v)
-    S.CrosshairStyle = v
+    S.CrosshairStyle = type(v) == "table" and v[1] or v
     if S.ClearCrosshair then S.ClearCrosshair() end
 end})
 VisualTab:CreateSlider({Name = "Vector Crosshair Size", Range = {2, 50}, Increment = 1, CurrentValue = S.CrosshairSize, Flag = "CrossSize", Callback = function(v) S.CrosshairSize = v end})

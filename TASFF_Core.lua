@@ -1643,7 +1643,7 @@ table.insert(getgenv().TASFF.Connections, RenderConnection)
 local oldIndex
 oldIndex = hookmetamethod(game, "__index", function(t, k)
     if k ~= "Hit" and k ~= "Target" and k ~= "UnitRay" then return oldIndex(t, k) end
-    if not checkcaller() then return oldIndex(t, k) end
+    if checkcaller() then return oldIndex(t, k) end
     if S.SilentAimEnabled and S.MasterEnabled and S.SilentAimTargetCache and S.SilentAimTargetCache.Instance then
         local bone = S.SilentAimTargetCache.Instance:FindFirstChild(S.TargetPart)
                   or S.SilentAimTargetCache.Instance:FindFirstChild("HumanoidRootPart")

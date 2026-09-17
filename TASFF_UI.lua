@@ -56,6 +56,20 @@ local function GetPresetNamesList()
     return #t > 0 and t or {"No Profiles Found"}
 end
 
+local function DropdownValue(v)
+    if type(v) == "table" then
+        local k, val = next(v)
+        if type(val) == "boolean" then
+            return (val and type(k) == "string" and k) or v[1]
+        end
+        if type(val) == "string" then return val end
+        if type(k) == "string" then return k end
+        return v[1]
+    end
+    if type(v) == "string" then return v end
+    return nil
+end
+
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                          WINDOW                              // --
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --

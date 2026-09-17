@@ -1,6 +1,6 @@
 -- // ============================================================ // --
 -- //   TASFF_UI.lua                                             // --
--- //   Rayfield UI — structure identical to the original        // --
+-- //   Rayfield UI â€” structure identical to the original        // --
 -- //   monolith. Callbacks write to _G.TASFF_State (S).        // --
 -- //   Must be loaded AFTER TASFF_Core.lua.                    // --
 -- // ============================================================ // --
@@ -11,7 +11,7 @@ local Players     = game:GetService("Players")
 local Player      = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 
--- // ── UI-Local Variables ───────────────────────────────────────── // --
+-- // â”€â”€ UI-Local Variables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
 
 local SelectedPresetToManage = ""
 local SelectedBlacklistTool  = ""
@@ -23,7 +23,7 @@ local PriorityMonitorLabel   = nil   -- paragraph element ref
 local ThreatListLabel        = nil   -- paragraph element ref
 local PresetInputName        = ""
 
--- // ── Theming Color Map ────────────────────────────────────────── // --
+-- // â”€â”€ Theming Color Map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
 
 local ColorPresetMap = {
     ["Purple"]  = Color3.fromRGB(138, 43,  226),
@@ -56,9 +56,9 @@ local function GetPresetNamesList()
     return #t > 0 and t or {"No Profiles Found"}
 end
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                          WINDOW                              // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local Window = Rayfield:CreateWindow({
     Name            = "TASFF V1.5.5",
@@ -105,16 +105,16 @@ local Window = Rayfield:CreateWindow({
     }
 })
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                        1. COMBAT TAB                         // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local MainTab = Window:CreateTab("Combat", "crosshair")
 
 MainTab:CreateSection("Command & Control")
 MainTab:CreateParagraph({
-    Title   = "TASFF — The Aimbot Script Final Form",
-    Content = "The definitive combat suite. Master Switch is the global killswitch — nothing runs while it's off. Aimbot Engine controls active target acquisition and tracking independently."
+    Title   = "TASFF â€” The Aimbot Script Final Form",
+    Content = "The definitive combat suite. Master Switch is the global killswitch â€” nothing runs while it's off. Aimbot Engine controls active target acquisition and tracking independently."
 })
 MainTab:CreateToggle({Name = "Master Switch (Killswitch)", CurrentValue = S.MasterEnabled, Flag = "MasterSwitch", Callback = function(v)
     S.MasterEnabled = v
@@ -134,7 +134,7 @@ MainTab:CreateDropdown({
     Options       = {"Legit (Camera)", "Advanced Legit (Mouse)", "Blatant", "Flickbot (Click-Teleport)"},
     CurrentOption = {S.Mode},
     Flag          = "AimMethod",
-    Callback      = function(v) S.Mode = v end
+    Callback      = function(v) S.Mode = v[1] end
 })
 
 MainTab:CreateSection("Activation & Automation")
@@ -167,16 +167,16 @@ MainTab:CreateDropdown({
     Options       = {"Head", "HumanoidRootPart", "Torso", "Visible On Screen"},
     CurrentOption = {S.TargetPart},
     Flag          = "TargetPart",
-    Callback      = function(v) S.TargetPart = v; S.ActivePartName = v end
+    Callback      = function(v) S.TargetPart = v[1]; S.ActivePartName = v[1] end
 })
 MainTab:CreateToggle({Name = "Randomize Hitboxes (Legit Variance)", CurrentValue = S.RandomizeHitboxEnabled, Flag = "RandomizeHitbox", Callback = function(v)
     S.RandomizeHitboxEnabled = v
 end})
 MainTab:CreateDropdown({Name = "Distance Sorting", Options = {"None", "Closest", "Farthest"}, CurrentOption = {S.PriorityMode}, Flag = "PriorityMode", Callback = function(v)
-    S.PriorityMode = v
+    S.PriorityMode = v[1]
 end})
 MainTab:CreateDropdown({Name = "Health Sorting", Options = {"None", "Weakest (HP)", "Strongest (HP)"}, CurrentOption = {S.VitalityMode}, Flag = "VitalityMode", Callback = function(v)
-    S.VitalityMode = v
+    S.VitalityMode = v[1]
 end})
 MainTab:CreateToggle({Name = "Prioritize Targets Near Screen Center", CurrentValue = S.TargetNearCenter, Flag = "TargetNearCenter", Callback = function(v)
     S.TargetNearCenter = v
@@ -220,9 +220,9 @@ MainTab:CreateSlider({Name = "Grace Period Delay (ms)", Range = {1, 1000}, Incre
     S.GracePeriodMs = v
 end})
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                       2. VISUALS TAB                         // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local VisualTab = Window:CreateTab("Visuals", "eye")
 
@@ -256,7 +256,7 @@ VisualTab:CreateToggle({Name = "2D Bounding Boxes", CurrentValue = S.BoxModeEnab
 VisualTab:CreateToggle({Name = "Skeletal Mapping (R6/R15)", CurrentValue = S.SkeletonModeEnabled, Flag = "EnableSkeletonMode", Callback = function(v) S.SkeletonModeEnabled = v end})
 VisualTab:CreateToggle({Name = "Distance Snaplines", CurrentValue = S.SnaplinesEnabled, Flag = "SnaplinesEnabled", Callback = function(v) S.SnaplinesEnabled = v end})
 VisualTab:CreateDropdown({Name = "Snapline Origin Point", Options = {"Bottom", "Center"}, CurrentOption = {S.SnaplineOrigin}, Flag = "SnaplineOrigin", Callback = function(v)
-    S.SnaplineOrigin = v
+    S.SnaplineOrigin = v[1]
 end})
 VisualTab:CreateToggle({Name = "Off-Screen Indicators (OOF Arrows)", CurrentValue = S.OOFArrowsEnabled, Flag = "OOFArrowsEnabled", Callback = function(v) S.OOFArrowsEnabled = v end})
 VisualTab:CreateSlider({Name = "OOF Indicator Radius", Range = {50, 400}, Increment = 10, CurrentValue = S.OOFArrowRadius, Flag = "OOFArrowRadius", Callback = function(v) S.OOFArrowRadius = v end})
@@ -283,7 +283,7 @@ VisualTab:CreateDropdown({
     Options       = {"Screen Center", "Mouse Tracking"},
     CurrentOption = {S.AimReferenceMode},
     Flag          = "AimReferenceMode",
-    Callback      = function(v) S.AimReferenceMode = v end
+    Callback      = function(v) S.AimReferenceMode = v[1] end
 })
 VisualTab:CreateToggle({Name = "Render Vector Crosshair", CurrentValue = S.EnableCrosshair, Flag = "UseCrosshair", Callback = function(v)
     S.EnableCrosshair = v
@@ -300,9 +300,9 @@ VisualTab:CreateToggle({Name = "Enable Manual Axis Calibration", CurrentValue = 
 VisualTab:CreateSlider({Name = "Horizontal Axis Offset (Pixels)", Range = {-200, 200}, Increment = 1, CurrentValue = S.CalibrationOffsetX, Flag = "CalibrationX", Callback = function(v) S.CalibrationOffsetX = v end})
 VisualTab:CreateSlider({Name = "Vertical Axis Offset (Pixels)", Range = {-200, 200}, Increment = 1, CurrentValue = S.CalibrationOffsetY, Flag = "CalibrationY", Callback = function(v) S.CalibrationOffsetY = v end})
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                      3. TRIGGERBOT TAB                       // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local TriggerbotTab = Window:CreateTab("Triggerbot", "mouse-pointer-click")
 
@@ -319,10 +319,10 @@ TriggerbotTab:CreateToggle({Name = "Enable Mouse Triggerbot", CurrentValue = S.A
     end
 end})
 TriggerbotTab:CreateDropdown({Name = "Click Simulation Engine", Options = {"Virtual", "Physical"}, CurrentOption = {S.TriggerbotClickMode}, Flag = "TriggerbotClickMode", Callback = function(v)
-    S.TriggerbotClickMode = v
+    S.TriggerbotClickMode = v[1]
 end})
 TriggerbotTab:CreateDropdown({Name = "Action Method", Options = {"Mash", "Hold"}, CurrentOption = {S.ClickMethod}, Flag = "ClickMethod", Callback = function(v)
-    S.ClickMethod = v
+    S.ClickMethod = v[1]
 end})
 TriggerbotTab:CreateSlider({Name = "Mash Interval (ms)", Range = {1, 1000}, Increment = 1, CurrentValue = S.ClickInterval, Flag = "ClickInterval", Callback = function(v)
     S.ClickInterval = v
@@ -356,7 +356,7 @@ TriggerbotTab:CreateInput({
     end
 })
 TriggerbotTab:CreateDropdown({Name = "Key Action Method", Options = {"Single Press", "Mash", "Hold"}, CurrentOption = {S.KeyTriggerMode}, Flag = "KeyTriggerMode", Callback = function(v)
-    S.KeyTriggerMode = v
+    S.KeyTriggerMode = v[1]
 end})
 
 TriggerbotTab:CreateSection("Proximity Auto-Melee")
@@ -368,9 +368,9 @@ TriggerbotTab:CreateSlider({Name = "Melee Strike Interval (ms)", Range = {1, 100
     S.MeleeClickInterval = v
 end})
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                       4. ADVANCED TAB                        // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local AdvancedTab = Window:CreateTab("Advanced", "cpu")
 
@@ -406,7 +406,7 @@ AdvancedTab:CreateParagraph({
 })
 AdvancedTab:CreateToggle({Name = "Enable Target Marking", CurrentValue = S.ClickToMarkEnabled, Flag = "ClickToMark", Callback = function(v) S.ClickToMarkEnabled = v end})
 AdvancedTab:CreateDropdown({Name = "Mark Activation Input", Options = {"Mouse Click Only", "Keybind Only", "Both"}, CurrentOption = {S.MarkMethod}, Flag = "MarkMethod", Callback = function(v)
-    S.MarkMethod = v
+    S.MarkMethod = v[1]
 end})
 AdvancedTab:CreateKeybind({
     Name           = "Target Mark Keybind",
@@ -452,9 +452,9 @@ AdvancedTab:CreateSlider({Name = "Minimum Transparency Threshold", Range = {0.01
 end})
 AdvancedTab:CreateToggle({Name = "Ignore Decals & Textures", CurrentValue = S.DecalsCheck, Flag = "DecalsCheck", Callback = function(v) S.DecalsCheck = v end})
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                       5. SETTINGS TAB                        // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local SettingsTab = Window:CreateTab("Settings", "filter")
 
@@ -562,9 +562,9 @@ SettingsTab:CreateButton({
     end
 })
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                       6. PRESETS TAB                         // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local PresetsTab = Window:CreateTab("Presets", "folder-sync")
 
@@ -731,9 +731,9 @@ PresetsTab:CreateInput({
     end
 })
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                       7. THEMING TAB                         // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local CustomizationTab = Window:CreateTab("Theming", "brush")
 
@@ -749,7 +749,7 @@ CustomizationTab:CreateDropdown({
     CurrentOption = {"Tan"},
     Flag          = "FOVCircleColorDropdown",
     Callback      = function(v)
-        local rgb = ColorPresetMap[v]
+        local rgb = ColorPresetMap[v[1]]
         if rgb and _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(rgb) end
     end
 })
@@ -760,7 +760,7 @@ CustomizationTab:CreateDropdown({
     CurrentOption = {"Maroon"},
     Flag          = "HighlightColorDropdown",
     Callback      = function(v)
-        local rgb = ColorPresetMap[v]
+        local rgb = ColorPresetMap[v[1]]
         if rgb then S.HighlightColor = rgb end
     end
 })
@@ -771,7 +771,7 @@ CustomizationTab:CreateDropdown({
     CurrentOption = {"Coral"},
     Flag          = "CrosshairColorDropdown",
     Callback      = function(v)
-        local rgb = ColorPresetMap[v]
+        local rgb = ColorPresetMap[v[1]]
         if rgb and _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(rgb) end
     end
 })
@@ -782,7 +782,7 @@ CustomizationTab:CreateDropdown({
     CurrentOption = {"Red"},
     Flag          = "SnaplineColorDropdown",
     Callback      = function(v)
-        local rgb = ColorPresetMap[v]
+        local rgb = ColorPresetMap[v[1]]
         if rgb then S.SnaplineColor = rgb end
     end
 })
@@ -805,9 +805,9 @@ CustomizationTab:CreateColorPicker({
     Callback = function(Value) S.HiddenColor = Value end
 })
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                        8. SYSTEM TAB                         // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local MiscTab = Window:CreateTab("System", "cog")
 
@@ -826,7 +826,7 @@ MiscTab:CreateDropdown({
     MultipleOptions = false,
     Flag            = "PerformanceMode",
     Callback        = function(v)
-        S.PerformanceMode = v or "Medium"
+        S.PerformanceMode = v[1] or "Medium"
         S.FrameCounters.HeavySystems = 0
         S.FrameCounters.NPCs         = 0
         S.FrameCounters.WorkspaceSweep = 0
@@ -917,14 +917,14 @@ MiscTab:CreateButton({
     end
 })
 
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                      9. UPDATE LOG TAB                       // --
--- // ══════════════════════════════════════════════════════════════ // --
+-- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
 
 UpdateLogTab:CreateSection("Version 1.5.5 (Current Release)")
-UpdateLogTab:CreateLabel("- Version bump to V1.5.5 — modular refactor across 4 files (State/Core/UI/Loader)")
+UpdateLogTab:CreateLabel("- Version bump to V1.5.5 â€” modular refactor across 4 files (State/Core/UI/Loader)")
 UpdateLogTab:CreateLabel("- Resolved the Lua 200-local engine limit via _G.TASFF_State shared module pattern")
 UpdateLogTab:CreateLabel("- Multi-hop penetrative wallcheck (up to 15 hops) for glass/decal penetration")
 UpdateLogTab:CreateLabel("- Frame-scope scalar caching in render loop for reduced overhead")
@@ -1004,10 +1004,11 @@ UpdateLogTab:CreateLabel("- Linked the Show Target Info text color directly to c
 UpdateLogTab:CreateLabel("- Removed the broken dynamic interface theme reloader for stability")
 UpdateLogTab:CreateLabel("- Added Visible On Screen, located in target bodypart dropdown")
 
--- // ── Load Configuration ──────────────────────────────────────── // --
+-- // â”€â”€ Load Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
 -- MUST be called last. Restores all flagged values from disk and
 -- fires each element's Callback, which writes them back into S.
 
 Rayfield:LoadConfiguration()
 
 print("[TASFF UI] Interface constructed. Configuration loaded.")
+

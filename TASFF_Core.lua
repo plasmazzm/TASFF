@@ -603,7 +603,7 @@ local function HandleClickToMark()
     end
 
     if targetName then
-        local idx = table.find(S.PriorityPlayers, targetName)
+        local idx = table.find(S.PriorityPlayers or {}, targetName)
         if idx then
             table.remove(S.PriorityPlayers, idx)
             SyncPriorityUI()
@@ -803,7 +803,7 @@ local function GetVisualAssets(model)
                 tag.Size    = 16
                 tag.Center  = true
                 tag.Outline = true
-                tag.Color   = S.HighlightColor
+                tag.Color   = S.HighlightColor or Color3.fromRGB(255, 255, 255)
             else
                 wantDrawing = false
             end
@@ -868,8 +868,8 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
     local function Process(model, isPlayer, pObj)
         if not model then return end
         local targetName = isPlayer and pObj.Name or model.Name
-        if isPlayer and table.find(S.BlacklistedPlayers, targetName) then return end
-        if S.StrictPrioritize and not table.find(S.PriorityPlayers, targetName) then return end
+        if isPlayer and table.find(S.BlacklistedPlayers or {}, targetName) then return end
+        if S.StrictPrioritize and not table.find(S.PriorityPlayers or {}, targetName) then return end
 
         local root = model:FindFirstChild("HumanoidRootPart")
                   or model:FindFirstChild("Torso")
@@ -892,7 +892,7 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         local screenPos   = ApplyScreenCalibration(Vector2.new(sPos.X, sPos.Y))
         local distFromCenter = (screenPos - screenCenter).Magnitude
 
-        if onScreen and (not S.ShowFOV or ignoreFOV or distFromCenter <= S.FOVSize) then
+        if ignoreFOV or (onScreen and (not S.ShowFOV or distFromCenter <= S.FOVSize)) then
             table.insert(results, {
                 Instance       = model,
                 Root           = root,
@@ -1072,7 +1072,6 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 
     -- // ── Heavy: Target Acquisition + ESP ──────────────────────── // --
     if RunHeavySystems then
-        ClearVisuals()
 
         if MasterEnabled then
             local TargetPart      = S.TargetPart
@@ -1148,7 +1147,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end
 
                 -- Cache sort-hot values for this frame
-                local PriorityPlayers  = S.PriorityPlayers
+                local PriorityPlayers         = S.PriorityPlayers or {}
                 local VitalityMode     = S.VitalityMode
                 local PriorityMode     = S.PriorityMode
                 local TargetNearCenter = S.TargetNearCenter
@@ -1230,6 +1229,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             S.LastVisualList          = VisualList
             S.LastCustomTargetPosition = CustomTargetPosition
 
+        else
+            S.LastVisualList           = {}
+            S.LastCustomTargetPosition = nil
+        end
+    end -- RunHeavySystems
+    ClearVisuals()
+    if MasterEnabled and S.LastVisualList then
             -- // ESP Render Loop // --
 
             -- Cache ESP-hot scalars for this frame
@@ -1237,8 +1243,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local FocusMode               = S.FocusMode
             local VisualMode              = S.VisualMode
             local VisibilityColorsEnabled = S.VisibilityColorsEnabled
-            local VisibleColor            = S.VisibleColor
-            local HiddenColor             = S.HiddenColor
+            local VisibleColor            = S.VisibleColor or Color3.fromRGB(0, 255, 0)
+            local HiddenColor             = S.HiddenColor or Color3.fromRGB(255, 0, 0)
             local ESPRenderDistance       = S.ESPRenderDistance
             local UseHighlight            = S.UseHighlight
             local UseNPCHighlight         = S.UseNPCHighlight
@@ -1254,9 +1260,9 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local SkeletonModeEnabled     = S.SkeletonModeEnabled
             local ChamsEnabled            = S.ChamsEnabled
             local ChamsOpacity            = S.ChamsOpacity
-            local HighlightColor          = S.HighlightColor
-            local SnaplineColor           = S.SnaplineColor
-            local PriorityPlayers         = S.PriorityPlayers
+            local HighlightColor          = S.HighlightColor or Color3.fromRGB(255, 255, 255)
+            local SnaplineColor           = S.SnaplineColor or Color3.fromRGB(255, 50, 50)
+            local PriorityPlayers         = S.PriorityPlayers or {}
 
             local myRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
             local myPos  = myRoot and myRoot.Position or Vector3.new(0, 0, 0)
@@ -1448,11 +1454,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     h.FillTransparency = 1
                 end
             end
-        else
-            S.LastVisualList           = {}
-            S.LastCustomTargetPosition = nil
-        end
-    end -- RunHeavySystems
+    end
 
     -- // ── Light: Aimbot + Triggerbot (every frame) ──────────────── // --
     if MasterEnabled then
@@ -1725,3 +1727,5 @@ getgenv().TASFF.Cleanup = function()
 end
 
 print("[TASFF Core] All function slots registered. Render loop active.")
+
+

@@ -540,7 +540,7 @@ BlacklistDropdown = SettingsTab:CreateDropdown({
     Options       = #S.ToolBlacklist > 0 and S.ToolBlacklist or {"No Registry Items Found"},
     CurrentOption = {"No Registry Items Found"},
     Flag          = "ToolBlacklistDropdown",
-    Callback      = function(v) SelectedBlacklistTool = v end
+    Callback      = function(v) SelectedBlacklistTool = type(v) == "table" and v[1] or v end
 })
 S.BlacklistDropdownRef = BlacklistDropdown
 
@@ -632,7 +632,7 @@ PresetDropdownRef = PresetsTab:CreateDropdown({
     Options       = GetPresetNamesList(),
     CurrentOption = {"No Profiles Found"},
     Flag          = "PresetSelectDropdown",
-    Callback      = function(v) SelectedPresetToManage = v end
+    Callback      = function(v) SelectedPresetToManage = type(v) == "table" and v[1] or v end
 })
 
 PresetsTab:CreateButton({
@@ -688,17 +688,28 @@ PresetsTab:CreateButton({
 PresetsTab:CreateButton({
     Name     = "Import Database from Clipboard",
     Callback = function()
-        pcall(function()
-            local gc = getclipboard or (getgenv and getgenv().getclipboard)
-            if gc then
-                local clipData = gc()
-                local success, decoded = pcall(HttpService.JSONDecode, HttpService, clipData)
-                if success and type(decoded) == "table" then
-                    for k, v in pairs(decoded) do S.SavedPresets[k] = v end
-                    if S.SavePresetsToFile then S.SavePresetsToFile() end
-                    if PresetDropdownRef and PresetDropdownRef.Refresh then
-                        pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
-                    end
+        local gc = getclipboard or (getgenv and getgenv().getclipboard)
+        if gc then
+            local clipData = gc()
+            if type(clipData) ~= "string" or clipData == "" then
+                if S.Notify then S.Notify({Title = "Import Failed", Content = "Clipboard is empty or contains no text.", Duration = 3, Image = "file-warning"}) end
+                return
+            end
+            local success, decoded = pcall(function() return HttpService:JSONDecode(clipData) end)
+            if success and type(decoded) == "table" then
+                for k, v in pairs(decoded) do S.SavedPresets[k] = v end
+                if S.SavePresetsToFile then S.SavePresetsToFile() end
+                if PresetDropdownRef and PresetDropdownRef.Refresh then
+                    pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
+                end
+                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Presets successfully imported and UI updated!", Duration = 3, Image = "clipboard-check"}) end
+            else
+                if S.Notify then S.Notify({Title = "Import Failed", Content = "Invalid JSON string format in clipboard.", Duration = 3, Image = "file-warning"}) end
+            end
+        else
+            if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Your executor does not support getclipboard.", Duration = 3, Image = "alert-octagon"}) end
+        end
+    end
                     if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Presets successfully imported and UI updated!", Duration = 3, Image = "clipboard-check"}) end
                 else
                     if S.Notify then S.Notify({Title = "Import Failed", Content = "Invalid preset data found in clipboard.", Duration = 3, Image = "file-warning"}) end

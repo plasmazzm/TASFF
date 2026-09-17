@@ -758,15 +758,6 @@ PresetsTab:CreateButton({
             if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Your executor does not support getclipboard.", Duration = 3, Image = "alert-octagon"}) end
         end
     end
-                    if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Presets added to database! Select from dropdown to load.", Duration = 3, Image = "clipboard-check"}) end
-                else
-                    if S.Notify then S.Notify({Title = "Import Failed", Content = "Invalid preset data found in clipboard.", Duration = 3, Image = "file-warning"}) end
-                end
-            else
-                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Your executor does not support getclipboard.", Duration = 3, Image = "alert-octagon"}) end
-            end
-        end)
-    end
 })
 
 PresetsTab:CreateInput({

@@ -993,7 +993,7 @@ task.defer(function()
     task.wait(0.2)
     S.CurrentTarget     = nil
     S.ScriptInitialized = true
-    print("[TASFF v1.5.5] Core initialized.")
+    print("[TASFF v2.0.0] Core initialized.")
 end)
 
 -- // ══════════════════════════════════════════════════════════════ // --

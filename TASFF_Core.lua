@@ -18,14 +18,6 @@ local CoreGui             = game:GetService("CoreGui")
 
 -- // Shared State & Runtime References // --
 local S       = _G.TASFF_State
-do
-    local part = S.TargetPart
-    if type(part) ~= "string" or part == "" or part == "Visible On Screen" then
-        S.ActivePartName = (type(S.ActivePartName) == "string" and S.ActivePartName) or "Head"
-    else
-        S.ActivePartName = S.ActivePartName or part
-    end
-end
 local Rayfield = getgenv().TASFF and getgenv().TASFF.Rayfield or nil
 local Player  = Players.LocalPlayer
 local Camera  = workspace.CurrentCamera
@@ -63,12 +55,9 @@ table.insert(getgenv().TASFF.Connections,
 -- // ── Utility ────────────────────────────────────────────────── // --
 
 local function GetKeyCode(name)
-    if type(name) ~= "string" or name == "" then return nil end
-    if name:match("^MouseButton") then return nil end
-    local ok, result = pcall(function()
-        return Enum.KeyCode[name] or Enum.KeyCode[name:upper()]
-    end)
-    return (ok and result) or nil
+    if not name or name == "" then return nil end
+    local ok, result = pcall(function() return Enum.KeyCode[name:upper()] end)
+    return ok and result or nil
 end
 S.GetKeyCode = GetKeyCode
 
@@ -221,31 +210,27 @@ S.GetAimPosition = GetAimPosition
 
 -- // ── Auto ADS ────────────────────────────────────────────────── // --
 
-local function GetMouseButtonIndex(name)
-    if name == "MouseButton1" then return 0 end
-    if name == "MouseButton2" then return 1 end
-    if name == "MouseButton3" then return 2 end
-    return nil
-end
-
 local function SetADSState(state)
-    local mouseBtn = GetMouseButtonIndex(S.AutoADSKeybind)
-    local function press(down)
-        if mouseBtn ~= nil then
-            VirtualInputManager:SendMouseButtonEvent(0, 0, mouseBtn, down, game, 0)
+    if state and not S.IsHoldingADS then
+        S.IsHoldingADS = true
+        if S.AutoADSKeybind == "MouseButton2" then
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 1, true, game, 0)
         else
             pcall(function()
                 local key = GetKeyCode(S.AutoADSKeybind)
-                if key then VirtualInputManager:SendKeyEvent(down, key, false, game) end
+                if key then VirtualInputManager:SendKeyEvent(true, key, false, game) end
             end)
         end
-    end
-    if state and not S.IsHoldingADS then
-        S.IsHoldingADS = true
-        press(true)
     elseif not state and S.IsHoldingADS then
         S.IsHoldingADS = false
-        press(false)
+        if S.AutoADSKeybind == "MouseButton2" then
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 1, false, game, 0)
+        else
+            pcall(function()
+                local key = GetKeyCode(S.AutoADSKeybind)
+                if key then VirtualInputManager:SendKeyEvent(false, key, false, game) end
+            end)
+        end
     end
 end
 S.SetADSState = SetADSState
@@ -391,9 +376,7 @@ S.GetIgnoreList = GetIgnoreList
 local IsVisibleWallcheck
 IsVisibleWallcheck = function(model, partName, customIgnoreList)
     if not model then return false end
-    local resolvedName = (type(partName) == "string" and partName ~= "" and partName ~= "Visible On Screen")
-        and partName or "HumanoidRootPart"
-    local targetPart = model:FindFirstChild(resolvedName) or model:FindFirstChild("HumanoidRootPart")
+    local targetPart = model:FindFirstChild(partName) or model:FindFirstChild("HumanoidRootPart")
     if not targetPart then return false end
     if not Camera then Camera = workspace.CurrentCamera end
 

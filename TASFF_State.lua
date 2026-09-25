@@ -102,6 +102,7 @@ _G.TASFF_State = {
     CrosshairSize               = 10,
     ShowToolCheck               = false,
     ShowDisplayName             = false,
+    UsePresetColors             = false,
 
     -- // ── Range & Grace Period ───────────────────────────────── // --
     AimbotRenderDistance        = 1000,
@@ -205,15 +206,11 @@ _G.TASFF_State = {
     ToolRemovedConnection       = nil,
 
     -- // ── UI Element References (set by TASFF_UI.lua) ────────── // --
-    -- These are nil at init. TASFF_UI.lua assigns them after
-    -- creating the Rayfield elements so Core can update them.
     PriorityDropdownRef         = nil,
     PriorityMonitorLabel        = nil,
-    PerformanceIndicator        = nil,  -- for Factory Reset flash
+    PerformanceIndicator        = nil,
 
     -- // ── Cross-Chunk Function Slots (set by Core / UI) ──────── // --
-    -- Core sets these after defining each function so UI callbacks
-    -- can call them without creating a circular dependency.
     TriggerPanic                = nil,
     UnloadScript                = nil,
     ClearVisuals                = nil,

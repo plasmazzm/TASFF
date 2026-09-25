@@ -200,7 +200,7 @@ local S = _G.TASFF_State
 task.delay(0.4, function()
     if S.Notify then
         S.Notify({
-            Title    = "TASFF v1.5.5",
+            Title    = "TASFF v2.0.0",
             Content  = "Script loaded successfully. Master Switch to begin.",
             Duration = 4,
             Image    = "shield-check"
@@ -208,4 +208,4 @@ task.delay(0.4, function()
     end
 end)
 
-print("[TASFF Loader] ══ All modules loaded. TASFF v1.5.5 is running. ══")
+print("[TASFF Loader] ══ All modules loaded. TASFF v2.0.0 is running. ══")

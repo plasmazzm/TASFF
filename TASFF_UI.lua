@@ -56,20 +56,6 @@ local function GetPresetNamesList()
     return #t > 0 and t or {"No Profiles Found"}
 end
 
-local function DropdownValue(v)
-    if type(v) == "table" then
-        local k, val = next(v)
-        if type(val) == "boolean" then
-            return (val and type(k) == "string" and k) or v[1]
-        end
-        if type(val) == "string" then return val end
-        if type(k) == "string" then return k end
-        return v[1]
-    end
-    if type(v) == "string" then return v end
-    return nil
-end
-
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                          WINDOW                              // --
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
@@ -171,21 +157,9 @@ MainTab:CreateToggle({Name = "Auto ADS (Automatic Scope)", CurrentValue = S.Auto
     S.AutoADSEnabled = v
     if not v and S.SetADSState then S.SetADSState(false) end
 end})
-MainTab:CreateDropdown({
-    Name          = "Auto ADS Input Key",
-    Options       = {
-        "MouseButton2", "MouseButton1",
-        "Q", "E", "F", "C", "X", "Z",
-        "LeftControl", "LeftShift", "LeftAlt",
-        "RightControl", "RightShift"
-    },
-    CurrentOption = {S.AutoADSKeybind or "MouseButton2"},
-    Flag          = "AutoADSKey",
-    Callback      = function(v)
-        local key = DropdownValue(v)
-        if key and key ~= "" then S.AutoADSKeybind = key end
-    end
-})
+MainTab:CreateKeybind({Name = "Auto ADS Input Key", CurrentKeybind = S.AutoADSKeybind or "MouseButton2", Flag = "AutoADSKey", Callback = function(key)
+    S.AutoADSKeybind = key
+end})
 
 MainTab:CreateSection("Target Selection & Sorting")
 MainTab:CreateDropdown({
@@ -193,11 +167,7 @@ MainTab:CreateDropdown({
     Options       = {"Head", "HumanoidRootPart", "Torso", "Visible On Screen"},
     CurrentOption = {S.TargetPart},
     Flag          = "TargetPart",
-        Callback      = function(v)
-        local part = DropdownValue(v) or "Head"
-        S.TargetPart = part
-        S.ActivePartName = (part ~= "Visible On Screen") and part or "Head"
-    end
+    Callback      = function(v) S.TargetPart = v[1]; S.ActivePartName = v[1] end
 })
 MainTab:CreateToggle({Name = "Randomize Hitboxes (Legit Variance)", CurrentValue = S.RandomizeHitboxEnabled, Flag = "RandomizeHitbox", Callback = function(v)
     S.RandomizeHitboxEnabled = v
@@ -817,10 +787,41 @@ PresetsTab:CreateInput({
 
 local CustomizationTab = Window:CreateTab("Theming", "brush")
 
-CustomizationTab:CreateSection("Overlay Color Engine")
+-- // ── Section 1: Preset Color Override System ─────────────────── // --
+
+CustomizationTab:CreateSection("Preset Color Override System")
 CustomizationTab:CreateParagraph({
-    Title   = "Visual Synchronization",
-    Content = "Select unified color profiles for your visual overlays. These settings apply instantly across all active geometric elements on your screen."
+    Title   = "How Preset Colors Work",
+    Content = "Enable 'Override with Preset Colors' to synchronize all overlays to the chosen preset per category. When disabled, colors are driven exclusively by the Fine Control pickers below."
+})
+
+CustomizationTab:CreateToggle({
+    Name         = "Override with Preset Colors",
+    CurrentValue = S.UsePresetColors or false,
+    Flag         = "UsePresetColors",
+    Callback     = function(v)
+        S.UsePresetColors = v
+        if v then
+            pcall(function()
+                local function applyDd(flag, updater, field)
+                    local f = Rayfield.Flags[flag]
+                    if not f then return end
+                    local sel = type(f.CurrentOption) == "table" and f.CurrentOption[1] or f.CurrentOption
+                    local rgb = ColorPresetMap[sel]
+                    if rgb then
+                        if updater then updater(rgb) end
+                        if field then S[field] = rgb end
+                    end
+                end
+                applyDd("FOVCircleColorDropdown",  _G.UpdateFOVCircleColor,  nil)
+                applyDd("HighlightColorDropdown",  nil,                      "HighlightColor")
+                applyDd("CrosshairColorDropdown",  _G.UpdateCrosshairColor,  nil)
+                applyDd("SnaplineColorDropdown",   nil,                      "SnaplineColor")
+                applyDd("VisibleColorDropdown",    nil,                      "VisibleColor")
+                applyDd("HiddenColorDropdown",     nil,                      "HiddenColor")
+            end)
+        end
+    end
 })
 
 CustomizationTab:CreateDropdown({
@@ -829,7 +830,8 @@ CustomizationTab:CreateDropdown({
     CurrentOption = {"Tan"},
     Flag          = "FOVCircleColorDropdown",
     Callback      = function(v)
-        local rgb = ColorPresetMap[v[1]]
+        if not S.UsePresetColors then return end
+        local rgb = ColorPresetMap[type(v) == "table" and v[1] or v]
         if rgb and _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(rgb) end
     end
 })
@@ -840,7 +842,8 @@ CustomizationTab:CreateDropdown({
     CurrentOption = {"Maroon"},
     Flag          = "HighlightColorDropdown",
     Callback      = function(v)
-        local rgb = ColorPresetMap[v[1]]
+        if not S.UsePresetColors then return end
+        local rgb = ColorPresetMap[type(v) == "table" and v[1] or v]
         if rgb then S.HighlightColor = rgb end
     end
 })
@@ -851,7 +854,8 @@ CustomizationTab:CreateDropdown({
     CurrentOption = {"Coral"},
     Flag          = "CrosshairColorDropdown",
     Callback      = function(v)
-        local rgb = ColorPresetMap[v[1]]
+        if not S.UsePresetColors then return end
+        local rgb = ColorPresetMap[type(v) == "table" and v[1] or v]
         if rgb and _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(rgb) end
     end
 })
@@ -862,32 +866,104 @@ CustomizationTab:CreateDropdown({
     CurrentOption = {"Red"},
     Flag          = "SnaplineColorDropdown",
     Callback      = function(v)
-        local rgb = ColorPresetMap[v[1]]
+        if not S.UsePresetColors then return end
+        local rgb = ColorPresetMap[type(v) == "table" and v[1] or v]
         if rgb then S.SnaplineColor = rgb end
     end
 })
 
-CustomizationTab:CreateSection("Fine Control (Color Pickers)")
-CustomizationTab:CreateParagraph({
-    Title   = "Custom Color Overrides",
-    Content = "Manually fine-tune the colors for Dynamic Visibility mode. Note: The dropdowns above will override these settings if selected."
-})
-CustomizationTab:CreateColorPicker({
-    Name     = "Visible Target Color (Dynamic)",
-    Color    = Color3.fromRGB(0, 255, 0),
-    Flag     = "VisibleColorPicker",
-    Callback = function(Value) S.VisibleColor = Value end
-})
-CustomizationTab:CreateColorPicker({
-    Name     = "Hidden Target Color (Dynamic)",
-    Color    = Color3.fromRGB(255, 0, 0),
-    Flag     = "HiddenColorPicker",
-    Callback = function(Value) S.HiddenColor = Value end
+CustomizationTab:CreateDropdown({
+    Name          = "Visible Target Indicator Color",
+    Options       = ColorDropdownOptions,
+    CurrentOption = {"Lime"},
+    Flag          = "VisibleColorDropdown",
+    Callback      = function(v)
+        if not S.UsePresetColors then return end
+        local rgb = ColorPresetMap[type(v) == "table" and v[1] or v]
+        if rgb then S.VisibleColor = rgb end
+    end
 })
 
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                        8. SYSTEM TAB                         // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
+CustomizationTab:CreateDropdown({
+    Name          = "Hidden Target Indicator Color",
+    Options       = ColorDropdownOptions,
+    CurrentOption = {"Red"},
+    Flag          = "HiddenColorDropdown",
+    Callback      = function(v)
+        if not S.UsePresetColors then return end
+        local rgb = ColorPresetMap[type(v) == "table" and v[1] or v]
+        if rgb then S.HiddenColor = rgb end
+    end
+})
+
+-- // ── Section 2: Fine Control Color Pickers ───────────────────── // --
+
+CustomizationTab:CreateSection("Fine Control (Color Pickers)")
+CustomizationTab:CreateParagraph({
+    Title   = "Per-Pixel Color Overrides",
+    Content = "Directly pick exact colors for each visual system. Only active when 'Override with Preset Colors' is OFF. Offers full RGB/HSV precision beyond the preset palette."
+})
+
+CustomizationTab:CreateColorPicker({
+    Name     = "FOV Circle Color",
+    Color    = S.FOVColor or Color3.fromRGB(255, 200, 120),
+    Flag     = "FOVCircleColorPicker",
+    Callback = function(Value)
+        if S.UsePresetColors then return end
+        if _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(Value) end
+    end
+})
+
+CustomizationTab:CreateColorPicker({
+    Name     = "ESP Geometry Color",
+    Color    = S.HighlightColor or Color3.fromRGB(139, 0, 0),
+    Flag     = "ESPColorPicker",
+    Callback = function(Value)
+        if S.UsePresetColors then return end
+        S.HighlightColor = Value
+    end
+})
+
+CustomizationTab:CreateColorPicker({
+    Name     = "Vector Crosshair Color",
+    Color    = S.CrosshairColor or Color3.fromRGB(255, 127, 80),
+    Flag     = "CrosshairColorPicker",
+    Callback = function(Value)
+        if S.UsePresetColors then return end
+        if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(Value) end
+    end
+})
+
+CustomizationTab:CreateColorPicker({
+    Name     = "Snapline & OOF Arrow Color",
+    Color    = S.SnaplineColor or Color3.fromRGB(255, 0, 0),
+    Flag     = "SnaplineColorPicker",
+    Callback = function(Value)
+        if S.UsePresetColors then return end
+        S.SnaplineColor = Value
+    end
+})
+
+CustomizationTab:CreateColorPicker({
+    Name     = "Visible Target Color (Dynamic)",
+    Color    = S.VisibleColor or Color3.fromRGB(0, 255, 0),
+    Flag     = "VisibleColorPicker",
+    Callback = function(Value)
+        if S.UsePresetColors then return end
+        S.VisibleColor = Value
+    end
+})
+
+CustomizationTab:CreateColorPicker({
+    Name     = "Hidden Target Color (Dynamic)",
+    Color    = S.HiddenColor or Color3.fromRGB(255, 0, 0),
+    Flag     = "HiddenColorPicker",
+    Callback = function(Value)
+        if S.UsePresetColors then return end
+        S.HiddenColor = Value
+    end
+})
+
 
 local MiscTab = Window:CreateTab("System", "cog")
 
@@ -1015,13 +1091,6 @@ UpdateLogTab:CreateLabel("- Frame-scope scalar caching in render loop for reduce
 UpdateLogTab:CreateLabel("- Combined CharacterAdded handler (threat hook + tool observer in one connection)")
 UpdateLogTab:CreateLabel("- Re-structured the rendering loop to ensure visual overlays persist accurately on dropped frames")
 UpdateLogTab:CreateLabel("- Added UTF-8 BOM stripping and HTML error detection to the module loader")
-UpdateLogTab:CreateLabel("- Corrected ConfigurationSaving folder path to match current version")
-
-UpdateLogTab:CreateSection("Version 1.5.5")
-UpdateLogTab:CreateLabel("- Version bump to V1.5.5 — hardening, bug fixes, and UI polish pass")
-UpdateLogTab:CreateLabel("- Fixed TargetFirstSeenTimestamps cleanup using pcall-guarded IsModelValid to prevent destroyed-model errors")
-UpdateLogTab:CreateLabel("- Added independent Snapline & OOF Arrow color control to the Theming tab")
-UpdateLogTab:CreateLabel("- Branded all notification titles under TASFF namespace (removed bare Error titles)")
 UpdateLogTab:CreateLabel("- Corrected ConfigurationSaving folder path to match current version")
 
 UpdateLogTab:CreateSection("Version 1.5.0")

@@ -386,51 +386,155 @@ end})
 -- //                       4. ADVANCED TAB                        // --
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
-local AdvancedTab = Window:CreateTab("Advanced", "cpu")
 
-AdvancedTab:CreateSection("Threat Intelligence & Retaliation")
-AdvancedTab:CreateParagraph({
-    Title   = "Threat System",
-    Content = "Automatically tags players who damage you into your Priority list. After the configured timeout, threats expire and can optionally be pushed straight into your Blacklist."
+-- Intel Tab block to INSERT before local AdvancedTab
+local IntelTab = Window:CreateTab("Intel", "shield-alert")
+
+IntelTab:CreateSection("Intel Monitor")
+IntelTab:CreateParagraph({
+    Title   = "How It Works",
+    Content = "All tracked players (marked, threats, nemeses, registry) appear here sorted by threat score. Select a name then use the action buttons below."
 })
-AdvancedTab:CreateToggle({Name = "Enable Threat Detector (Damage Tracking)", CurrentValue = S.ThreatDetectorEnabled, Flag = "ThreatDetector", Callback = function(v)
+
+local IntelMonitorLabel = IntelTab:CreateParagraph({
+    Title   = "Intel Monitor (0 tracked)",
+    Content = "No tracked players."
+})
+S.IntelMonitorLabel = IntelMonitorLabel
+
+IntelTab:CreateInput({
+    Name                  = "Select Player by Name",
+    PlaceholderText       = "Enter exact username...",
+    RemoveTextAfterFocusLost = false,
+    Flag                  = "IntelSelectInput",
+    Callback              = function(text)
+        if text and text ~= "" then
+            S.IntelSelected = text
+            if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
+        end
+    end
+})
+
+IntelTab:CreateButton({
+    Name     = "Remove Selected",
+    Callback = function()
+        if S.IntelSelected == "" then
+            if S.Notify then S.Notify({Title="Intel",Content="No player selected.",Duration=2,Image="alert-circle"}) end
+            return
+        end
+        if S.RemoveFromIntel then S.RemoveFromIntel(S.IntelSelected, false) end
+    end
+})
+
+IntelTab:CreateButton({
+    Name     = "Remove Selected (Nemesis)",
+    Callback = function()
+        if S.IntelSelected == "" then
+            if S.Notify then S.Notify({Title="Intel",Content="No player selected.",Duration=2,Image="alert-circle"}) end
+            return
+        end
+        if S.RemoveFromIntel then S.RemoveFromIntel(S.IntelSelected, true) end
+    end
+})
+
+IntelTab:CreateButton({
+    Name     = "Clear All Non-Nemesis",
+    Callback = function()
+        for name, data in pairs(S.IntelPlayers) do
+            if not data.nemesis then
+                S.IntelPlayers[name] = nil
+                S.ThreatMemory[name] = nil
+                local idx = table.find(S.PriorityPlayers, name)
+                if idx then table.remove(S.PriorityPlayers, idx) end
+            end
+        end
+        S.IntelSelected = ""
+        if S.SyncPriorityUI then S.SyncPriorityUI() end
+        if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
+        if S.Notify then S.Notify({Title="Intel",Content="Cleared all non-Nemesis entries.",Duration=2,Image="trash-2"}) end
+    end
+})
+
+IntelTab:CreateSection("Priority Settings")
+IntelTab:CreateParagraph({
+    Title   = "Priority Behavior Mode",
+    Content = "Boost: Priority players are sorted first but aimbot still targets others when none are available. Exclusive: Aimbot ONLY targets priority-listed players (old StrictPrioritize behavior)."
+})
+IntelTab:CreateDropdown({
+    Name          = "Priority Behavior",
+    Options       = {"Boost", "Exclusive"},
+    CurrentOption = {S.PriorityBehavior or "Boost"},
+    Flag          = "PriorityBehavior",
+    Callback      = function(v)
+        local val = type(v) == "table" and v[1] or v
+        S.PriorityBehavior = val
+        S.StrictPrioritize = (val == "Exclusive")
+    end
+})
+
+local IntelPriorityDropdown = IntelTab:CreateDropdown({
+    Name            = "Priority Registry (Preferred Targets)",
+    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
+    CurrentOption   = {},
+    MultipleOptions = true,
+    Flag            = "IntelPriorityPlayers",
+    Callback        = function(v)
+        local removed = {}
+        for _, oldName in ipairs(S.PriorityPlayers) do
+            if not table.find(v, oldName) then table.insert(removed, oldName) end
+        end
+        for _, remName in ipairs(removed) do
+            S.ThreatMemory[remName] = nil
+            S.NemesisMemory[remName] = nil
+            S.IntelPlayers[remName] = nil
+        end
+        for _, newName in ipairs(v) do
+            if not S.IntelPlayers[newName] then
+                if S.AddToIntel then S.AddToIntel(newName, "Registry", 0) end
+            end
+        end
+        S.PriorityPlayers = v
+        if S.SyncPriorityUI then S.SyncPriorityUI() end
+    end
+})
+S.PriorityDropdownRef = IntelPriorityDropdown
+
+IntelTab:CreateSection("Threat Intelligence")
+IntelTab:CreateToggle({Name = "Enable Threat Detector (Damage Tracking)", CurrentValue = S.ThreatDetectorEnabled, Flag = "ThreatDetector", Callback = function(v)
     S.ThreatDetectorEnabled = v
 end})
-AdvancedTab:CreateToggle({Name = "Enable Nemesis System (Death Tracking)", CurrentValue = S.NemesisEnabled, Flag = "NemesisEnabled", Callback = function(v)
-    S.NemesisEnabled = v
+IntelTab:CreateToggle({Name = "Threat Neutralization (Auto-expire on kill)", CurrentValue = S.ThreatNeutralizationEnabled, Flag = "ThreatNeutralization", Callback = function(v)
+    S.ThreatNeutralizationEnabled = v
 end})
-AdvancedTab:CreateSlider({Name = "Threat Memory Expiration (Seconds)", Range = {1, 60}, Increment = 1, CurrentValue = S.ThreatTimeout, Flag = "ThreatTimeout", Callback = function(v)
+IntelTab:CreateSlider({Name = "Threat Memory Expiration (Seconds)", Range = {1, 60}, Increment = 1, CurrentValue = S.ThreatTimeout, Flag = "ThreatTimeout", Callback = function(v)
     S.ThreatTimeout = v
 end})
-AdvancedTab:CreateToggle({Name = "Auto-Blacklist Expired Threats", CurrentValue = S.BlacklistExpiredThreats, Flag = "BlacklistExpiredThreats", Callback = function(v)
+IntelTab:CreateToggle({Name = "Auto-Blacklist Expired Threats", CurrentValue = S.BlacklistExpiredThreats, Flag = "BlacklistExpiredThreats", Callback = function(v)
     S.BlacklistExpiredThreats = v
 end})
-
--- Core's ThreatMonitorLoop reads S.ThreatListLabel every second and calls :Set()
-ThreatListLabel = AdvancedTab:CreateParagraph({
-    Title   = "Live Threat Monitor",
-    Content = "No active threats detected."
-})
-S.ThreatListLabel = ThreatListLabel
-
-AdvancedTab:CreateSection("Target Marking & Overrides")
-AdvancedTab:CreateParagraph({
-    Title   = "Hover-To-Mark Target Selection",
-    Content = "Hover your cursor near any player (even through walls) and press your designated input to manually add or remove them from your Priority List."
-})
-AdvancedTab:CreateToggle({Name = "Enable Target Marking", CurrentValue = S.ClickToMarkEnabled, Flag = "ClickToMark", Callback = function(v) S.ClickToMarkEnabled = v end})
-AdvancedTab:CreateDropdown({Name = "Mark Activation Input", Options = {"Mouse Click Only", "Keybind Only", "Both"}, CurrentOption = {S.MarkMethod}, Flag = "MarkMethod", Callback = function(v)
-    S.MarkMethod = v[1]
+IntelTab:CreateToggle({Name = "Auto-Expire Tracked Players on Disconnect", CurrentValue = S.AutoExpireOnDisconnect, Flag = "AutoExpireOnDisconnect", Callback = function(v)
+    S.AutoExpireOnDisconnect = v
 end})
-AdvancedTab:CreateKeybind({
-        Name           = "Target Mark Keybind",
-        CurrentKeybind = S.MarkKeybind or "T",
-        Flag           = "MarkKeybind",
-        Callback       = function(key)
-            local validKey = SanitizeKeyName(key)
-            local isRebind = (validKey ~= nil and validKey ~= S.MarkKeybind)
-            if validKey then S.MarkKeybind = validKey end
-            if not isRebind and S.ClickToMarkEnabled and (S.MarkMethod == "Keybind Only" or S.MarkMethod == "Both") then
+
+IntelTab:CreateSection("Nemesis System")
+IntelTab:CreateToggle({Name = "Enable Nemesis System (Death Tracking)", CurrentValue = S.NemesisEnabled, Flag = "NemesisEnabled", Callback = function(v)
+    S.NemesisEnabled = v
+end})
+
+IntelTab:CreateSection("Click-to-Mark")
+IntelTab:CreateToggle({Name = "Enable Target Marking", CurrentValue = S.ClickToMarkEnabled, Flag = "ClickToMark", Callback = function(v) S.ClickToMarkEnabled = v end})
+IntelTab:CreateDropdown({Name = "Mark Activation Input", Options = {"Mouse Click Only", "Keybind Only", "Both"}, CurrentOption = {S.MarkMethod}, Flag = "MarkMethod", Callback = function(v)
+    S.MarkMethod = type(v) == "table" and v[1] or v
+end})
+IntelTab:CreateKeybind({
+    Name           = "Target Mark Keybind",
+    CurrentKeybind = S.MarkKeybind or "T",
+    Flag           = "MarkKeybind",
+    Callback       = function(key)
+        local validKey = SanitizeKeyName(key)
+        local isRebind = (validKey ~= nil and validKey ~= S.MarkKeybind)
+        if validKey then S.MarkKeybind = validKey end
+        if not isRebind and S.ClickToMarkEnabled and (S.MarkMethod == "Keybind Only" or S.MarkMethod == "Both") then
             if S.MasterEnabled and S.AimbotActive and S.CurrentTarget ~= nil then return end
             local toolEquipped = Player.Character and Player.Character:FindFirstChildOfClass("Tool") ~= nil
             if toolEquipped then return end
@@ -438,25 +542,16 @@ AdvancedTab:CreateKeybind({
         end
     end
 })
-AdvancedTab:CreateToggle({Name = "Strict Focus (Lock ONLY to Marked Targets)", CurrentValue = S.StrictPrioritize, Flag = "StrictPrioritize", Callback = function(v)
-    S.StrictPrioritize = v
+IntelTab:CreateToggle({Name = "Focus Mode (Visual ESP Only on Priority Targets)", CurrentValue = S.FocusMode, Flag = "FocusMode", Callback = function(v)
+    S.FocusMode = v
 end})
 
--- Core's SyncPriorityUI reads S.PriorityMonitorLabel and calls :Set()
-PriorityMonitorLabel = AdvancedTab:CreateParagraph({
-    Title   = "Active Priority Targets (0)",
-    Content = "No priority targets currently selected."
-})
-S.PriorityMonitorLabel = PriorityMonitorLabel
 
-AdvancedTab:CreateButton({
-    Name     = "Purge Priority List",
-    Callback = function()
-        S.PriorityPlayers = {}
-        if S.SyncPriorityUI then S.SyncPriorityUI() end
-        if S.Notify then S.Notify({Title = "TASFF Mark", Content = "Cleared all priority targets.", Duration = 2, Image = "delete"}) end
-    end
-})
+local AdvancedTab = Window:CreateTab("Advanced", "cpu")
+
+AdvancedTab:CreateSection("Target Marking (Legacy - See Intel Tab)")
+-- (Mark/Priority controls moved to Intel tab)
+
 
 AdvancedTab:CreateSection("Environment Penetration (Wallchecks)")
 AdvancedTab:CreateToggle({Name = "Enforce Line of Sight (Wallcheck)", CurrentValue = S.WallCheck, Flag = "WallCheck", Callback = function(v) S.WallCheck = v end})
@@ -481,8 +576,8 @@ SettingsTab:CreateToggle({Name = "Ignore Dead Targets", CurrentValue = S.IgnoreD
 
 SettingsTab:CreateSection("Player Management Registry")
 SettingsTab:CreateParagraph({
-    Title   = "Priority & Blacklist Routing",
-    Content = "Blacklisted players will be completely ignored by all targeting routines. Priority targets will be focused first when Strict Prioritize or Focus Mode is enabled."
+    Title   = "Blacklist & Priority",
+    Content = "Blacklisted players are ignored by all targeting. Priority targets and Intel system controls have moved to the Intel tab."
 })
 SettingsTab:CreateDropdown({
     Name            = "Blacklist Registry (Ignored)",
@@ -497,27 +592,6 @@ SettingsTab:CreateDropdown({
         end
     end
 })
-
-PriorityDropdownRef = SettingsTab:CreateDropdown({
-    Name            = "Priority Registry (Preferred)",
-    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
-    CurrentOption   = {},
-    MultipleOptions = true,
-    Flag            = "PriorityPlayers",
-    Callback        = function(v)
-        local removed = {}
-        for _, oldName in ipairs(S.PriorityPlayers) do
-            if not table.find(v, oldName) then table.insert(removed, oldName) end
-        end
-        for _, remName in ipairs(removed) do
-            S.ThreatMemory[remName]  = nil
-            S.NemesisMemory[remName] = nil
-        end
-        S.PriorityPlayers = v
-        if S.SyncPriorityUI then S.SyncPriorityUI() end
-    end
-})
-S.PriorityDropdownRef = PriorityDropdownRef
 
 SettingsTab:CreateSection("Weapon & Inventory Automation")
 SettingsTab:CreateParagraph({

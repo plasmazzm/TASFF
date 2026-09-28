@@ -912,7 +912,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local hum = S.CurrentTarget.Instance:FindFirstChildOfClass("Humanoid")
                 local typeMismatch = (S.CurrentTarget.IsPlayer and not S.TargetPlayers) or (not S.CurrentTarget.IsPlayer and not S.TargetNPCs)
                 local wallCheckFailed = false
-                if WallCheck and TargetPart~="Visible On Screen" then
+                if TargetPart == "Visible On Screen" then
+                    -- for VoS: mark failed if the upcoming CustomTargetData scan returns nothing (handled below)
+                    -- we conservatively let it pass here; the nil-target clear below handles it
+                elseif WallCheck then
                     if not IsVisibleCachedWrapper(S.CurrentTarget.Instance, S.ActivePartName, cachedIgnoreList) then wallCheckFailed=true end
                 end
                 local outOfBounds = false
@@ -956,33 +959,33 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             if S.SilentAimEnabled and S.CurrentTarget then
                 S.SilentAimTargetCache=S.CurrentTarget; S.SilentAimTargetCacheTime=tick()
             elseif tick()-S.SilentAimTargetCacheTime>0.1 then S.SilentAimTargetCache=nil end
-            local CustomTargetPosition = nil
+            local CustomTargetData = nil
             if TargetPart=="Visible On Screen" and S.CurrentTarget then
                 local rigParts={"Head","Torso","UpperTorso","LowerTorso","Left Arm","LeftUpperArm","LeftLowerArm","LeftHand","Right Arm","RightUpperArm","RightLowerArm","RightHand","Left Leg","LeftUpperLeg","LeftLowerLeg","LeftFoot","Right Leg","RightUpperLeg","RightLowerLeg","RightFoot"}
-                local visPositions={}; local headVisPos=nil; local camPos=Camera.CFrame.Position
+                local camPos=Camera.CFrame.Position
                 local rp=RaycastParams.new(); rp.FilterType=Enum.RaycastFilterType.Exclude
                 local ignList={}; for _,v in ipairs(cachedIgnoreList) do table.insert(ignList,v) end
-                local tr=S.CurrentTarget.Instance:FindFirstChild("HumanoidRootPart")
-                if tr then table.insert(ignList,tr) end
+                table.insert(ignList, S.CurrentTarget.Instance)
                 rp.FilterDescendantsInstances=ignList; rp.IgnoreWater=true
+                local bDist=999999; local bPart=nil; local sc=GetAimPosition()
                 for _,pn in ipairs(rigParts) do
                     local part=S.CurrentTarget.Instance:FindFirstChild(pn)
                     if part and part:IsA("BasePart") then
                         local dir=part.Position-camPos; local res=workspace:Raycast(camPos,dir,rp)
                         if not res or res.Instance:IsDescendantOf(S.CurrentTarget.Instance) then
-                            if pn=="Head" then headVisPos=part.Position end
-                            table.insert(visPositions,part.Position)
+                            local sp,os=Camera:WorldToViewportPoint(part.Position)
+                            if os then
+                                local sPos=ApplyScreenCalibration(Vector2.new(sp.X,sp.Y))
+                                local d=(sPos-sc).Magnitude
+                                if d<bDist then bDist=d; bPart=part end
+                            end
                         end
                     end
                 end
-                if headVisPos then CustomTargetPosition=headVisPos
-                elseif #visPositions>0 then
-                    local sum=Vector3.new(0,0,0); for _,p in ipairs(visPositions) do sum=sum+p end
-                    CustomTargetPosition=sum/#visPositions
-                else if not S.StickyAimEnabled then S.CurrentTarget=nil end end
+                if bPart then CustomTargetData={Part=bPart, Position=bPart.Position} else S.CurrentTarget=nil end
             end
-            S.LastVisualList=VisualList; S.LastCustomTargetPosition=CustomTargetPosition
-        else S.LastVisualList={}; S.LastCustomTargetPosition=nil end
+            S.LastVisualList=VisualList; S.LastCustomTargetData=CustomTargetData
+        else S.LastVisualList={}; S.LastCustomTargetData=nil end
     end
     ClearVisuals()
     if MasterEnabled and S.LastVisualList then
@@ -1108,7 +1111,11 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local TWP=nil
             local tv=CT.Root and CT.Root.AssemblyLinearVelocity or Vector3.new(0,0,0)
             local isM=tv.Magnitude>1.5; local Mode=S.Mode; local PA=S.PredictionAmount
-            if TP=="Visible On Screen" and S.LastCustomTargetPosition then TWP=S.LastCustomTargetPosition
+            if TP=="Visible On Screen" then
+                if S.LastCustomTargetData and S.LastCustomTargetData.Part and S.LastCustomTargetData.Part.Parent then
+                    local lvPart = S.LastCustomTargetData.Part
+                    TWP = lvPart.Position + (lvPart.AssemblyLinearVelocity * PA)
+                else TWP=nil end
             else
                 local bn=TP
                 if Mode=="Legit (Camera)" or Mode=="Advanced Legit (Mouse)" then
@@ -1118,7 +1125,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local bone=CT.Instance:FindFirstChild(bn) or CT.Root
                 if bone then TWP=bone.Position+(bone.AssemblyLinearVelocity*PA) end
             end
-            if TWP and S.WallCheck then
+            if TWP and S.WallCheck and TP~="Visible On Screen" then
                 local ti={}; for _,v in ipairs(cachedIgnoreList) do table.insert(ti,v) end; table.insert(ti,CT.Instance)
                 if not IsVisibleCachedWrapper(CT.Instance,S.ActivePartName,ti) then TWP=nil end
             end

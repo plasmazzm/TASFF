@@ -638,10 +638,12 @@ local function HandleClickToMark()
     if targetName then
         local idx = table.find(S.PriorityPlayers or {}, targetName)
         if idx then
-            table.remove(S.PriorityPlayers, idx); SyncPriorityUI()
-            Notify({Title="TASFF Mark",Content="Unmarked "..targetName.." from Priority.",Duration=2,Image="minus-circle"})
+            if S.RemoveFromIntel then S.RemoveFromIntel(targetName, false)
+            else table.remove(S.PriorityPlayers, idx); SyncPriorityUI() end
+            Notify({Title="TASFF Mark",Content="Unmarked "..targetName.." from Intel.",Duration=2,Image="minus-circle"})
         else
-            table.insert(S.PriorityPlayers, targetName); SyncPriorityUI()
+            if S.AddToIntel then S.AddToIntel(targetName, "Marked", 0)
+            else table.insert(S.PriorityPlayers, targetName); SyncPriorityUI() end
             Notify({Title="TASFF Mark",Content="Marked "..targetName.." as Priority!",Duration=2,Image="crosshair"})
         end
     else
@@ -930,9 +932,10 @@ table.insert(getgenv().TASFF.Connections, CharacterConnection)
 
 if Player.Character then HookThreatHealth(Player.Character); ListenForTools(Player.Character) end
 
--- Threat Neutralization: watch when a tracked player dies (killed by anyone)
-table.insert(getgenv().TASFF.Connections, Players.PlayerAdded:Connect(function(p)
-    p.CharacterAdded:Connect(function(char)
+-- Threat Neutralization: hooks a player's current and future humanoids
+local function HookNeutralization(p)
+    if not p or p == Player then return end
+    local function hookHum(char)
         local hum = char:WaitForChild("Humanoid", 5)
         if not hum then return end
         hum.Died:Connect(function()
@@ -943,23 +946,14 @@ table.insert(getgenv().TASFF.Connections, Players.PlayerAdded:Connect(function(p
                 Notify({Title="Intel",Content="Neutralized: "..p.Name.." removed from Intel.",Duration=2,Image="check-circle"})
             end
         end)
-    end)
-end))
-for _, p in ipairs(Players:GetPlayers()) do
-    if p ~= Player and p.Character then
-        local hum = p.Character:FindFirstChildOfClass("Humanoid")
-        if hum then
-            table.insert(getgenv().TASFF.Connections, hum.Died:Connect(function()
-                if not S.ThreatNeutralizationEnabled then return end
-                local data = S.IntelPlayers and S.IntelPlayers[p.Name]
-                if data and not data.nemesis and S.RemoveFromIntel then
-                    S.RemoveFromIntel(p.Name, false)
-                    Notify({Title="Intel",Content="Neutralized: "..p.Name.." removed from Intel.",Duration=2,Image="check-circle"})
-                end
-            end))
-        end
     end
+    -- Hook current character (if already spawned)
+    if p.Character then task.spawn(hookHum, p.Character) end
+    -- Hook all future respawns
+    p.CharacterAdded:Connect(hookHum)
 end
+table.insert(getgenv().TASFF.Connections, Players.PlayerAdded:Connect(HookNeutralization))
+for _, ep in ipairs(Players:GetPlayers()) do pcall(HookNeutralization, ep) end
 
 -- Auto-Expire on Disconnect
 table.insert(getgenv().TASFF.Connections, Players.PlayerRemoving:Connect(function(p)

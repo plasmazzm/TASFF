@@ -1151,12 +1151,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                   for _,pn in ipairs(rigParts) do
                       local part=S.CurrentTarget.Instance:FindFirstChild(pn)
                       if part and part:IsA("BasePart") then
-                          local isVisible = false
-                          if S.WallCheck then
-                              isVisible = S.IsVisibleWallcheck and S.IsVisibleWallcheck(S.CurrentTarget.Instance, pn, cachedIgnoreList) or false
-                          else
-                              isVisible = true
-                          end
+                          local isVisible = S.IsVisibleWallcheck and S.IsVisibleWallcheck(S.CurrentTarget.Instance, pn, cachedIgnoreList) or false
                           if isVisible then
                             local sp,os=Camera:WorldToViewportPoint(part.Position)
                             if os then

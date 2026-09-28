@@ -116,7 +116,7 @@ _G.TASFF_State = {
     SilentAimTargetCache        = nil,
     SilentAimTargetCacheTime    = 0,
     LastVisualList              = {},
-    LastCustomTargetPosition    = nil,
+    LastCustomTargetData    = nil,
 
     -- // ── ESP Visual Settings ────────────────────────────────── // --
     ESPRenderDistance           = 1000,

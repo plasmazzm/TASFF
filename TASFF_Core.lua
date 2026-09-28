@@ -948,19 +948,27 @@ local function HookNeutralization(p)
         local hum = char:WaitForChild("Humanoid", 5)
         if not hum then return end
         hum.Died:Connect(function()
-            if S.KillCountThreatEnabled then
-                local creator = hum:FindFirstChild("creator")
-                if creator and creator:IsA("ObjectValue") and creator.Value and creator.Value:IsA("Player") then
-                    local killer = creator.Value
-                    if killer ~= Player and killer ~= p then
-                        S.PlayerKillCounts[killer.Name] = (S.PlayerKillCounts[killer.Name] or 0) + 1
-                        if S.PlayerKillCounts[killer.Name] >= (S.KillsBeforeThreat or 3) then
-                            local kData = S.IntelPlayers and S.IntelPlayers[killer.Name]
-                            local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
-                            if not isTracked then
-                                if S.AddToIntel then S.AddToIntel(killer.Name, "Threat", 30) end
-                                Notify({Title="TASFF Threat", Content=killer.Name.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
-                            end
+            local killerName = "Unknown"
+            local killerObj = nil
+            local creator = hum:FindFirstChild("creator")
+            if creator and creator:IsA("ObjectValue") and creator.Value and creator.Value:IsA("Player") then
+                killerObj = creator.Value
+                killerName = killerObj.Name
+            end
+
+            if S.KillFeedEnabled and killerName ~= "Unknown" and killerName ~= p.Name then
+                Notify({Title="TASFF Intel", Content=killerName.." killed "..p.Name, Duration=2, Image="crosshair"})
+            end
+
+            if S.KillCountThreatEnabled and killerObj then
+                if killerObj ~= Player and killerObj ~= p then
+                    S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
+                    if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
+                        local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+                        local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
+                        if not isTracked then
+                            if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
+                            Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
                         end
                     end
                 end
@@ -1005,12 +1013,17 @@ local function UpdateSpectator()
         local p = Players:FindFirstChild(S.SpectateTarget)
         if p and p.Character and p.Character:FindFirstChild("Humanoid") then
             workspace.CurrentCamera.CameraSubject = p.Character.Humanoid
+            S.WasSpectating = true
             return
+        else
+            S.SpectatePlayerEnabled = false
+            if S.SyncSpectatorUI then S.SyncSpectatorUI(false) end
         end
     end
-    local selfHum = Player.Character and Player.Character:FindFirstChild("Humanoid")
-    if workspace.CurrentCamera.CameraSubject ~= selfHum then
+    if S.WasSpectating then
+        local selfHum = Player.Character and Player.Character:FindFirstChild("Humanoid")
         workspace.CurrentCamera.CameraSubject = selfHum or nil
+        S.WasSpectating = false
     end
 end
 

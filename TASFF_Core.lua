@@ -300,6 +300,102 @@ local function SyncPriorityUI()
 end
 S.SyncPriorityUI = SyncPriorityUI
 
+-- INTEL_INJECT: This file is injected by the patcher into TASFF_Core.lua after SyncPriorityUI
+
+-- // ── Intel System (v2.0.5) ─────────────────────────────────────── // --
+
+local IntelPointValues = {
+    Marked   = 15,
+    Threat   = 30,
+    Registry = 20,
+    Nemesis  = 50,
+    Damaged  = 5,
+    Killed   = 25,
+}
+
+local function GetIntelSortedList()
+    local list = {}
+    for name, data in pairs(S.IntelPlayers) do
+        table.insert(list, {Name=name, Data=data})
+    end
+    table.sort(list, function(a,b) return (a.Data.points or 0) > (b.Data.points or 0) end)
+    return list
+end
+S.GetIntelSortedList = GetIntelSortedList
+
+local function RebuildIntelMonitor()
+    if not S.IntelMonitorLabel then return end
+    local sorted = GetIntelSortedList()
+    if #sorted == 0 then
+        pcall(function() S.IntelMonitorLabel:Set({Title="Intel Monitor (0 tracked)", Content="No tracked players."}) end)
+        return
+    end
+    local lines = {}
+    local mostDangerousName, mostDangerousPts = nil, 0
+    for _, entry in ipairs(sorted) do
+        local name = entry.Name
+        local data = entry.Data
+        local pts  = data.points or 0
+        local src  = data.source or "Marked"
+        local po   = Players:FindFirstChild(name)
+        local displaySuffix = (po and po.DisplayName ~= name) and (" (" .. po.DisplayName .. ")") or ""
+        local selected = (S.IntelSelected == name) and " [SELECTED]" or ""
+        table.insert(lines, name .. displaySuffix .. "  [" .. src .. "]  " .. pts .. " pts" .. selected)
+        if pts > mostDangerousPts then mostDangerousPts = pts; mostDangerousName = name end
+    end
+    local heatmap = ""
+    if mostDangerousName then
+        local po2 = Players:FindFirstChild(mostDangerousName)
+        local dn2 = (po2 and po2.DisplayName ~= mostDangerousName) and (" (" .. po2.DisplayName .. ")") or ""
+        heatmap = "\n\n★ Most Dangerous: " .. mostDangerousName .. dn2 .. " — " .. mostDangerousPts .. " pts"
+    end
+    local body = table.concat(lines, "\n") .. heatmap
+    pcall(function() S.IntelMonitorLabel:Set({Title="Intel Monitor (" .. #sorted .. " tracked)", Content=body}) end)
+end
+S.RebuildIntelMonitor = RebuildIntelMonitor
+
+local function AddToIntel(name, source, extraPoints)
+    if not name or name == "" or name == Player.Name then return end
+    local pts = (IntelPointValues[source] or 0) + (extraPoints or 0)
+    local srcPriority = {Nemesis=4, Registry=3, Threat=2, Marked=1}
+    if S.IntelPlayers[name] then
+        local curSrc = S.IntelPlayers[name].source or "Marked"
+        if (srcPriority[source] or 0) > (srcPriority[curSrc] or 0) then
+            S.IntelPlayers[name].source = source
+        end
+        S.IntelPlayers[name].points = (S.IntelPlayers[name].points or 0) + pts
+        if source == "Nemesis" then S.IntelPlayers[name].nemesis = true end
+    else
+        S.IntelPlayers[name] = { source=source, points=pts, nemesis=(source=="Nemesis") }
+        if source ~= "Nemesis" and not table.find(S.PriorityPlayers, name) then
+            table.insert(S.PriorityPlayers, name)
+            SyncPriorityUI()
+        end
+    end
+    RebuildIntelMonitor()
+end
+S.AddToIntel = AddToIntel
+
+local function RemoveFromIntel(name, forceRemoveNemesis)
+    if not name or name == "" then return end
+    local data = S.IntelPlayers[name]
+    if not data then return end
+    if data.nemesis and not forceRemoveNemesis then
+        Notify({Title="Intel",Content="Use 'Remove Nemesis' to remove a Nemesis player.",Duration=2,Image="shield-off"})
+        return
+    end
+    S.IntelPlayers[name] = nil
+    S.ThreatMemory[name] = nil
+    S.NemesisMemory[name] = nil
+    local idx = table.find(S.PriorityPlayers, name)
+    if idx then table.remove(S.PriorityPlayers, idx) end
+    SyncPriorityUI()
+    if S.IntelSelected == name then S.IntelSelected = "" end
+    RebuildIntelMonitor()
+end
+S.RemoveFromIntel = RemoveFromIntel
+
+
 table.insert(getgenv().TASFF.Connections, Players.PlayerAdded:Connect(function() task.defer(SyncPriorityUI) end))
 table.insert(getgenv().TASFF.Connections, Players.PlayerRemoving:Connect(function() task.defer(SyncPriorityUI) end))
 
@@ -409,15 +505,16 @@ local function RegisterThreat(attackerName, isKill)
     if isKill then
         if S.NemesisEnabled then
             NemesisMemory[attackerName] = tick()
+            if S.AddToIntel then S.AddToIntel(attackerName, "Nemesis", 25) end
             Notify({Title="TASFF Nemesis",Content=attackerName.." killed you. Added to Nemesis List.",Duration=3,Image="flame"})
+        else
+            if S.AddToIntel then S.AddToIntel(attackerName, "Threat", 25) end
         end
     else
         ThreatMemory[attackerName] = tick()
-    end
-    if not table.find(S.PriorityPlayers, attackerName) then
-        table.insert(S.PriorityPlayers, attackerName)
-        SyncPriorityUI()
-        if not isKill then
+        local isNew = not table.find(S.PriorityPlayers, attackerName)
+        if S.AddToIntel then S.AddToIntel(attackerName, "Threat", 5) end
+        if isNew then
             Notify({Title="TASFF Threat",Content="Registered Threat: "..attackerName,Duration=2,Image="alert-circle"})
         end
     end
@@ -755,7 +852,7 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         if not model then return end
         local targetName = isPlayer and pObj.Name or model.Name
         if isPlayer and table.find(S.BlacklistedPlayers or {}, targetName) then return end
-        if S.StrictPrioritize and not table.find(S.PriorityPlayers or {}, targetName) then return end
+        if S.PriorityBehavior == "Exclusive" and not table.find(S.PriorityPlayers or {}, targetName) then return end
         local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso")
         if not root then return end
         local hum = model:FindFirstChildOfClass("Humanoid")
@@ -832,6 +929,44 @@ end)
 table.insert(getgenv().TASFF.Connections, CharacterConnection)
 
 if Player.Character then HookThreatHealth(Player.Character); ListenForTools(Player.Character) end
+
+-- Threat Neutralization: watch when a tracked player dies (killed by anyone)
+table.insert(getgenv().TASFF.Connections, Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function(char)
+        local hum = char:WaitForChild("Humanoid", 5)
+        if not hum then return end
+        hum.Died:Connect(function()
+            if not S.ThreatNeutralizationEnabled then return end
+            local data = S.IntelPlayers and S.IntelPlayers[p.Name]
+            if data and not data.nemesis and S.RemoveFromIntel then
+                S.RemoveFromIntel(p.Name, false)
+                Notify({Title="Intel",Content="Neutralized: "..p.Name.." removed from Intel.",Duration=2,Image="check-circle"})
+            end
+        end)
+    end)
+end))
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= Player and p.Character then
+        local hum = p.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            table.insert(getgenv().TASFF.Connections, hum.Died:Connect(function()
+                if not S.ThreatNeutralizationEnabled then return end
+                local data = S.IntelPlayers and S.IntelPlayers[p.Name]
+                if data and not data.nemesis and S.RemoveFromIntel then
+                    S.RemoveFromIntel(p.Name, false)
+                    Notify({Title="Intel",Content="Neutralized: "..p.Name.." removed from Intel.",Duration=2,Image="check-circle"})
+                end
+            end))
+        end
+    end
+end
+
+-- Auto-Expire on Disconnect
+table.insert(getgenv().TASFF.Connections, Players.PlayerRemoving:Connect(function(p)
+    if S.AutoExpireOnDisconnect and S.IntelPlayers and S.IntelPlayers[p.Name] and not S.IntelPlayers[p.Name].nemesis then
+        if S.RemoveFromIntel then S.RemoveFromIntel(p.Name, false) end
+    end
+end))
 
 task.defer(function()
     task.wait(0.2)

@@ -67,7 +67,7 @@ end
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local Window = Rayfield:CreateWindow({
-    Name            = "TASFF V2.0.0",
+    Name            = "TASFF V2.0.5",
     Icon            = 7488932264,
     LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
@@ -106,7 +106,7 @@ local Window = Rayfield:CreateWindow({
     },
     ConfigurationSaving = {
         Enabled    = true,
-        FolderName = "TASFF V2.0.0",
+        FolderName = "TASFF V2.0.5",
         FileName   = "MainConfig"
     }
 })
@@ -500,6 +500,9 @@ local IntelPriorityDropdown = IntelTab:CreateDropdown({
 S.PriorityDropdownRef = IntelPriorityDropdown
 
 IntelTab:CreateSection("Threat Intelligence")
+IntelTab:CreateToggle({Name = "Enable Live Kill Feed Notifications", CurrentValue = S.KillFeedEnabled, Flag = "KillFeedEnabled", Callback = function(v)
+    S.KillFeedEnabled = v
+end})
 IntelTab:CreateToggle({Name = "Enable Kill-Count Threat Auto-Flag", CurrentValue = S.KillCountThreatEnabled, Flag = "KillCountThreat", Callback = function(v)
     S.KillCountThreatEnabled = v
 end})
@@ -749,7 +752,7 @@ PresetsTab:CreateButton({
                 -- Advanced & Logic
                 ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
-                KillCountThreatEnabled = S.KillCountThreatEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
+                KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1193,7 +1196,7 @@ MiscTab:CreateButton({
         S.MeleeModeEnabled = false;     S.MeleeDetectionRange = 5;      S.MeleeClickInterval = 100
         S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
         S.BlacklistExpiredThreats = false
-        S.KillCountThreatEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
+        S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
         S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
         S.ClickToMarkEnabled = false;   S.MarkMethod = "Both"
         S.StrictPrioritize = false;     S.WallCheck = true
@@ -1221,7 +1224,18 @@ MiscTab:CreateButton({
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
-UpdateLogTab:CreateSection("Version 2.0.0 (Current Release)")
+UpdateLogTab:CreateSection("Version 2.0.5 (Current Release)")
+UpdateLogTab:CreateLabel("- The 'Intel Update': Consolidated all player-tracking features into a new centralized Intel Tab.")
+UpdateLogTab:CreateLabel("- Visible on Screen (VoS) Rewrite: Now raycasts 20 limbs independently and ignores own body parts.")
+UpdateLogTab:CreateLabel("- Priority Behavior Overhaul: Replaced StrictPrioritize with Boost vs. Exclusive dropdown options.")
+UpdateLogTab:CreateLabel("- Live Intel Monitor: Dynamic dashboard tracking Marked, Threats, and Nemeses with a points-based heatmap.")
+UpdateLogTab:CreateLabel("- Auto-Flag Systems: Kill-Count Threat detection and automated Nemesis Strike system added.")
+UpdateLogTab:CreateLabel("- Threat Neutralization: Automatically removes Threat tags when the enemy is neutralized (dies).")
+UpdateLogTab:CreateLabel("- Spectator Mode: Bound your camera to any tracked target to monitor them remotely (fixed native conflicts).")
+UpdateLogTab:CreateLabel("- Live Kill Feed: Built-in notification feed explicitly designed to debug Intel logic and false positives.")
+UpdateLogTab:CreateLabel("- Assorted Bug Fixes: Fixed Sticky Aim gaps, Enum.KeyCode errors on mouse binds, and wallcheck conflicts.")
+
+UpdateLogTab:CreateSection("Version 2.0.0")
 UpdateLogTab:CreateLabel("- Version bump to V2.0.0 � modular refactor across 4 files (State/Core/UI/Loader)")
 UpdateLogTab:CreateLabel("- Resolved the Lua 200-local engine limit via _G.TASFF_State shared module pattern")
 UpdateLogTab:CreateLabel("- Restored the original TASFF black-and-red UI theme with complete monolith feature parity")

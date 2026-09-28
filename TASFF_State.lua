@@ -48,6 +48,15 @@ _G.TASFF_State = {
     PriorityBehavior            = "Boost",
     ThreatNeutralizationEnabled = false,
     AutoExpireOnDisconnect      = false,
+    
+    -- // -- Intel System Features (v2.0.5) --------------------------- // --
+    KillCountThreatEnabled      = false,
+    KillsBeforeThreat           = 3,
+    PlayerKillCounts            = {},
+    KillsBeforeNemesis          = 3,
+    PlayerNemesisStrikes        = {},
+    SpectatePlayerEnabled       = false,
+    SpectateTarget              = "",
 
     -- // ── Auto ADS ───────────────────────────────────────────── // --
     AutoADSEnabled              = false,
@@ -228,6 +237,7 @@ _G.TASFF_State = {
     RemoveFromIntel             = nil,   -- function(name, forceRemoveNemesis)
     RebuildIntelMonitor         = nil,   -- function() rebuilds the paragraph text
     GetIntelSortedList          = nil,
+    SyncSpectatorUI             = nil,   -- function(state) updates UI toggle if core forces it off
     SetADSState                 = nil,
     GetPlayerNames              = nil,
     HandleClickToMark           = nil,

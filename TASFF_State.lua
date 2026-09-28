@@ -51,6 +51,7 @@ _G.TASFF_State = {
     
     -- // -- Intel System Features (v2.0.5) --------------------------- // --
     KillCountThreatEnabled      = false,
+    KillFeedEnabled             = false,
     KillsBeforeThreat           = 3,
     PlayerKillCounts            = {},
     KillsBeforeNemesis          = 3,

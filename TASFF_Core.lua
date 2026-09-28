@@ -504,9 +504,18 @@ local function RegisterThreat(attackerName, isKill)
     if not attackerName or attackerName == Player.Name then return end
     if isKill then
         if S.NemesisEnabled then
-            NemesisMemory[attackerName] = tick()
-            if S.AddToIntel then S.AddToIntel(attackerName, "Nemesis", 25) end
-            Notify({Title="TASFF Nemesis",Content=attackerName.." killed you. Added to Nemesis List.",Duration=3,Image="flame"})
+            S.PlayerNemesisStrikes[attackerName] = (S.PlayerNemesisStrikes[attackerName] or 0) + 1
+            local strikes = S.PlayerNemesisStrikes[attackerName]
+            local req = S.KillsBeforeNemesis or 3
+            if strikes >= req then
+                NemesisMemory[attackerName] = tick()
+                if S.AddToIntel then S.AddToIntel(attackerName, "Nemesis", 25) end
+                Notify({Title="TASFF Nemesis",Content="🔴 "..attackerName.." is now your Nemesis.",Duration=3,Image="flame"})
+            else
+                local strikeMsg = "⚠ Strike "..strikes.." — "..attackerName.." has killed you."
+                if strikes == 2 then strikeMsg = "⚠ Strike 2 — "..attackerName.." is on a streak against you." end
+                Notify({Title="TASFF Nemesis",Content=strikeMsg,Duration=3,Image="flame"})
+            end
         else
             if S.AddToIntel then S.AddToIntel(attackerName, "Threat", 25) end
         end
@@ -939,6 +948,24 @@ local function HookNeutralization(p)
         local hum = char:WaitForChild("Humanoid", 5)
         if not hum then return end
         hum.Died:Connect(function()
+            if S.KillCountThreatEnabled then
+                local creator = hum:FindFirstChild("creator")
+                if creator and creator:IsA("ObjectValue") and creator.Value and creator.Value:IsA("Player") then
+                    local killer = creator.Value
+                    if killer ~= Player and killer ~= p then
+                        S.PlayerKillCounts[killer.Name] = (S.PlayerKillCounts[killer.Name] or 0) + 1
+                        if S.PlayerKillCounts[killer.Name] >= (S.KillsBeforeThreat or 3) then
+                            local kData = S.IntelPlayers and S.IntelPlayers[killer.Name]
+                            local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
+                            if not isTracked then
+                                if S.AddToIntel then S.AddToIntel(killer.Name, "Threat", 30) end
+                                Notify({Title="TASFF Threat", Content=killer.Name.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
+                            end
+                        end
+                    end
+                end
+            end
+
             if not S.ThreatNeutralizationEnabled then return end
             local data = S.IntelPlayers and S.IntelPlayers[p.Name]
             if data and not data.nemesis and S.RemoveFromIntel then
@@ -973,8 +1000,23 @@ end)
 -- //                      MAIN RENDER LOOP                        // --
 -- // ══════════════════════════════════════════════════════════════ // --
 
+local function UpdateSpectator()
+    if S.SpectatePlayerEnabled and S.SpectateTarget and S.SpectateTarget ~= "" then
+        local p = Players:FindFirstChild(S.SpectateTarget)
+        if p and p.Character and p.Character:FindFirstChild("Humanoid") then
+            workspace.CurrentCamera.CameraSubject = p.Character.Humanoid
+            return
+        end
+    end
+    local selfHum = Player.Character and Player.Character:FindFirstChild("Humanoid")
+    if workspace.CurrentCamera.CameraSubject ~= selfHum then
+        workspace.CurrentCamera.CameraSubject = selfHum or nil
+    end
+end
+
 local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     if not S.ScriptInitialized then return end
+    UpdateSpectator()
     EnsureDrawings()
     local RunHeavySystems  = ShouldRunSubsystem("HeavySystems")
     local cachedIgnoreList = GetIgnoreList()

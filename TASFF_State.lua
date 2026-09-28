@@ -32,7 +32,7 @@ _G.TASFF_State = {
     RandomizeHitboxEnabled      = false,
     PriorityMode                = "None",
     VitalityMode                = "None",
-    StrictPrioritize            = false,
+    StrictPrioritize            = false,   -- kept for preset backward compat; use PriorityBehavior instead
 
     -- // ── Threat System ──────────────────────────────────────── // --
     ThreatDetectorEnabled       = false,
@@ -41,6 +41,13 @@ _G.TASFF_State = {
     BlacklistExpiredThreats     = false,
     NemesisEnabled              = true,
     NemesisMemory               = {},
+
+    -- // -- Intel System (v2.0.5) ------------------------------------ // --
+    IntelPlayers                = {},
+    IntelSelected               = "",
+    PriorityBehavior            = "Boost",
+    ThreatNeutralizationEnabled = false,
+    AutoExpireOnDisconnect      = false,
 
     -- // ── Auto ADS ───────────────────────────────────────────── // --
     AutoADSEnabled              = false,
@@ -208,6 +215,7 @@ _G.TASFF_State = {
     -- // ── UI Element References (set by TASFF_UI.lua) ────────── // --
     PriorityDropdownRef         = nil,
     PriorityMonitorLabel        = nil,
+    IntelMonitorLabel           = nil,   -- unified Intel Monitor paragraph ref
     PerformanceIndicator        = nil,
 
     -- // ── Cross-Chunk Function Slots (set by Core / UI) ──────── // --
@@ -216,6 +224,10 @@ _G.TASFF_State = {
     ClearVisuals                = nil,
     ClearCrosshair              = nil,
     SyncPriorityUI              = nil,
+    AddToIntel                  = nil,   -- function(name, source, extraPoints)
+    RemoveFromIntel             = nil,   -- function(name, forceRemoveNemesis)
+    RebuildIntelMonitor         = nil,   -- function() rebuilds the paragraph text
+    GetIntelSortedList          = nil,
     SetADSState                 = nil,
     GetPlayerNames              = nil,
     HandleClickToMark           = nil,

@@ -500,6 +500,12 @@ local IntelPriorityDropdown = IntelTab:CreateDropdown({
 S.PriorityDropdownRef = IntelPriorityDropdown
 
 IntelTab:CreateSection("Threat Intelligence")
+IntelTab:CreateToggle({Name = "Enable Kill-Count Threat Auto-Flag", CurrentValue = S.KillCountThreatEnabled, Flag = "KillCountThreat", Callback = function(v)
+    S.KillCountThreatEnabled = v
+end})
+IntelTab:CreateSlider({Name = "Kills Before Threat Flag", Range = {1, 10}, Increment = 1, CurrentValue = S.KillsBeforeThreat, Flag = "KillsBeforeThreat", Callback = function(v)
+    S.KillsBeforeThreat = v
+end})
 IntelTab:CreateToggle({Name = "Enable Threat Detector (Damage Tracking)", CurrentValue = S.ThreatDetectorEnabled, Flag = "ThreatDetector", Callback = function(v)
     S.ThreatDetectorEnabled = v
 end})
@@ -519,6 +525,48 @@ end})
 IntelTab:CreateSection("Nemesis System")
 IntelTab:CreateToggle({Name = "Enable Nemesis System (Death Tracking)", CurrentValue = S.NemesisEnabled, Flag = "NemesisEnabled", Callback = function(v)
     S.NemesisEnabled = v
+end})
+IntelTab:CreateSlider({Name = "Strikes Before Nemesis Flag", Range = {1, 10}, Increment = 1, CurrentValue = S.KillsBeforeNemesis, Flag = "KillsBeforeNemesis", Callback = function(v)
+    S.KillsBeforeNemesis = v
+end})
+local NemesisViewer = IntelTab:CreateParagraph({
+    Title   = "Permanent Nemesis Roster",
+    Content = "No nemeses."
+})
+local function RefreshNemesisViewer()
+    local names = {}
+    for n, _ in pairs(S.NemesisMemory or {}) do table.insert(names, n) end
+    if #names == 0 then
+        pcall(function() NemesisViewer:Set({Title="Permanent Nemesis Roster", Content="No permanent nemeses."}) end)
+    else
+        pcall(function() NemesisViewer:Set({Title="Permanent Nemesis Roster", Content=table.concat(names, "\n")}) end)
+    end
+end
+IntelTab:CreateButton({Name="Refresh Nemesis Roster", Callback=RefreshNemesisViewer})
+task.spawn(RefreshNemesisViewer)
+
+IntelTab:CreateSection("Spectator Mode")
+local SpectateDropdown = IntelTab:CreateDropdown({
+    Name            = "Spectate Target",
+    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
+    CurrentOption   = {S.SpectateTarget or ""},
+    MultipleOptions = false,
+    Flag            = "SpectateTargetDropdown",
+    Callback        = function(v)
+        local val = type(v) == "table" and v[1] or v
+        S.SpectateTarget = val
+    end
+})
+local SpectateToggle = IntelTab:CreateToggle({Name = "Spectate Player", CurrentValue = S.SpectatePlayerEnabled, Flag = "SpectatePlayer", Callback = function(v)
+    S.SpectatePlayerEnabled = v
+end})
+S.SyncSpectatorUI = function(state) pcall(function() SpectateToggle:Set(state) end) end
+IntelTab:CreateButton({Name="Refresh Player List", Callback=function()
+    if S.GetPlayerNames then
+        local names = S.GetPlayerNames()
+        pcall(function() SpectateDropdown:Refresh(names, true) end)
+        if S.PriorityDropdownRef and S.PriorityDropdownRef.Refresh then pcall(function() S.PriorityDropdownRef:Refresh(names, true) end) end
+    end
 end})
 
 IntelTab:CreateSection("Click-to-Mark")
@@ -701,6 +749,7 @@ PresetsTab:CreateButton({
                 -- Advanced & Logic
                 ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
+                KillCountThreatEnabled = S.KillCountThreatEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1144,6 +1193,8 @@ MiscTab:CreateButton({
         S.MeleeModeEnabled = false;     S.MeleeDetectionRange = 5;      S.MeleeClickInterval = 100
         S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
         S.BlacklistExpiredThreats = false
+        S.KillCountThreatEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
+        S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
         S.ClickToMarkEnabled = false;   S.MarkMethod = "Both"
         S.StrictPrioritize = false;     S.WallCheck = true
         S.NoCollisionCheck = false;     S.TransparencyCheck = false;    S.TransparencyThreshold = 0.5

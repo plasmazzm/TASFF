@@ -6,6 +6,12 @@
 -- // ============================================================ // --
 
 local S           = _G.TASFF_State
+
+local function SanitizeKeyName(k)
+    if type(k) == "string" and k ~= "" then return k:gsub("Enum%.KeyCode%.", "")
+    elseif typeof(k) == "EnumItem" then return k.Name end
+    return nil
+end
 local Rayfield    = getgenv().TASFF and getgenv().TASFF.Rayfield
 local Players     = game:GetService("Players")
 local Player      = Players.LocalPlayer
@@ -139,12 +145,14 @@ MainTab:CreateDropdown({
 
 MainTab:CreateSection("Activation & Automation")
 MainTab:CreateKeybind({
-    Name            = "Aimbot Activation Key",
-    CurrentKeybind  = S.AimbotKeybind or "E",
-    Flag            = "AimbotKeybind",
-    Callback        = function(key)
-        S.AimbotKeybind = key
-        if S.MasterEnabled then
+        Name            = "Aimbot Activation Key",
+        CurrentKeybind  = S.AimbotKeybind or "E",
+        Flag            = "AimbotKeybind",
+        Callback        = function(key)
+            local validKey = SanitizeKeyName(key)
+            local isRebind = (validKey ~= nil and validKey ~= S.AimbotKeybind)
+            if validKey then S.AimbotKeybind = validKey end
+            if not isRebind and S.MasterEnabled then
             S.AimbotActive = not S.AimbotActive
             if not S.AimbotActive then
                 S.CurrentTarget = nil
@@ -157,9 +165,15 @@ MainTab:CreateToggle({Name = "Auto ADS (Automatic Scope)", CurrentValue = S.Auto
     S.AutoADSEnabled = v
     if not v and S.SetADSState then S.SetADSState(false) end
 end})
-MainTab:CreateKeybind({Name = "Auto ADS Input Key", CurrentKeybind = S.AutoADSKeybind or "MouseButton2", Flag = "AutoADSKey", Callback = function(key)
-    S.AutoADSKeybind = key
-end})
+MainTab:CreateInput({
+        Name = "Auto ADS Input Key (Text)",
+        PlaceholderText = "e.g. MouseButton2, F",
+        RemoveTextAfterFocusLost = false,
+        Flag = "AutoADSKeyInput",
+        Callback = function(text)
+            if text and text ~= "" then S.AutoADSKeybind = text end
+        end
+    })
 
 MainTab:CreateSection("Target Selection & Sorting")
 MainTab:CreateDropdown({
@@ -409,13 +423,14 @@ AdvancedTab:CreateDropdown({Name = "Mark Activation Input", Options = {"Mouse Cl
     S.MarkMethod = v[1]
 end})
 AdvancedTab:CreateKeybind({
-    Name           = "Target Mark Keybind",
-    CurrentKeybind = S.MarkKeybind or "T",
-    Flag           = "MarkKeybind",
-    Callback       = function(key)
-        local wasRebind = (tostring(key) ~= tostring(S.MarkKeybind))
-        S.MarkKeybind = key
-        if not wasRebind and S.ClickToMarkEnabled and (S.MarkMethod == "Keybind Only" or S.MarkMethod == "Both") then
+        Name           = "Target Mark Keybind",
+        CurrentKeybind = S.MarkKeybind or "T",
+        Flag           = "MarkKeybind",
+        Callback       = function(key)
+            local validKey = SanitizeKeyName(key)
+            local isRebind = (validKey ~= nil and validKey ~= S.MarkKeybind)
+            if validKey then S.MarkKeybind = validKey end
+            if not isRebind and S.ClickToMarkEnabled and (S.MarkMethod == "Keybind Only" or S.MarkMethod == "Both") then
             if S.MasterEnabled and S.AimbotActive and S.CurrentTarget ~= nil then return end
             local toolEquipped = Player.Character and Player.Character:FindFirstChildOfClass("Tool") ~= nil
             if toolEquipped then return end
@@ -1008,11 +1023,14 @@ MiscTab:CreateToggle({Name = "Silence All Notifications", CurrentValue = S.Disab
 end})
 
 MiscTab:CreateKeybind({
-    Name           = "Global Panic Keybind",
-    CurrentKeybind = S.PanicKeybind or "Delete",
-    Flag           = "PanicKeybind",
-    Callback       = function(key) S.PanicKeybind = key end
-})
+        Name           = "Global Panic Keybind",
+        CurrentKeybind = S.PanicKeybind or "Delete",
+        Flag           = "PanicKeybind",
+        Callback       = function(key)
+            local validKey = SanitizeKeyName(key)
+            if validKey then S.PanicKeybind = validKey end
+        end
+    })
 
 MiscTab:CreateButton({
     Name     = "Execute Panic Protocol",

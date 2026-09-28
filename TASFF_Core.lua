@@ -1147,16 +1147,17 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             if TargetPart=="Visible On Screen" and S.CurrentTarget then
                 local rigParts={"Head","Torso","UpperTorso","LowerTorso","Left Arm","LeftUpperArm","LeftLowerArm","LeftHand","Right Arm","RightUpperArm","RightLowerArm","RightHand","Left Leg","LeftUpperLeg","LeftLowerLeg","LeftFoot","Right Leg","RightUpperLeg","RightLowerLeg","RightFoot"}
                 local camPos=Camera.CFrame.Position
-                local rp=RaycastParams.new(); rp.FilterType=Enum.RaycastFilterType.Exclude
-                local ignList={}; for _,v in ipairs(cachedIgnoreList) do table.insert(ignList,v) end
-                table.insert(ignList, S.CurrentTarget.Instance)
-                rp.FilterDescendantsInstances=ignList; rp.IgnoreWater=true
                 local bDist=999999; local bPart=nil; local sc=GetAimPosition()
-                for _,pn in ipairs(rigParts) do
-                    local part=S.CurrentTarget.Instance:FindFirstChild(pn)
-                    if part and part:IsA("BasePart") then
-                        local dir=part.Position-camPos; local res=workspace:Raycast(camPos,dir,rp)
-                        if not res or res.Instance:IsDescendantOf(S.CurrentTarget.Instance) then
+                  for _,pn in ipairs(rigParts) do
+                      local part=S.CurrentTarget.Instance:FindFirstChild(pn)
+                      if part and part:IsA("BasePart") then
+                          local isVisible = false
+                          if S.WallCheck then
+                              isVisible = S.IsVisibleWallcheck and S.IsVisibleWallcheck(S.CurrentTarget.Instance, pn, cachedIgnoreList) or false
+                          else
+                              isVisible = true
+                          end
+                          if isVisible then
                             local sp,os=Camera:WorldToViewportPoint(part.Position)
                             if os then
                                 local sPos=ApplyScreenCalibration(Vector2.new(sp.X,sp.Y))

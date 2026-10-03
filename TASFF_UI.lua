@@ -116,7 +116,143 @@ local Window = Rayfield:CreateWindow({
 -- //                        1. COMBAT TAB                         // --
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
+-- // ── HOME TAB ────────────────────────────────────────────────── // --
+
+local HomeTab = Window:CreateTab("Home", "home")
+
+HomeTab:CreateSection("Welcome")
+HomeTab:CreateParagraph({
+    Title   = "TASFF v2.1.0 — The Aimbot Script Final Form",
+    Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
+           .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
+           .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
+})
+
+HomeTab:CreateSection("Quick Feature Status")
+HomeTab:CreateParagraph({
+    Title   = "How to Read",
+    Content = "Select a category from the dropdown below. Enabled features appear first (✔), then disabled (✘). Changes made in other tabs are reflected on next category switch."
+})
+
+local function BuildStatusContent(category)
+    local on, off = {}, {}
+    local function check(label, flag)
+        if flag then table.insert(on, "  \xE2\x9C\x94 " .. label)
+        else table.insert(off, "  \xE2\x9C\x98 " .. label) end
+    end
+    if category == "Combat" then
+        check("Master Switch",          S.MasterEnabled)
+        check("Aimbot Engine",          S.TargetingEnabled)
+        check("Silent Aim",             S.SilentAimEnabled)
+        check("Sticky Aim",             S.StickyAimEnabled)
+        check("Dynamic Recoil (DRC)",   S.DynamicRecoilEnabled)
+        check("Auto ADS",               S.AutoADSEnabled)
+        check("Randomize Hitboxes",     S.RandomizeHitboxEnabled)
+        check("Target Near Center",     S.TargetNearCenter)
+        check("Target Switch Delay",    S.TargetSwitchDelayEnabled)
+        check("Grace Period",           S.GracePeriodEnabled)
+        check("Triggerbot",             S.AutoClickEnabled)
+        check("Melee Mode",             S.MeleeModeEnabled)
+    elseif category == "Visuals" then
+        check("Highlights (Players)",   S.UseHighlight)
+        check("Highlights (NPCs)",      S.UseNPCHighlight)
+        check("Info Tags (Players)",    S.UseInfoTag)
+        check("Info Tags (NPCs)",       S.UseNPCInfoTag)
+        check("Snaplines",              S.SnaplinesEnabled)
+        check("OOF Arrows",             S.OOFArrowsEnabled)
+        check("Box ESP",                S.BoxModeEnabled)
+        check("Skeleton ESP",           S.SkeletonModeEnabled)
+        check("Chams",                  S.ChamsEnabled)
+        check("Visibility Colors",      S.VisibilityColorsEnabled)
+        check("Show Display Name",      S.ShowDisplayName)
+        check("Show Tool Check",        S.ShowToolCheck)
+    elseif category == "Intel" then
+        check("Threat Detector",        S.ThreatDetectorEnabled)
+        check("Nemesis System",         S.NemesisEnabled)
+        check("Click-to-Mark",          S.ClickToMarkEnabled)
+        check("Focus Mode ESP",         S.FocusMode)
+        check("Wall Check",             S.WallCheck)
+        check("Team Check",             S.TeamCheck)
+        check("Target Players",         S.TargetPlayers)
+        check("Target NPCs",            S.TargetNPCs)
+    elseif category == "Automation" then
+        check("Auto-Engage on Equip",   S.AutoEnableOnEquip)
+        check("Intelligent Equip Filter", S.IntelligentEquipFilter)
+        check("Weapon-Type Gating",     S.WeaponTypeGating)
+        check("FOV Circle",             S.ShowFOV)
+        check("Invisible FOV",          S.InvisibleFOV)
+        check("Hide Blacklisted ESP",   S.HideBlacklistedESP)
+    end
+    local lines = {}
+    if #on > 0 then
+        table.insert(lines, "ENABLED"); for _, l in ipairs(on) do table.insert(lines, l) end
+    end
+    if #off > 0 then
+        if #on > 0 then table.insert(lines, "") end
+        table.insert(lines, "DISABLED"); for _, l in ipairs(off) do table.insert(lines, l) end
+    end
+    if #lines == 0 then return "No features in this category." end
+    return table.concat(lines, "\n")
+end
+
+local DashboardParagraph = HomeTab:CreateParagraph({
+    Title   = "Status — Combat",
+    Content = BuildStatusContent("Combat")
+})
+S.DashboardParagraph = DashboardParagraph
+
+HomeTab:CreateDropdown({
+    Name          = "Status Category",
+    Options       = {"Combat", "Visuals", "Intel", "Automation"},
+    CurrentOption = {"Combat"},
+    Flag          = "DashboardCategory",
+    Callback      = function(v)
+        local cat = v[1] or "Combat"
+        S.DashboardCategory = cat
+        if DashboardParagraph then
+            pcall(function()
+                DashboardParagraph:Set({Title = "Status — " .. cat, Content = BuildStatusContent(cat)})
+            end)
+        end
+    end
+})
+
+HomeTab:CreateSection("Session Statistics")
+local SessionStatsLabel = HomeTab:CreateParagraph({
+    Title   = "Current Session",
+    Content = "Locks: 0  |  Fires: 0  |  Threats: 0  |  Nemeses: 0"
+})
+S.SessionStatsLabel = SessionStatsLabel
+
+task.spawn(function()
+    S.SessionStartTime = tick()
+    task.wait(3)
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        if SessionStatsLabel then
+            pcall(function()
+                local uptime = math.floor(tick() - (S.SessionStartTime or tick()))
+                local mins, secs = math.floor(uptime / 60), uptime % 60
+                SessionStatsLabel:Set({
+                    Title   = "Current Session (up " .. mins .. "m " .. secs .. "s)",
+                    Content = string.format(
+                        "Target Locks: %d  |  Trigger Fires: %d  |  Threats: +%d  |  Nemeses: +%d",
+                        S.SessionTargetLocks  or 0,
+                        S.SessionTriggerFires or 0,
+                        S.SessionThreatsAdded or 0,
+                        S.SessionNemesesAdded or 0
+                    )
+                })
+            end)
+        end
+        task.wait(5)
+    end
+end)
+
+-- // ── COMBAT TAB ──────────────────────────────────────────────── // --
+
 local MainTab = Window:CreateTab("Combat", "crosshair")
+
+
 
 MainTab:CreateSection("Command & Control")
 MainTab:CreateParagraph({

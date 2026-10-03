@@ -867,8 +867,13 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
     local function Process(model, isPlayer, pObj)
         if not model then return end
         local targetName = isPlayer and pObj.Name or model.Name
-        if isPlayer and table.find(S.BlacklistedPlayers or {}, targetName) then return end
-        if S.PriorityBehavior == "Exclusive" and not table.find(S.PriorityPlayers or {}, targetName) then return end
+        local isBlacklisted = isPlayer and table.find(S.BlacklistedPlayers or {}, targetName) ~= nil
+        -- v2.1.0: blacklisted players are filtered from aimbot but shown in ESP (with tag or hidden per setting)
+        if isBlacklisted then
+            if performWallCheck then return end  -- never aim at blacklisted
+            if S.HideBlacklistedESP then return end  -- option to fully hide from ESP too
+        end
+        if S.PriorityBehavior == "Exclusive" and not isBlacklisted and not table.find(S.PriorityPlayers or {}, targetName) then return end
         local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso")
         if not root then return end
         local hum = model:FindFirstChildOfClass("Humanoid")
@@ -885,12 +890,14 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         if ignoreFOV or (onScreen and (not S.ShowFOV or distFromCenter <= S.FOVSize)) then
             table.insert(results, {
                 Instance=model, Root=root, Name=targetName, IsPlayer=isPlayer,
-                IsTeammate=isTeammate, DistFromCenter=distFromCenter, Distance=distFromCam,
+                IsTeammate=isTeammate, IsBlacklisted=isBlacklisted,
+                DistFromCenter=distFromCenter, Distance=distFromCam,
                 Position=pos, ScreenPos=Vector2.new(sPos.X,sPos.Y),
                 Health=hum.Health, TeamColor=isPlayer and pObj.TeamColor.Color or Color3.fromRGB(255,255,255)
             })
         end
     end
+
     if S.TargetPlayers then
         for _, v in ipairs(Players:GetPlayers()) do
             if v ~= Player and v.Character then Process(v.Character, true, v) end
@@ -1275,9 +1282,11 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         for _,t in ipairs(S.LastVisualList) do
             local isPriority=table.find(PP,t.Name)~=nil
             local isNemesis=NE and NemesisMemory[t.Name]~=nil
+            local isBlacklisted=t.IsBlacklisted==true
             local inFocus=not FM or isPriority
             local isPrimary=S.CurrentTarget and t.Instance==S.CurrentTarget.Instance
-            local show=inFocus and (VM=="All" or VM=="Multiple" or (VM=="Single" and isPrimary))
+            local show=inFocus and (VM=="All" or VM=="Multiple" or (VM=="Single" and isPrimary)) or isBlacklisted
+
             local dist=math.floor((myPos-t.Position).Magnitude)
             if not show or not t.Instance or dist>ERD then
                 local tc=TagCache[t.Instance]
@@ -1293,9 +1302,11 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local isVisNow=true
             if VCE then isVisNow=IsVisibleCachedWrapper(t.Instance,"HumanoidRootPart",cachedIgnoreList) end
             local bc=HLC or t.TeamColor
-            if isNemesis then bc=Color3.fromRGB(150,0,255)
+            if isBlacklisted then bc=Color3.fromRGB(255,140,0)         -- orange for blacklisted
+            elseif isNemesis then bc=Color3.fromRGB(150,0,255)
             elseif isPriority then bc=Color3.fromRGB(255,50,50)
             elseif VCE then bc=isVisNow and VC or HC end
+
             h.Adornee=t.Instance
             if t.IsPlayer then h.Enabled=UH else h.Enabled=UNH end
             h.OutlineColor=bc
@@ -1327,8 +1338,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     local hdr=""
                     local at=t.Instance:FindFirstChildOfClass("Tool")
                     if STC and at then hdr="["..at.Name:upper().."] " end
-                    if isNemesis then hdr=hdr.."[NEMESIS] " elseif isPriority then hdr=hdr.."[PRIORITY] " end
+                    if isBlacklisted then hdr=hdr.."[BLACKLISTED] "
+                    elseif isNemesis then hdr=hdr.."[NEMESIS] " elseif isPriority then hdr=hdr.."[PRIORITY] " end
                     if t.IsTeammate then hdr=hdr.."[TEAM] " end
+
                     local ns=""
                     if t.IsPlayer and SDisp then local po=Players:FindFirstChild(t.Name); if po then ns="("..po.DisplayName..") " end end
                     local fs=string.format("%s%s%s\nHP: %d | Dist: %d",hdr,ns,t.Name,math.floor(t.Health),dist)
@@ -1397,8 +1410,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local ti={}; for _,v in ipairs(cachedIgnoreList) do table.insert(ti,v) end; table.insert(ti,CT.Instance)
                 if not IsVisibleCachedWrapper(CT.Instance,S.ActivePartName,ti) then TWP=nil end
             end
-            -- v2.1.0: Silent Aim fix — hooks handle redirection; skip physical movement entirely
-            if TWP and not S.SilentAimEnabled then
+            -- v2.1.0: Silent Aim — only block MOUSE movement (mousemoverel/abs).
+            -- Camera CFrame writes still happen so the engine doesn't freeze the camera.
+            -- The __index/__namecall hooks handle actual bullet/raycast redirection.
+            if TWP then
                 local tcf=CFrame.new(Camera.CFrame.Position,TWP)
                 local sp,os=Camera:WorldToViewportPoint(TWP)
                 local tsp=os and ApplyScreenCalibration(Vector2.new(sp.X,sp.Y)) or nil
@@ -1407,7 +1422,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     Camera.CFrame=Camera.CFrame:Lerp(tcf,math.clamp(deltaTime*(6/math.max(0.1,Sm)),0.01,1))
                 elseif Mode=="Advanced Legit (Mouse)" then
                     -- v2.1.0 fix: smoothstep approach + split X/Y smoothness + micro-offset humanization
-                    if tsp then
+                    -- SA on: skip mouse movement entirely — hook handles bullet redirect
+                    if not S.SilentAimEnabled and tsp then
                         local mp=UserInputService:GetMouseLocation()
                         local diff=tsp-mp; local d2=diff.Magnitude
                         if d2 > 0.5 then
@@ -1439,6 +1455,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     end
                 end
             end
+
 
         end
         local MME=S.MeleeModeEnabled; local eMR=false

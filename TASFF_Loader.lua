@@ -176,13 +176,15 @@ end
 -- // ── Load Modules in Order ───────────────────────────────────── // --
 -- Order is critical:
 --   1. State  — defines _G.TASFF_State (all other modules depend on this)
---   2. Core   — reads S, defines all logic functions and starts loops
---   3. UI     — reads S, builds Rayfield window, sets S.ThreatListLabel etc.,
+--   2. Lists  — keyword classifiers, feature list, game configs (depends on State)
+--   3. Core   — reads S, defines all logic functions and starts loops
+--   4. UI     — reads S, builds Rayfield window, sets S.ThreatListLabel etc.,
 --               calls Rayfield:LoadConfiguration() at the very end
 
 print("[TASFF Loader] Loading modules...")
 
 LoadModule("TASFF_State.lua")   -- _G.TASFF_State = {...}
+LoadModule("TASFF_Lists.lua")   -- classifiers, feature list, game configs
 LoadModule("TASFF_Core.lua")    -- S.FunctionSlots = ..., render loop starts
 LoadModule("TASFF_UI.lua")      -- Window created, LoadConfiguration() called
 
@@ -200,7 +202,7 @@ local S = _G.TASFF_State
 task.delay(0.4, function()
     if S.Notify then
         S.Notify({
-            Title    = "TASFF v2.0.0",
+            Title    = "TASFF v2.1.0",
             Content  = "Script loaded successfully. Master Switch to begin.",
             Duration = 4,
             Image    = "shield-check"
@@ -208,4 +210,4 @@ task.delay(0.4, function()
     end
 end)
 
-print("[TASFF Loader] ══ All modules loaded. TASFF v2.0.0 is running. ══")
+print("[TASFF Loader] ══ All modules loaded. TASFF v2.1.0 is running. ══")

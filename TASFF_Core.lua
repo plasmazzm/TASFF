@@ -509,6 +509,7 @@ local function RegisterThreat(attackerName, isKill)
             local req = S.KillsBeforeNemesis or 3
             if strikes >= req then
                 NemesisMemory[attackerName] = tick()
+                S.SessionNemesesAdded = (S.SessionNemesesAdded or 0) + 1
                 if S.AddToIntel then S.AddToIntel(attackerName, "Nemesis", 25) end
                 Notify({Title="TASFF Nemesis",Content="🔴 "..attackerName.." is now your Nemesis.",Duration=3,Image="flame"})
             else
@@ -517,17 +518,20 @@ local function RegisterThreat(attackerName, isKill)
                 Notify({Title="TASFF Nemesis",Content=strikeMsg,Duration=3,Image="flame"})
             end
         else
+            S.SessionThreatsAdded = (S.SessionThreatsAdded or 0) + 1
             if S.AddToIntel then S.AddToIntel(attackerName, "Threat", 25) end
         end
     else
         ThreatMemory[attackerName] = tick()
         local isNew = not table.find(S.PriorityPlayers, attackerName)
+        S.SessionThreatsAdded = (S.SessionThreatsAdded or 0) + 1
         if S.AddToIntel then S.AddToIntel(attackerName, "Threat", 5) end
         if isNew then
             Notify({Title="TASFF Threat",Content="Registered Threat: "..attackerName,Duration=2,Image="alert-circle"})
         end
     end
 end
+
 
 local function HookThreatHealth(char)
     if not char then return end
@@ -692,11 +696,10 @@ S.NormalizePerformanceMode = NormalizePerformanceMode
 -- v2.1.0: ShouldRunSubsystem removed — replaced by the 4-slot pipeline in the render loop
 -- and time-based background task.spawn loops (see below).
 
-
-
 local function UpdateNPCs()
+    -- Use GetChildren() not GetDescendants() — far cheaper; NPCs sit directly in workspace
     local temp = {}
-    for _, v in ipairs(workspace:GetDescendants()) do
+    for _, v in ipairs(workspace:GetChildren()) do
         if v:IsA("Model") and v:FindFirstChildOfClass("Humanoid") then
             if not Players:GetPlayerFromCharacter(v) and v ~= Player.Character then
                 table.insert(temp, v)
@@ -708,11 +711,11 @@ end
 S.UpdateNPCs = UpdateNPCs
 
 -- // ── v2.1.0 Background Tasks (time-based, staggered start) ───── // --
--- These run fully decoupled from RenderStepped so they cannot cause frame hitches.
--- Staggered delays prevent all three from firing simultaneously on startup.
+-- All heavy per-entity work runs here, NOT in the render thread.
+-- Staggered delays prevent all loops from waking up simultaneously.
 
+-- ① NPC cache refresh
 task.spawn(function()
-    -- NPC cache: start immediately, interval driven by BackgroundIntervals.NPC
     while getgenv().TASFF and getgenv().TASFF.Running do
         pcall(UpdateNPCs)
         local biv = (S.BackgroundIntervals or {})[S.PerformanceMode or "Medium"] or {}
@@ -720,8 +723,8 @@ task.spawn(function()
     end
 end)
 
+-- ② Workspace model sweep (viewmodel / gun ignore list)
 task.spawn(function()
-    -- Workspace sweep: 0.3s stagger after NPC loop
     task.wait(0.3)
     while getgenv().TASFF and getgenv().TASFF.Running do
         pcall(UpdateWorkspaceIgnores)
@@ -730,9 +733,51 @@ task.spawn(function()
     end
 end)
 
+-- ③ Visibility Precompute — THE KEY FIX for stutter
+-- Runs IsVisibleWallcheck for every player + NPC one-by-one with a task.wait() between each.
+-- The render pipeline reads S.VisibilityPrecomputed[model] (a simple bool lookup — no raycasts).
+-- This completely moves all multi-hop raycast cost off the render thread.
+task.spawn(function()
+    task.wait(0.5)   -- slight stagger so ignore list is already built
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        if S.WallCheck and S.MasterEnabled then
+            local ignoreList = GetIgnoreList()
+            local partName   = S.ActivePartName or "HumanoidRootPart"
+
+            -- Players
+            if S.TargetPlayers then
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= Player and p.Character then
+                        local ok, result = pcall(IsVisibleWallcheck, p.Character, partName, ignoreList)
+                        S.VisibilityPrecomputed[p.Character] = ok and result or false
+                        task.wait()   -- yield for exactly 1 frame between each raycast burst
+                    end
+                end
+            end
+
+            -- NPCs
+            if S.TargetNPCs then
+                local npcs = S.CachedNPCs or {}
+                for _, npc in ipairs(npcs) do
+                    if npc and npc.Parent then
+                        local ok, result = pcall(IsVisibleWallcheck, npc, partName, ignoreList)
+                        S.VisibilityPrecomputed[npc] = ok and result or false
+                        task.wait()
+                    end
+                end
+            end
+        else
+            -- Wallcheck off: treat everyone as visible so aimbot works normally
+            S.VisibilityPrecomputed = {}
+        end
+
+        local biv = (S.BackgroundIntervals or {})[S.PerformanceMode or "Medium"] or {}
+        task.wait(biv.NPC or 0.8)   -- full rest period after completing the sweep
+    end
+end)
+
 pcall(UpdateWorkspaceIgnores)
 pcall(UpdateNPCs)
-
 
 
 local function CleanupCaches()
@@ -880,7 +925,19 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         if not hum or (S.IgnoreDead and hum.Health <= 0) then return end
         local isTeammate = isPlayer and Player.Team and pObj.Team and pObj.Team == Player.Team
         if S.TeamCheck and isTeammate then return end
-        if performWallCheck and not IsVisibleCachedWrapper(model, S.ActivePartName, customIgnoreList) then return end
+        -- v2.1.0 Render-thread wallcheck elimination:
+        -- Read from S.VisibilityPrecomputed (set by background loop ③, one yield per entity).
+        -- Falls back to live raycast ONLY on cold start (entry is nil before first sweep completes).
+        if performWallCheck then
+            local precomp = S.VisibilityPrecomputed[model]
+            if precomp == nil then
+                -- Cold start: compute live once, then background loop takes over
+                precomp = IsVisibleWallcheck(model, S.ActivePartName, customIgnoreList)
+                S.VisibilityPrecomputed[model] = precomp
+            end
+            if not precomp then return end
+        end
+
         local pos = root.Position
         local distFromCam = (pos - Camera.CFrame.Position).Magnitude
         if distFromCam > (maxDistance or S.AimbotRenderDistance) then return end
@@ -1196,8 +1253,16 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local typeMismatch = (S.CurrentTarget.IsPlayer and not S.TargetPlayers) or (not S.CurrentTarget.IsPlayer and not S.TargetNPCs)
             local wallCheckFailed = false
             if TargetPart ~= "Visible On Screen" and WallCheck then
-                if not IsVisibleCachedWrapper(S.CurrentTarget.Instance, S.ActivePartName, cachedIgnoreList) then wallCheckFailed = true end
+                -- Use precomputed table — avoids any raycast on the render thread
+                local precomp = S.VisibilityPrecomputed[S.CurrentTarget.Instance]
+                if precomp == nil then
+                    -- Cold start only: compute once, background takes over after
+                    precomp = IsVisibleCachedWrapper(S.CurrentTarget.Instance, S.ActivePartName, cachedIgnoreList)
+                    S.VisibilityPrecomputed[S.CurrentTarget.Instance] = precomp
+                end
+                if not precomp then wallCheckFailed = true end
             end
+
             local outOfBounds = false
             if S.CurrentTarget.Root then
                 local d = (S.CurrentTarget.Root.Position - Camera.CFrame.Position).Magnitude
@@ -1249,9 +1314,15 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     if PM == "Farthest" then return (a.Distance or 999999) > (b.Distance or 999999) end
                     return aDC < bDC
                 end)
+                -- v2.1.0: track new target lock for session stats
+                local prev = S.CurrentTarget
                 S.CurrentTarget = filtered[1]
+                if S.CurrentTarget and (not prev or prev.Instance ~= S.CurrentTarget.Instance) then
+                    S.SessionTargetLocks = (S.SessionTargetLocks or 0) + 1
+                end
             end
         end
+
 
         -- Silent aim target cache update (every frame)
         if S.SilentAimEnabled and S.CurrentTarget then
@@ -1476,13 +1547,19 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local coord; if S.ThirdPersonTriggerbot and CT2 and CT2.ScreenPos then coord=CT2.ScreenPos else coord=UserInputService:GetMouseLocation() end
             local aI=mA and MCI or CI
             if CM=="Hold" then
-                if not S.IsHoldingClick then S.IsHoldingClick=true; if TCM=="Physical" and mouse1press then mouse1press() else VirtualInputManager:SendMouseButtonEvent(coord.X,coord.Y,0,true,game,0) end end
+                if not S.IsHoldingClick then
+                    S.IsHoldingClick=true
+                    S.SessionTriggerFires = (S.SessionTriggerFires or 0) + 1
+                    if TCM=="Physical" and mouse1press then mouse1press() else VirtualInputManager:SendMouseButtonEvent(coord.X,coord.Y,0,true,game,0) end
+                end
             elseif CM=="Mash" then
                 if (tick()-S.LastClickTime)>=(aI/1000) then
                     S.LastClickTime=tick()
+                    S.SessionTriggerFires = (S.SessionTriggerFires or 0) + 1
                     task.spawn(function() if TCM=="Physical" and mouse1click then mouse1click() else VirtualInputManager:SendMouseButtonEvent(coord.X,coord.Y,0,true,game,0); task.wait(0.01); VirtualInputManager:SendMouseButtonEvent(coord.X,coord.Y,0,false,game,0) end end)
                 end
             end
+
         else
             if S.IsHoldingClick then
                 S.IsHoldingClick=false; local c2=UserInputService:GetMouseLocation()

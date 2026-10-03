@@ -230,6 +230,9 @@ _G.TASFF_State = {
     -- Aimbot candidate cache: written by pipeline Slot 1, sorted every frame
     AimbotCandidates            = {},
 
+    -- v2.1.0 Visibility precompute: written by background loop ③, read by GetPotentialTargets
+    -- Key = character model, Value = bool. Eliminates raycasts from the render thread entirely.
+    VisibilityPrecomputed       = {},
 
 
     -- // ── Calibration ────────────────────────────────────────── // --

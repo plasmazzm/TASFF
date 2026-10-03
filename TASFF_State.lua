@@ -19,8 +19,12 @@ _G.TASFF_State = {
     InvisibleFOV                = false,
     FOVSize                     = 100,
     TargetPart                  = "Head",
+    VOSPriorityParts            = {},            -- parts to prefer first in VoS scan (e.g. {"Head","UpperTorso"})
     Mode                        = "Legit (Camera)",
-    Smoothness                  = 1.5,
+    Smoothness                  = 1.5,           -- used by Legit (Camera) and as fallback
+    SmoothnessX                 = 1.5,           -- horizontal smoothness for Advanced Legit (Mouse)
+    SmoothnessY                 = 1.5,           -- vertical smoothness for Advanced Legit (Mouse)
+    BlatantSnapSpeed            = 100,           -- 100 = instant snap; <100 = lerp fraction
     PredictionAmount            = 0.16,
 
     -- // ── v1.5.0 Combat Upgrades ─────────────────────────────── // --
@@ -181,15 +185,52 @@ _G.TASFF_State = {
     ScriptInitialized           = false,
     DisableNotifications        = false,
     PresetFileName              = "TASFF_V1.5.5_Presets.json",
+    ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
+    CurrentVersion              = "2.1.0",
 
-    -- // ── Performance Engine ─────────────────────────────────── // --
+    -- // ── Session Statistics (v2.1.0) ─────────────────────────── // --
+    SessionStartTime            = 0,
+    SessionTargetLocks          = 0,
+    SessionTriggerFires         = 0,
+    SessionThreatsAdded         = 0,
+    SessionNemesesAdded         = 0,
+
+    -- // ── v2.1.0 Feature Flags ─────────────────────────────────── // --
+    HideBlacklistedESP          = false,     -- false = show [BLACKLISTED] tag; true = fully hide
+    IntelligentEquipFilter      = true,      -- use keyword classifier before auto-enabling aimbot
+    WeaponTypeGating            = true,      -- gate triggerbot/melee by classified weapon type
+    DashboardCategory           = "Combat",  -- home tab status panel active tab
+    LockHistory                 = {},        -- circular buffer [{name,time}], max 5 entries
+
+    -- // ── Performance Engine (v2.1.0 Pipeline) ────────────────── // --
     PerformanceMode             = "Medium",
     PerformanceModes            = {"Ultra High", "High", "Medium", "Low", "Ultra Low"},
+
+    -- Legacy tables kept for UI backward compat (updated in v2.2.0)
     PerformanceIntervals        = {["Ultra High"]=1, ["High"]=2, ["Medium"]=3, ["Low"]=5, ["Ultra Low"]=10},
     NPCIntervals                = {["Ultra High"]=2, ["High"]=3, ["Medium"]=5, ["Low"]=8, ["Ultra Low"]=12},
     SweepIntervals              = {["Ultra High"]=1, ["High"]=2, ["Medium"]=3, ["Low"]=5, ["Ultra Low"]=8},
     CacheIntervals              = {["Ultra High"]=15,["High"]=20,["Medium"]=30,["Low"]=45,["Ultra Low"]=60},
     FrameCounters               = {HeavySystems=0, NPCs=0, WorkspaceSweep=0, CacheCleanup=0},
+
+    -- v2.1.0 Pipeline: one scanning slot per frame, rest frames between slots
+    PipelineSlot                = 0,
+    PipelineRestCount           = 0,
+    PipelineRestFrames          = {["Ultra High"]=0, ["High"]=1, ["Medium"]=2, ["Low"]=4, ["Ultra Low"]=7},
+
+    -- v2.1.0 Background task intervals (seconds) — replaces frame-counter loops
+    BackgroundIntervals = {
+        ["Ultra High"] = { NPC=0.3,  Sweep=0.2,  Cache=3  },
+        ["High"]       = { NPC=0.5,  Sweep=0.4,  Cache=5  },
+        ["Medium"]     = { NPC=0.8,  Sweep=0.6,  Cache=8  },
+        ["Low"]        = { NPC=1.2,  Sweep=1.0,  Cache=12 },
+        ["Ultra Low"]  = { NPC=2.0,  Sweep=1.5,  Cache=20 },
+    },
+
+    -- Aimbot candidate cache: written by pipeline Slot 1, sorted every frame
+    AimbotCandidates            = {},
+
+
 
     -- // ── Calibration ────────────────────────────────────────── // --
     AimReferenceMode            = "Screen Center",
@@ -261,6 +302,15 @@ _G.TASFF_State = {
     DrawSkeleton                = nil,
     LoadPresetsFromFile         = nil,
     SavePresetsToFile           = nil,
+
+    -- // ── v2.1.0 Function Slots (set by TASFF_Lists.lua) ──────── // --
+    ClassifyTool                = nil,   -- ClassifyTool(name) → "Weapon"|"Melee"|"NonWeapon"|"Unknown"
+    IsRangedWeapon              = nil,
+    IsMeleeWeapon               = nil,
+    IsNonWeapon                 = nil,
+    FeatureCount                = 0,     -- populated by TASFF_Lists.lua on load
+    PresetGameConfigs           = {},    -- populated by TASFF_Lists.lua on load
 }
+
 
 print("[TASFF State] Shared state table initialised.")

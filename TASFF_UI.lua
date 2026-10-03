@@ -67,7 +67,7 @@ end
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local Window = Rayfield:CreateWindow({
-    Name            = "TASFF V2.0.5",
+    Name            = "TASFF V2.1.0",
     Icon            = 7488932264,
     LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
@@ -106,10 +106,11 @@ local Window = Rayfield:CreateWindow({
     },
     ConfigurationSaving = {
         Enabled    = true,
-        FolderName = "TASFF V2.0.5",
+        FolderName = "TASFF V2.1.0",
         FileName   = "MainConfig"
     }
 })
+
 
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                        1. COMBAT TAB                         // --
@@ -200,8 +201,17 @@ MainTab:CreateSlider({Name = "Maximum Acquisition Range (Studs)", Range = {100, 
 end})
 
 MainTab:CreateSection("Smoothing & Prediction")
-MainTab:CreateSlider({Name = "Tracking Smoothness", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.Smoothness, Flag = "SmoothSpeed", Callback = function(v)
+MainTab:CreateSlider({Name = "Tracking Smoothness (Legit/Camera)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.Smoothness, Flag = "SmoothSpeed", Callback = function(v)
     S.Smoothness = v
+end})
+MainTab:CreateSlider({Name = "Advanced Legit Smoothness X (Horizontal)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.SmoothnessX, Flag = "SmoothnessX", Callback = function(v)
+    S.SmoothnessX = v
+end})
+MainTab:CreateSlider({Name = "Advanced Legit Smoothness Y (Vertical)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.SmoothnessY, Flag = "SmoothnessY", Callback = function(v)
+    S.SmoothnessY = v
+end})
+MainTab:CreateSlider({Name = "Blatant Snap Speed (100 = Instant)", Range = {5, 100}, Increment = 5, CurrentValue = S.BlatantSnapSpeed, Flag = "BlatantSnapSpeed", Callback = function(v)
+    S.BlatantSnapSpeed = v
 end})
 MainTab:CreateSlider({Name = "Velocity Prediction Intensity", Range = {0, 0.5}, Increment = 0.01, CurrentValue = S.PredictionAmount, Flag = "PredIntense", Callback = function(v)
     S.PredictionAmount = v
@@ -209,6 +219,8 @@ end})
 MainTab:CreateToggle({Name = "Dynamic Recoil Control (DRC)", CurrentValue = S.DynamicRecoilEnabled, Flag = "DynamicRecoil", Callback = function(v)
     S.DynamicRecoilEnabled = v
 end})
+
+
 
 MainTab:CreateSection("Advanced Engagement Logic")
 MainTab:CreateToggle({Name = "Universal Silent Aim (Magic Bullet)", CurrentValue = S.SilentAimEnabled, Flag = "SilentAimEnabled", Callback = function(v)
@@ -643,6 +655,13 @@ SettingsTab:CreateDropdown({
         end
     end
 })
+SettingsTab:CreateToggle({
+    Name         = "Hide Blacklisted Player ESP (off = show [BLACKLISTED] tag)",
+    CurrentValue = S.HideBlacklistedESP,
+    Flag         = "HideBlacklistedESP",
+    Callback     = function(v) S.HideBlacklistedESP = v end
+})
+
 
 SettingsTab:CreateSection("Weapon & Inventory Automation")
 SettingsTab:CreateParagraph({
@@ -652,6 +671,26 @@ SettingsTab:CreateParagraph({
 SettingsTab:CreateToggle({Name = "Auto-Engage Aimbot on Weapon Equip", CurrentValue = S.AutoEnableOnEquip, Flag = "AutoEquipAim", Callback = function(v)
     S.AutoEnableOnEquip = v
 end})
+SettingsTab:CreateToggle({
+    Name         = "Intelligent Equip Filter (Keyword Classifier)",
+    CurrentValue = S.IntelligentEquipFilter,
+    Flag         = "IntelligentEquipFilter",
+    Callback     = function(v)
+        S.IntelligentEquipFilter = v
+        if S.Notify then S.Notify({Title="TASFF Intel",Content=v and "Equip filter ON — non-weapons will not trigger aimbot." or "Equip filter OFF — all tools trigger aimbot.",Duration=2,Image="cpu"}) end
+    end
+})
+SettingsTab:CreateToggle({
+    Name         = "Weapon-Type Gating (Triggerbot/Melee Smart Block)",
+    CurrentValue = S.WeaponTypeGating,
+    Flag         = "WeaponTypeGating",
+    Callback     = function(v)
+        S.WeaponTypeGating = v
+        if S.Notify then S.Notify({Title="TASFF Intel",Content=v and "Type gating ON — melee won't triggerbot; ranged won't melee." or "Type gating OFF — all weapons use all features.",Duration=2,Image="cpu"}) end
+    end
+})
+
+
 
 SettingsTab:CreateButton({
     Name     = "Blacklist Currently Equipped Tool",
@@ -1224,7 +1263,25 @@ MiscTab:CreateButton({
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
-UpdateLogTab:CreateSection("Version 2.0.5 (Current Release)")
+UpdateLogTab:CreateSection("Version 2.1.0 (Current Release)")
+UpdateLogTab:CreateLabel("- Performance Engine Rewrite: Replaced frame-skip monolith with a 4-slot rotating pipeline.")
+UpdateLogTab:CreateLabel("- Pipeline Design: Each slot (ESP scan / Aimbot scan / VoS raycasts / Maintenance) fires one per frame.")
+UpdateLogTab:CreateLabel("- Target selection and aim application now run every frame — aimbot is never delayed by performance mode.")
+UpdateLogTab:CreateLabel("- Three background task.spawn loops (NPC cache / Workspace sweep / Cache cleanup) replace frame counters.")
+UpdateLogTab:CreateLabel("- Silent Aim Fix: Mouse movement (Advanced Legit) is blocked when SA is on; camera modes still drive correctly.")
+UpdateLogTab:CreateLabel("- Advanced Legit Rewrite: Smoothstep ease + independent X/Y smoothness sliders + micro-offset humanizer.")
+UpdateLogTab:CreateLabel("- Blatant Snap Speed: Configurable 5-100 lerp speed slider (100 = instant, legacy behavior).")
+UpdateLogTab:CreateLabel("- Panic Keybind Fix: Uses enum-to-enum comparison via GetKeyCode() — no longer breaks after config restore.")
+UpdateLogTab:CreateLabel("- Intelligent Equip Filter: Keyword classifier prevents aimbot activation for non-weapon tools.")
+UpdateLogTab:CreateLabel("- Weapon-Type Gating: Triggerbot blocked for classified melee weapons; proximity melee blocked for ranged.")
+UpdateLogTab:CreateLabel("- Blacklisted Player ESP: Blacklisted players now show with [BLACKLISTED] tag in orange instead of disappearing.")
+UpdateLogTab:CreateLabel("- Hide Blacklisted ESP toggle: Optionally fully hide blacklisted players from ESP instead of tagging them.")
+UpdateLogTab:CreateLabel("- VoS Priority Parts: Configurable list of body parts checked first in Visible On Screen mode.")
+UpdateLogTab:CreateLabel("- New TASFF_Lists.lua module: Keyword tables for weapons, melee, non-weapons; game configs; feature list.")
+UpdateLogTab:CreateLabel("- Session statistics fields added: target locks, trigger fires, threats/nemeses added.")
+
+UpdateLogTab:CreateSection("Version 2.0.5")
+
 UpdateLogTab:CreateLabel("- The 'Intel Update': Consolidated all player-tracking features into a new centralized Intel Tab.")
 UpdateLogTab:CreateLabel("- Visible on Screen (VoS) Rewrite: Now raycasts 20 limbs independently and ignores own body parts.")
 UpdateLogTab:CreateLabel("- Priority Behavior Overhaul: Replaced StrictPrioritize with Boost vs. Exclusive dropdown options.")

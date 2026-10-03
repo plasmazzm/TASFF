@@ -662,9 +662,15 @@ end
 S.HandleClickToMark = HandleClickToMark
 
 table.insert(getgenv().TASFF.Connections, UserInputService.InputBegan:Connect(function(input, gpe)
-    if input.KeyCode ~= Enum.KeyCode.Unknown and input.KeyCode.Name == S.PanicKeybind then
-        TriggerPanic(); return
+    -- v2.1.0 fix: enum-to-enum comparison via GetKeyCode() — immune to string format
+    -- inconsistencies that occur after Rayfield:LoadConfiguration() restores saved flags
+    if input.KeyCode ~= Enum.KeyCode.Unknown then
+        local panicKey = GetKeyCode(S.PanicKeybind)
+        if panicKey and input.KeyCode == panicKey then
+            TriggerPanic(); return
+        end
     end
+
     if S.ClickToMarkEnabled
        and (S.MarkMethod == "Mouse Click Only" or S.MarkMethod == "Both")
        and input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -683,26 +689,10 @@ local function NormalizePerformanceMode(mode)
     return valid[mode] and mode or "Medium"
 end
 S.NormalizePerformanceMode = NormalizePerformanceMode
+-- v2.1.0: ShouldRunSubsystem removed — replaced by the 4-slot pipeline in the render loop
+-- and time-based background task.spawn loops (see below).
 
-local function ShouldRunSubsystem(subsystem)
-    S.PerformanceMode = NormalizePerformanceMode(S.PerformanceMode)
-    local fc = FrameCounters
-    if subsystem == "HeavySystems" then
-        fc.HeavySystems = fc.HeavySystems + 1
-        if fc.HeavySystems >= (PerformanceIntervals[S.PerformanceMode] or 3) then fc.HeavySystems = 0; return true end
-    elseif subsystem == "NPCs" then
-        fc.NPCs = fc.NPCs + 1
-        if fc.NPCs >= (NPCIntervals[S.PerformanceMode] or 5) then fc.NPCs = 0; return true end
-    elseif subsystem == "WorkspaceSweep" then
-        fc.WorkspaceSweep = fc.WorkspaceSweep + 1
-        if fc.WorkspaceSweep >= (SweepIntervals[S.PerformanceMode] or 3) then fc.WorkspaceSweep = 0; return true end
-    elseif subsystem == "CacheCleanup" then
-        fc.CacheCleanup = fc.CacheCleanup + 1
-        if fc.CacheCleanup >= (CacheIntervals[S.PerformanceMode] or 30) then fc.CacheCleanup = 0; return true end
-    end
-    return false
-end
-S.ShouldRunSubsystem = ShouldRunSubsystem
+
 
 local function UpdateNPCs()
     local temp = {}
@@ -717,22 +707,33 @@ local function UpdateNPCs()
 end
 S.UpdateNPCs = UpdateNPCs
 
+-- // ── v2.1.0 Background Tasks (time-based, staggered start) ───── // --
+-- These run fully decoupled from RenderStepped so they cannot cause frame hitches.
+-- Staggered delays prevent all three from firing simultaneously on startup.
+
 task.spawn(function()
+    -- NPC cache: start immediately, interval driven by BackgroundIntervals.NPC
     while getgenv().TASFF and getgenv().TASFF.Running do
-        if ShouldRunSubsystem("NPCs") then pcall(UpdateNPCs) end
-        task.wait(0.15)
+        pcall(UpdateNPCs)
+        local biv = (S.BackgroundIntervals or {})[S.PerformanceMode or "Medium"] or {}
+        task.wait(biv.NPC or 0.8)
     end
 end)
 
 task.spawn(function()
+    -- Workspace sweep: 0.3s stagger after NPC loop
+    task.wait(0.3)
     while getgenv().TASFF and getgenv().TASFF.Running do
-        if ShouldRunSubsystem("WorkspaceSweep") then pcall(UpdateWorkspaceIgnores) end
-        task.wait(0.15)
+        pcall(UpdateWorkspaceIgnores)
+        local biv = (S.BackgroundIntervals or {})[S.PerformanceMode or "Medium"] or {}
+        task.wait(biv.Sweep or 0.6)
     end
 end)
 
 pcall(UpdateWorkspaceIgnores)
 pcall(UpdateNPCs)
+
+
 
 local function CleanupCaches()
     local now = tick()
@@ -790,11 +791,15 @@ end
 S.CleanupCaches = CleanupCaches
 
 task.spawn(function()
+    -- Cache cleanup: 0.7s stagger, runs infrequently based on BackgroundIntervals.Cache
+    task.wait(0.7)
     while getgenv().TASFF and getgenv().TASFF.Running do
-        if ShouldRunSubsystem("CacheCleanup") then pcall(CleanupCaches) end
-        task.wait(0.15)
+        pcall(CleanupCaches)
+        local biv = (S.BackgroundIntervals or {})[S.PerformanceMode or "Medium"] or {}
+        task.wait(biv.Cache or 8)
     end
 end)
+
 
 local function GetVisualAssets(model)
     local h = HighlightCache[model]
@@ -1031,14 +1036,18 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     if not S.ScriptInitialized then return end
     UpdateSpectator()
     EnsureDrawings()
-    local RunHeavySystems  = ShouldRunSubsystem("HeavySystems")
     local cachedIgnoreList = GetIgnoreList()
+
     local MasterEnabled    = S.MasterEnabled
     local AimbotActive     = S.AimbotActive
     local TargetingEnabled = S.TargetingEnabled
     local heldTool          = Player.Character and Player.Character:FindFirstChildOfClass("Tool")
     local isToolBlacklisted = heldTool and table.find(S.ToolBlacklist, heldTool.Name)
-    local canAimWithTool    = not S.AutoEnableOnEquip or (heldTool and not isToolBlacklisted)
+    -- v2.1.0: Intelligent Equip Filter — classify held tool, block aimbot for non-weapons
+    local heldToolClass = heldTool and S.ClassifyTool and S.ClassifyTool(heldTool.Name) or "Unknown"
+    local isNonWeaponEquipped = S.IntelligentEquipFilter and heldTool and heldToolClass == "NonWeapon"
+    local canAimWithTool    = not S.AutoEnableOnEquip or (heldTool and not isToolBlacklisted and not isNonWeaponEquipped)
+
     local screenCenter  = GetAimPosition()
     local shouldShowFOV = S.ShowFOV and not S.InvisibleFOV and MasterEnabled and AimbotActive
     if S.FOVCircle then
@@ -1075,98 +1084,177 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             CE.Circle.Position=screenCenter; CE.Circle.Radius=sz; CE.Circle.Color=color; CE.Circle.Visible=true
         end
     end
-    if RunHeavySystems then
-        if MasterEnabled then
-            local TargetPart      = S.TargetPart; local WallCheck = S.WallCheck
-            local bypassWallCheck = (TargetPart ~= "Visible On Screen") and WallCheck or false
-            local VisualList = GetPotentialTargets(S.VisualMode=="All", false, cachedIgnoreList, S.ESPRenderDistance)
-            local AimbotList = {}
-            if AimbotActive and TargetingEnabled then
-                local raw = GetPotentialTargets(false, bypassWallCheck, cachedIgnoreList, S.AimbotRenderDistance)
-                for i,v in ipairs(raw) do AimbotList[i]=v end
-            end
-            for model,_ in pairs(TargetFirstSeenTimestamps) do
-                if not model or not model.Parent or not model:FindFirstChildOfClass("Humanoid") then TargetFirstSeenTimestamps[model]=nil end
-            end
-            if S.CurrentTarget and S.CurrentTarget.Root then
-                if (S.CurrentTarget.Root.Position-Camera.CFrame.Position).Magnitude > S.AimbotRenderDistance then S.CurrentTarget=nil end
-            end
-            local StickyLockActive = false
-            if S.StickyAimEnabled and S.CurrentTarget and S.CurrentTarget.Instance and S.CurrentTarget.Instance.Parent then
-                local hum = S.CurrentTarget.Instance:FindFirstChildOfClass("Humanoid")
-                local typeMismatch = (S.CurrentTarget.IsPlayer and not S.TargetPlayers) or (not S.CurrentTarget.IsPlayer and not S.TargetNPCs)
-                local wallCheckFailed = false
-                if TargetPart == "Visible On Screen" then
-                    -- for VoS: mark failed if the upcoming CustomTargetData scan returns nothing (handled below)
-                    -- we conservatively let it pass here; the nil-target clear below handles it
-                elseif WallCheck then
-                    if not IsVisibleCachedWrapper(S.CurrentTarget.Instance, S.ActivePartName, cachedIgnoreList) then wallCheckFailed=true end
+    -- // ── v2.1.0 Pipeline: Scanning Slots (one per frame) ─────── // --
+    -- Only the expensive scanning calls (GetPotentialTargets + VoS raycasts)
+    -- are gated here. Target selection and aim application run every frame below.
+    do
+        local pm = S.PerformanceMode or "Medium"
+        local prf = S.PipelineRestFrames
+        local restTarget = (prf and prf[pm]) or 2
+
+        if (S.PipelineRestCount or 0) > 0 then
+            S.PipelineRestCount = S.PipelineRestCount - 1
+        else
+            local slot = S.PipelineSlot or 0
+
+            if slot == 0 then
+                -- Slot 0: Build visual list for ESP rendering
+                if MasterEnabled then
+                    S.LastVisualList = GetPotentialTargets(S.VisualMode == "All", false, cachedIgnoreList, S.ESPRenderDistance)
+                else
+                    S.LastVisualList = {}
                 end
-                local outOfBounds = false
-                if S.CurrentTarget.Root then
-                    local d=(S.CurrentTarget.Root.Position-Camera.CFrame.Position).Magnitude
-                    if d>S.AimbotRenderDistance then outOfBounds=true end
-                    local sp,os=Camera:WorldToViewportPoint(S.CurrentTarget.Root.Position)
-                    if S.ShowFOV and os and (Vector2.new(sp.X,sp.Y)-screenCenter).Magnitude>S.FOVSize then outOfBounds=true end
+
+            elseif slot == 1 then
+                -- Slot 1: Build aimbot candidate list (with wallcheck raycasts)
+                if MasterEnabled and AimbotActive and TargetingEnabled then
+                    local tp = S.TargetPart
+                    local bypassWC = (tp ~= "Visible On Screen") and S.WallCheck or false
+                    S.AimbotCandidates = GetPotentialTargets(false, bypassWC, cachedIgnoreList, S.AimbotRenderDistance)
+                else
+                    S.AimbotCandidates = {}
                 end
-                if hum and hum.Health>0 and not typeMismatch and not wallCheckFailed and not outOfBounds and AimbotActive then
-                    StickyLockActive=true
-                else S.CurrentTarget=nil end
-            end
-            if not StickyLockActive then
-                if S.TargetSwitchDelayEnabled and (tick()-S.LastKillTime)<(S.SwitchDelayMs/1000) then AimbotList={} end
-                local graceCondition = WallCheck or (TargetPart=="Visible On Screen")
-                if S.GracePeriodEnabled and graceCondition then
-                    local now=tick()
-                    for i=#AimbotList,1,-1 do
-                        local m=AimbotList[i].Instance
-                        if not TargetFirstSeenTimestamps[m] then TargetFirstSeenTimestamps[m]=now end
-                        if (now-TargetFirstSeenTimestamps[m])*1000 < S.GracePeriodMs then table.remove(AimbotList,i) end
+
+            elseif slot == 2 then
+                -- Slot 2: VoS scan — up to 20 raycasts on current target limbs
+                -- Priority parts (from S.VOSPriorityParts) are checked first
+                local tp = S.TargetPart
+                if tp == "Visible On Screen" and S.CurrentTarget and S.CurrentTarget.Instance and S.CurrentTarget.Instance.Parent then
+                    local rigParts = {"Head","Torso","UpperTorso","LowerTorso","Left Arm","LeftUpperArm","LeftLowerArm","LeftHand","Right Arm","RightUpperArm","RightLowerArm","RightHand","Left Leg","LeftUpperLeg","LeftLowerLeg","LeftFoot","Right Leg","RightUpperLeg","RightLowerLeg","RightFoot"}
+                    local prio = S.VOSPriorityParts or {}
+                    local ordered = {}
+                    for _, pn in ipairs(prio) do table.insert(ordered, pn) end
+                    for _, pn in ipairs(rigParts) do
+                        if not table.find(prio, pn) then table.insert(ordered, pn) end
                     end
-                end
-                local PP=S.PriorityPlayers or {}; local VM=S.VitalityMode; local PM=S.PriorityMode; local TNC=S.TargetNearCenter
-                table.sort(AimbotList, function(a,b)
-                    local aPrio=table.find(PP,a.Name); local bPrio=table.find(PP,b.Name)
-                    if aPrio and not bPrio then return true end
-                    if bPrio and not aPrio then return false end
-                    if VM=="Weakest (HP)" then return a.Health<b.Health end
-                    if VM=="Strongest (HP)" then return a.Health>b.Health end
-                    local aDC=a.DistFromCenter or 999999; local bDC=b.DistFromCenter or 999999
-                    if TNC then return aDC<bDC end
-                    if PM=="Closest"  then return (a.Distance or 999999)<(b.Distance or 999999) end
-                    if PM=="Farthest" then return (a.Distance or 999999)>(b.Distance or 999999) end
-                    return aDC<bDC
-                end)
-                S.CurrentTarget = AimbotList[1]
-            end
-            if S.AutoADSEnabled then SetADSState(S.CurrentTarget~=nil and AimbotActive and canAimWithTool) end
-            if S.SilentAimEnabled and S.CurrentTarget then
-                S.SilentAimTargetCache=S.CurrentTarget; S.SilentAimTargetCacheTime=tick()
-            elseif tick()-S.SilentAimTargetCacheTime>0.1 then S.SilentAimTargetCache=nil end
-            local CustomTargetData = nil
-            if TargetPart=="Visible On Screen" and S.CurrentTarget then
-                local rigParts={"Head","Torso","UpperTorso","LowerTorso","Left Arm","LeftUpperArm","LeftLowerArm","LeftHand","Right Arm","RightUpperArm","RightLowerArm","RightHand","Left Leg","LeftUpperLeg","LeftLowerLeg","LeftFoot","Right Leg","RightUpperLeg","RightLowerLeg","RightFoot"}
-                local camPos=Camera.CFrame.Position
-                local bDist=999999; local bPart=nil; local sc=GetAimPosition()
-                  for _,pn in ipairs(rigParts) do
-                      local part=S.CurrentTarget.Instance:FindFirstChild(pn)
-                      if part and part:IsA("BasePart") then
-                          local isVisible = S.IsVisibleWallcheck and S.IsVisibleWallcheck(S.CurrentTarget.Instance, pn, cachedIgnoreList) or false
-                          if isVisible then
-                            local sp,os=Camera:WorldToViewportPoint(part.Position)
-                            if os then
-                                local sPos=ApplyScreenCalibration(Vector2.new(sp.X,sp.Y))
-                                local d=(sPos-sc).Magnitude
-                                if d<bDist then bDist=d; bPart=part end
+                    local bDist = 999999; local bPart = nil; local sc = GetAimPosition()
+                    for _, pn in ipairs(ordered) do
+                        local part = S.CurrentTarget.Instance:FindFirstChild(pn)
+                        if part and part:IsA("BasePart") then
+                            local isVis = S.IsVisibleWallcheck and S.IsVisibleWallcheck(S.CurrentTarget.Instance, pn, cachedIgnoreList) or false
+                            if isVis then
+                                local sp2, os2 = Camera:WorldToViewportPoint(part.Position)
+                                if os2 then
+                                    local sPos2 = ApplyScreenCalibration(Vector2.new(sp2.X, sp2.Y))
+                                    local d = (sPos2 - sc).Magnitude
+                                    if d < bDist then bDist = d; bPart = part end
+                                end
                             end
                         end
                     end
+                    if bPart then
+                        S.LastCustomTargetData = {Part = bPart, Position = bPart.Position}
+                    else
+                        S.LastCustomTargetData = nil; S.CurrentTarget = nil
+                    end
+                elseif S.TargetPart ~= "Visible On Screen" then
+                    S.LastCustomTargetData = nil
                 end
-                if bPart then CustomTargetData={Part=bPart, Position=bPart.Position} else S.CurrentTarget=nil end
+
+            elseif slot == 3 then
+                -- Slot 3: Timestamp pruning + AutoADS + Silent Aim cache expiry
+                for model, _ in pairs(TargetFirstSeenTimestamps) do
+                    if not model or not model.Parent or not model:FindFirstChildOfClass("Humanoid") then
+                        TargetFirstSeenTimestamps[model] = nil
+                    end
+                end
+                if S.AutoADSEnabled then SetADSState(S.CurrentTarget ~= nil and AimbotActive and canAimWithTool) end
+                if (not S.SilentAimEnabled or not S.CurrentTarget) and (tick() - (S.SilentAimTargetCacheTime or 0) > 0.1) then
+                    S.SilentAimTargetCache = nil
+                end
             end
-            S.LastVisualList=VisualList; S.LastCustomTargetData=CustomTargetData
-        else S.LastVisualList={}; S.LastCustomTargetData=nil end
+
+            S.PipelineSlot = (slot + 1) % 4
+            S.PipelineRestCount = restTarget
+        end
     end
+
+    -- // ── v2.1.0 Every-Frame: Target Selection (full FPS, no gating) // --
+    -- Reads S.AimbotCandidates (written by Slot 1), sorts and picks target
+    -- every frame so aimbot responsiveness is independent of performance mode.
+    if MasterEnabled and AimbotActive and TargetingEnabled then
+        local TargetPart = S.TargetPart; local WallCheck = S.WallCheck
+
+        -- Range cull on current target
+        if S.CurrentTarget and S.CurrentTarget.Root then
+            if (S.CurrentTarget.Root.Position - Camera.CFrame.Position).Magnitude > S.AimbotRenderDistance then
+                S.CurrentTarget = nil
+            end
+        end
+
+        -- Sticky aim validation
+        local StickyLockActive = false
+        if S.StickyAimEnabled and S.CurrentTarget and S.CurrentTarget.Instance and S.CurrentTarget.Instance.Parent then
+            local hum = S.CurrentTarget.Instance:FindFirstChildOfClass("Humanoid")
+            local typeMismatch = (S.CurrentTarget.IsPlayer and not S.TargetPlayers) or (not S.CurrentTarget.IsPlayer and not S.TargetNPCs)
+            local wallCheckFailed = false
+            if TargetPart ~= "Visible On Screen" and WallCheck then
+                if not IsVisibleCachedWrapper(S.CurrentTarget.Instance, S.ActivePartName, cachedIgnoreList) then wallCheckFailed = true end
+            end
+            local outOfBounds = false
+            if S.CurrentTarget.Root then
+                local d = (S.CurrentTarget.Root.Position - Camera.CFrame.Position).Magnitude
+                if d > S.AimbotRenderDistance then outOfBounds = true end
+                local sp2, os2 = Camera:WorldToViewportPoint(S.CurrentTarget.Root.Position)
+                if S.ShowFOV and os2 and (Vector2.new(sp2.X, sp2.Y) - screenCenter).Magnitude > S.FOVSize then outOfBounds = true end
+            end
+            if hum and hum.Health > 0 and not typeMismatch and not wallCheckFailed and not outOfBounds then
+                StickyLockActive = true
+            else
+                S.CurrentTarget = nil
+            end
+        end
+
+        -- Select new target from candidates (every frame — sort is cheap, no raycasts)
+        if not StickyLockActive then
+            local candidates = S.AimbotCandidates or {}
+            local filtered = {}
+            local now = tick()
+            local graceCondition = WallCheck or (TargetPart == "Visible On Screen")
+            for _, c in ipairs(candidates) do
+                if not c.Instance or not c.Instance.Parent then continue end
+                local hum = c.Instance:FindFirstChildOfClass("Humanoid")
+                if not hum or (S.IgnoreDead and hum.Health <= 0) then continue end
+                if S.GracePeriodEnabled and graceCondition then
+                    if not TargetFirstSeenTimestamps[c.Instance] then TargetFirstSeenTimestamps[c.Instance] = now end
+                    if (now - TargetFirstSeenTimestamps[c.Instance]) * 1000 < S.GracePeriodMs then continue end
+                end
+                -- Refresh live screen-distance + health for accurate sorting each frame
+                if c.Root and c.Root.Parent then
+                    local sp2, _ = Camera:WorldToViewportPoint(c.Root.Position)
+                    c.DistFromCenter = (Vector2.new(sp2.X, sp2.Y) - screenCenter).Magnitude
+                    c.Distance = (c.Root.Position - Camera.CFrame.Position).Magnitude
+                    c.Health = hum.Health
+                end
+                table.insert(filtered, c)
+            end
+            if not (S.TargetSwitchDelayEnabled and (tick() - S.LastKillTime) < (S.SwitchDelayMs / 1000)) then
+                local PP = S.PriorityPlayers or {}; local VM = S.VitalityMode; local PM = S.PriorityMode; local TNC = S.TargetNearCenter
+                table.sort(filtered, function(a, b)
+                    local aPrio = table.find(PP, a.Name); local bPrio = table.find(PP, b.Name)
+                    if aPrio and not bPrio then return true end
+                    if bPrio and not aPrio then return false end
+                    if VM == "Weakest (HP)"  then return a.Health < b.Health end
+                    if VM == "Strongest (HP)" then return a.Health > b.Health end
+                    local aDC = a.DistFromCenter or 999999; local bDC = b.DistFromCenter or 999999
+                    if TNC then return aDC < bDC end
+                    if PM == "Closest"  then return (a.Distance or 999999) < (b.Distance or 999999) end
+                    if PM == "Farthest" then return (a.Distance or 999999) > (b.Distance or 999999) end
+                    return aDC < bDC
+                end)
+                S.CurrentTarget = filtered[1]
+            end
+        end
+
+        -- Silent aim target cache update (every frame)
+        if S.SilentAimEnabled and S.CurrentTarget then
+            S.SilentAimTargetCache = S.CurrentTarget; S.SilentAimTargetCacheTime = tick()
+        end
+    else
+        if not MasterEnabled then S.LastVisualList = {}; S.LastCustomTargetData = nil end
+        if tick() - (S.SilentAimTargetCacheTime or 0) > 0.1 then S.SilentAimTargetCache = nil end
+    end
+
     ClearVisuals()
     if MasterEnabled and S.LastVisualList then
         local NE=S.NemesisEnabled; local FM=S.FocusMode; local VM=S.VisualMode
@@ -1309,7 +1397,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local ti={}; for _,v in ipairs(cachedIgnoreList) do table.insert(ti,v) end; table.insert(ti,CT.Instance)
                 if not IsVisibleCachedWrapper(CT.Instance,S.ActivePartName,ti) then TWP=nil end
             end
-            if TWP then
+            -- v2.1.0: Silent Aim fix — hooks handle redirection; skip physical movement entirely
+            if TWP and not S.SilentAimEnabled then
                 local tcf=CFrame.new(Camera.CFrame.Position,TWP)
                 local sp,os=Camera:WorldToViewportPoint(TWP)
                 local tsp=os and ApplyScreenCalibration(Vector2.new(sp.X,sp.Y)) or nil
@@ -1317,17 +1406,40 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 if Mode=="Legit (Camera)" then
                     Camera.CFrame=Camera.CFrame:Lerp(tcf,math.clamp(deltaTime*(6/math.max(0.1,Sm)),0.01,1))
                 elseif Mode=="Advanced Legit (Mouse)" then
+                    -- v2.1.0 fix: smoothstep approach + split X/Y smoothness + micro-offset humanization
                     if tsp then
-                        local mp=UserInputService:GetMouseLocation(); local d2=(tsp-mp).Magnitude
-                        local fr=math.max(1.0,Sm*(1+(150/math.max(d2,1)))); local tv2=tick()*6
-                        local sx=math.sin(tv2)*(d2*0.012); local sy=math.cos(tv2*1.3)*(d2*0.012)
-                        local mv=Vector2.new(tsp.X+sx,tsp.Y+sy)-mp
-                        local step=math.clamp(deltaTime*(25/fr),0.01,1)
-                        if UserInputService.MouseBehavior==Enum.MouseBehavior.LockCenter then mousemoverel(mv.X*step,mv.Y*step)
-                        else mousemoveabs(mp.X+mv.X*step,mp.Y+mv.Y*step) end
+                        local mp=UserInputService:GetMouseLocation()
+                        local diff=tsp-mp; local d2=diff.Magnitude
+                        if d2 > 0.5 then
+                            local Sx=math.max(0.1, S.SmoothnessX or Sm)
+                            local Sy=math.max(0.1, S.SmoothnessY or Sm)
+                            -- Ease: approaches fast when far, decelerates near target
+                            local ease=math.clamp(d2/150, 0.05, 1.0)
+                            local stepX=math.clamp(deltaTime*(20/Sx)*ease, 0.005, 0.7)
+                            local stepY=math.clamp(deltaTime*(20/Sy)*ease, 0.005, 0.7)
+                            -- Subtle random micro-offset for human feel (only when not locked in)
+                            local microX=d2>10 and (math.random()-0.5)*2.0 or 0
+                            local microY=d2>10 and (math.random()-0.5)*2.0 or 0
+                            local mvX=(diff.X+microX)*stepX
+                            local mvY=(diff.Y+microY)*stepY
+                            if UserInputService.MouseBehavior==Enum.MouseBehavior.LockCenter then
+                                mousemoverel(mvX, mvY)
+                            else
+                                mousemoveabs(mp.X+mvX, mp.Y+mvY)
+                            end
+                        end
                     end
-                elseif Mode=="Blatant" then Camera.CFrame=tcf end
+                elseif Mode=="Blatant" then
+                    -- v2.1.0: Blatant snap speed — 100=instant, <100=lerp
+                    local snap=S.BlatantSnapSpeed or 100
+                    if snap < 100 then
+                        Camera.CFrame=Camera.CFrame:Lerp(tcf, math.clamp(snap/100, 0.01, 1))
+                    else
+                        Camera.CFrame=tcf
+                    end
+                end
             end
+
         end
         local MME=S.MeleeModeEnabled; local eMR=false
         if MME and Player.Character then
@@ -1336,8 +1448,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         end
         local CT2=S.CurrentTarget; local CM=S.ClickMethod; local TCM=S.TriggerbotClickMode
         local CI=S.ClickInterval; local MCI=S.MeleeClickInterval
-        local tbA=S.AutoClickEnabled and CT2~=nil and TargetingEnabled and AimbotActive and canAimWithTool
-        local mA=MME and eMR
+        -- v2.1.0 Weapon-Type Gating: triggerbot blocked for melee tools; melee blocked for ranged
+        local wgEnabled = S.WeaponTypeGating and heldToolClass ~= "Unknown"
+        local triggerAllowed = not wgEnabled or (heldToolClass ~= "Melee")
+        local meleeAllowed   = not wgEnabled or (heldToolClass ~= "Weapon")
+        local tbA=S.AutoClickEnabled and CT2~=nil and TargetingEnabled and AimbotActive and canAimWithTool and triggerAllowed
+        local mA=MME and eMR and meleeAllowed
+
         if tbA or mA then
             local coord; if S.ThirdPersonTriggerbot and CT2 and CT2.ScreenPos then coord=CT2.ScreenPos else coord=UserInputService:GetMouseLocation() end
             local aI=mA and MCI or CI

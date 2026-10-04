@@ -1174,7 +1174,12 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
                 end
             end
         end
-        if not hum or (S.IgnoreDead and hum.Health <= 0) then return end
+        if not hum then return end
+        if hum.Health <= 0 then
+            if not S.DeadTargetsCache then S.DeadTargetsCache = {} end
+            if not S.DeadTargetsCache[model] then S.DeadTargetsCache[model] = tick() end
+            if (tick() - S.DeadTargetsCache[model]) > (S.KillFlashDuration or 0.8) then return end
+        end
         local isTeammate = isPlayer and Player.Team and pObj.Team and pObj.Team == Player.Team
         if S.TeamCheck and isTeammate then return end
         -- v2.1.0 Render-thread wallcheck elimination:
@@ -1282,7 +1287,7 @@ local function HookNeutralization(p)
             local killerObj = nil
             
             -- Detect creator (covers ObjectValue and StringValue variants)
-            local creator = hum:FindFirstChild("creator") or hum:FindFirstChild("Creator") or hum:FindFirstChild("KilledBy")
+            local creator = hum:FindFirstChild("creator") or hum:FindFirstChild("Creator") or hum:FindFirstChild("KilledBy") or hum:FindFirstChild("creatorTag") or hum:FindFirstChild("Killer") or hum:FindFirstChild("killer")
             if creator then
                 if creator:IsA("ObjectValue") and creator.Value and creator.Value:IsA("Player") then
                     killerObj = creator.Value
@@ -1604,7 +1609,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             for _, c in ipairs(candidates) do
                 if not c.Instance or not c.Instance.Parent then continue end
                 local hum = c.Instance:FindFirstChildOfClass("Humanoid")
-                if not hum or (S.IgnoreDead and hum.Health <= 0) then continue end
+                if not hum or hum.Health <= 0 then continue end
                 -- Feature 5: Health Threshold Gate
                 if healthThreshold > 0 and hum.MaxHealth > 0 and ((hum.Health / hum.MaxHealth) * 100 < healthThreshold) then continue end
                 if S.GracePeriodEnabled and graceCondition then
@@ -1620,7 +1625,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end
                 table.insert(filtered, c)
             end
-            if not (S.TargetSwitchDelayEnabled and (tick() - S.LastKillTime) < (S.SwitchDelayMs / 1000)) then
+            local delayActive = S.TargetSwitchDelayEnabled and (tick() - S.LastKillTime) < (S.SwitchDelayMs / 1000)
+            if not delayActive then
                 local PP = S.PriorityPlayers or {}; local VM = S.VitalityMode; local PM = S.PriorityMode; local TNC = S.TargetNearCenter
                 table.sort(filtered, function(a, b)
                     local aPrio = table.find(PP, a.Name); local bPrio = table.find(PP, b.Name)
@@ -1827,7 +1833,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local tv=CT.Root and CT.Root.AssemblyLinearVelocity or Vector3.new(0,0,0)
             local isM=tv.Magnitude>1.5; local Mode=S.Mode; local PA=S.PredictionAmount
             if TP=="Visible On Screen" then
-                if S.LastCustomTargetData and S.LastCustomTargetData.Part and S.LastCustomTargetData.Part.Parent then
+                if S.LastCustomTargetData and S.LastCustomTargetData.Part and S.LastCustomTargetData.Part.Parent and S.LastCustomTargetData.Part:IsDescendantOf(CT.Instance) then
                     local lvPart = S.LastCustomTargetData.Part
                     TWP = lvPart.Position + (lvPart.AssemblyLinearVelocity * PA)
                 else TWP=nil end

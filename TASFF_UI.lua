@@ -290,10 +290,12 @@ MainTab:CreateKeybind({
             local validKey = SanitizeKeyName(key)
             local isRebind = (validKey ~= nil and validKey ~= S.AimbotKeybind)
             if validKey then S.AimbotKeybind = validKey end
-            if not isRebind and S.MasterEnabled then
+            if not isRebind and S.MasterEnabled and not S.PanicLocked then
             S.AimbotActive = not S.AimbotActive
             if not S.AimbotActive then
                 S.CurrentTarget = nil
+                S.SilentAimTargetCache = nil
+                S.SilentAimTargetCacheTime = 0
                 if S.SetADSState then S.SetADSState(false) end
             end
         end
@@ -1375,6 +1377,70 @@ CustomizationTab:CreateColorPicker({
     end
 })
 
+-- // ── Section 3: Combat & Overlay Colors ───────────────────── // --
+
+CustomizationTab:CreateSection("Combat & Overlay Colors")
+CustomizationTab:CreateColorPicker({
+    Name     = "Chams Color (Through-Wall)",
+    Color    = S.ChamsColor or Color3.fromRGB(255, 30, 30),
+    Flag     = "ChamsColorPicker",
+    Callback = function(Value) S.ChamsColor = Value end
+})
+CustomizationTab:CreateSlider({Name = "Chams Opacity (0–100)", Range = {0, 100}, Increment = 1, CurrentValue = S.ChamsOpacity or 10, Flag = "ChamsOpacity", Callback = function(v) S.ChamsOpacity = v end})
+CustomizationTab:CreateColorPicker({
+    Name     = "OOF Arrow Color",
+    Color    = S.OOFArrowColor or Color3.fromRGB(255, 100, 0),
+    Flag     = "OOFArrowColorPicker",
+    Callback = function(Value) S.OOFArrowColor = Value end
+})
+CustomizationTab:CreateColorPicker({
+    Name     = "Kill Confirmation Flash Color",
+    Color    = S.KillFlashColor or Color3.fromRGB(255, 255, 255),
+    Flag     = "KillFlashColorPicker",
+    Callback = function(Value) S.KillFlashColor = Value end
+})
+CustomizationTab:CreateColorPicker({
+    Name     = "Blacklisted Player Tag Color",
+    Color    = S.BlacklistedTagColor or Color3.fromRGB(100, 100, 100),
+    Flag     = "BlacklistedTagColorPicker",
+    Callback = function(Value) S.BlacklistedTagColor = Value end
+})
+CustomizationTab:CreateColorPicker({
+    Name     = "Priority/Marked Player ESP Color",
+    Color    = S.PriorityHighlightColor or Color3.fromRGB(255, 200, 0),
+    Flag     = "PriorityHighlightColorPicker",
+    Callback = function(Value) S.PriorityHighlightColor = Value end
+})
+CustomizationTab:CreateColorPicker({
+    Name     = "Threat Player ESP Color",
+    Color    = S.ThreatHighlightColor or Color3.fromRGB(255, 60, 0),
+    Flag     = "ThreatHighlightColorPicker",
+    Callback = function(Value) S.ThreatHighlightColor = Value end
+})
+CustomizationTab:CreateColorPicker({
+    Name     = "Nemesis Player ESP Color",
+    Color    = S.NemesisHighlightColor or Color3.fromRGB(180, 0, 180),
+    Flag     = "NemesisHighlightColorPicker",
+    Callback = function(Value) S.NemesisHighlightColor = Value end
+})
+CustomizationTab:CreateColorPicker({
+    Name     = "Snapline Color",
+    Color    = S.SnaplineColor or Color3.fromRGB(255, 0, 0),
+    Flag     = "SnaplineFineColorPicker",
+    Callback = function(Value) S.SnaplineColor = Value end
+})
+CustomizationTab:CreateColorPicker({
+    Name     = "Box ESP Color",
+    Color    = S.BoxColor or Color3.fromRGB(200, 40, 40),
+    Flag     = "BoxESPColorPicker",
+    Callback = function(Value) S.BoxColor = Value end
+})
+CustomizationTab:CreateColorPicker({
+    Name     = "Skeleton ESP Color",
+    Color    = S.SkeletonColor or Color3.fromRGB(200, 40, 40),
+    Flag     = "SkeletonESPColorPicker",
+    Callback = function(Value) S.SkeletonColor = Value end
+})
 
 local MiscTab = Window:CreateTab("System", "cog")
 
@@ -1421,6 +1487,19 @@ MiscTab:CreateSlider({Name = "Notification Throttle (Max per 3s)", Range = {1, 1
 
 MiscTab:CreateToggle({Name = "Anti-AFK (Prevent Kick)", CurrentValue = S.AntiAFKEnabled, Flag = "AntiAFK", Callback = function(v) S.AntiAFKEnabled = v end})
 MiscTab:CreateToggle({Name = "FPS Watcher (Auto-Tune Performance Mode)", CurrentValue = S.FPSWatcherEnabled, Flag = "FPSWatcher", Callback = function(v) S.FPSWatcherEnabled = v end})
+
+MiscTab:CreateSection("Quick Controls")
+MiscTab:CreateToggle({Name = "Rapid Aim Mode Cycle (Keybind)", CurrentValue = S.RapidModeCycleEnabled, Flag = "RapidModeCycle", Callback = function(v) S.RapidModeCycleEnabled = v end})
+MiscTab:CreateKeybind({
+    Name           = "Mode Cycle Key",
+    CurrentKeybind = S.RapidModeCycleKey or "P",
+    Flag           = "RapidModeCycleKey",
+    Callback       = function(key)
+        local validKey = SanitizeKeyName(key)
+        if validKey then S.RapidModeCycleKey = validKey end
+    end
+})
+MiscTab:CreateToggle({Name = "Debug Mode (Verbose Console Output)", CurrentValue = S.DebugMode, Flag = "DebugMode", Callback = function(v) S.DebugMode = v end})
 
 MiscTab:CreateKeybind({
         Name           = "Global Panic Keybind",
@@ -1498,6 +1577,20 @@ MiscTab:CreateButton({
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
+UpdateLogTab:CreateSection("Version 2.1.1 (Hotfix Patch)")
+UpdateLogTab:CreateLabel("- FIXED Panic Keybind: Panic now permanently locks TASFF. Only a full re-execute restores operation.")
+UpdateLogTab:CreateLabel("- FIXED Silent Aim Camera Freeze: __index hook now only intercepts Mouse object queries, not all CFrame reads.")
+UpdateLogTab:CreateLabel("- FIXED Silent Aim Camera Freeze: __namecall hook detects and ignores PopperCam/ZoomController raycasts.")
+UpdateLogTab:CreateLabel("- FIXED Sticky Aim Snap-Back: SilentAimTargetCache and CurrentTarget cleared instantly on aimbot toggle-off.")
+UpdateLogTab:CreateLabel("- FIXED Kill Intelligence: Creator tag detection now checks 'creator', 'Creator', and 'KilledBy' (string and obj).")
+UpdateLogTab:CreateLabel("- FIXED Priority Point Tracking: Priority/Intel players now gain +15 points per kill.")
+UpdateLogTab:CreateLabel("- NEW Disconnect Notification: Tracked players who leave now trigger a notification with their Intel category.")
+UpdateLogTab:CreateLabel("- NEW Unload Notification: Termination now shows a native Roblox notification (Rayfield may be destroyed).")
+UpdateLogTab:CreateLabel("- NEW Feature 17 — Rapid Aim Mode Cycle: Configurable keybind cycles Legit → Advanced Legit → Blatant.")
+UpdateLogTab:CreateLabel("- NEW Feature 24 — Auto-Update Checker: Checks GitHub version.txt on load and notifies if newer version found.")
+UpdateLogTab:CreateLabel("- NEW Feature 27 — Debug Mode: Toggle verbose console output for targeting, threats, and mode switches.")
+UpdateLogTab:CreateLabel("- NEW Expanded Theming: 11 new color pickers covering Chams, OOF, Kill Flash, Priority, Threat, Nemesis, Blacklisted.")
+
 UpdateLogTab:CreateSection("Version 2.1.0 (Current Release)")
 UpdateLogTab:CreateLabel("- Performance Engine Rewrite: Replaced frame-skip monolith with a 4-slot rotating pipeline.")
 UpdateLogTab:CreateLabel("- Pipeline Design: Each slot (ESP scan / Aimbot scan / VoS raycasts / Maintenance) fires one per frame.")

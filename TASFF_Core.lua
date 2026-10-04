@@ -1699,24 +1699,34 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             
             -- Feature 15: Kill Confirm Flash
             local isRecentlyDead = false
+            local fadeFactor = 0
             if S.KillConfirmFlashEnabled then
                 local hum = t.Instance:FindFirstChildOfClass("Humanoid")
                 if hum and hum.Health <= 0 then
                     if not S.DeadTargetsCache then S.DeadTargetsCache = {} end
                     if not S.DeadTargetsCache[t.Instance] then S.DeadTargetsCache[t.Instance] = tick() end
-                    if (tick() - S.DeadTargetsCache[t.Instance]) < 0.4 then isRecentlyDead = true end
+                    local deadTime = tick() - S.DeadTargetsCache[t.Instance]
+                    local flashDur = S.KillFlashDuration or 0.8
+                    if deadTime < flashDur then 
+                        isRecentlyDead = true 
+                        fadeFactor = 1 - (deadTime / flashDur)
+                    end
                 end
             end
 
             local bc=HLC or t.TeamColor
-            if isRecentlyDead then bc = S.KillFlashColor or Color3.fromRGB(255, 255, 255)
-            elseif isBlacklisted then bc = S.BlacklistedTagColor or Color3.fromRGB(255, 140, 0)
+            if isBlacklisted then bc = S.BlacklistedTagColor or Color3.fromRGB(255, 140, 0)
             elseif isNemesis then bc = S.NemesisHighlightColor or Color3.fromRGB(150, 0, 255)
             elseif isPriority then bc = S.PriorityHighlightColor or Color3.fromRGB(255, 50, 50)
             elseif VCE then
                 local isThreat = S.IntelPlayers and S.IntelPlayers[t.Name] and (S.IntelPlayers[t.Name].source == "Threat")
                 if isThreat then bc = S.ThreatHighlightColor or Color3.fromRGB(255, 60, 0)
                 else bc = isVisNow and VC or HC end
+            end
+
+            if isRecentlyDead then 
+                local kfc = S.KillFlashColor or Color3.fromRGB(255, 255, 255)
+                bc = bc:Lerp(kfc, fadeFactor)
             end
 
             h.Adornee=t.Instance
@@ -1800,8 +1810,14 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 if SnaplineCache[t.Instance] then SnaplineCache[t.Instance].Visible=false end
                 if SkeletonCache[t.Instance] then for _,l in ipairs(SkeletonCache[t.Instance]) do if l and l.Line then l.Line.Visible=false end end end
             end
-            if ChE then h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop;h.FillColor=bc;h.FillTransparency=1-(math.clamp(ChO,1,10)/10)
-            else h.DepthMode=Enum.HighlightDepthMode.Occluded;h.FillTransparency=1 end
+            if ChE then 
+                h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+                h.FillColor=S.ChamsColor or bc
+                h.FillTransparency=1-(math.clamp(ChO,0,100)/100)
+            else 
+                h.DepthMode=Enum.HighlightDepthMode.Occluded
+                h.FillTransparency=1 
+            end
         end
     end
     if MasterEnabled then

@@ -152,6 +152,7 @@ _G.TASFF_State = {
     StreamProofESP              = true,
     OOFArrowsEnabled            = false,
     OOFArrowRadius              = 150,
+    HighlightColor              = Color3.fromRGB(255, 255, 255),
     VisibilityColorsEnabled     = false,
     VisibleColor                = Color3.fromRGB(0, 255, 0),
     HiddenColor                 = Color3.fromRGB(255, 0, 0),

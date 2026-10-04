@@ -304,7 +304,7 @@ MainTab:CreateParagraph({
 MainTab:CreateToggle({Name = "Master Switch (Killswitch)", CurrentValue = S.MasterEnabled, Flag = "MasterSwitch", Callback = function(v)
     S.MasterEnabled = v
     if not v then
-        S.AimbotActive = false; S.CurrentTarget = nil
+        S.AimbotActive = false; S.CurrentTarget = nil; S.AimbotCandidates = {}
         if S.SetADSState    then S.SetADSState(false)  end
         if S.ClearVisuals   then S.ClearVisuals()      end
         if S.ClearCrosshair then S.ClearCrosshair()    end
@@ -313,6 +313,12 @@ MainTab:CreateToggle({Name = "Master Switch (Killswitch)", CurrentValue = S.Mast
 end})
 MainTab:CreateToggle({Name = "Enable Aimbot Engine", CurrentValue = S.TargetingEnabled, Flag = "TargetSystemToggle", Callback = function(v)
     S.TargetingEnabled = v
+    if not v then
+        S.AimbotActive = false
+        S.CurrentTarget = nil
+        S.AimbotCandidates = {}
+        S.SilentAimTargetCache = nil
+    end
 end})
 MainTab:CreateDropdown({
     Name          = "Primary Aim Method",
@@ -335,6 +341,7 @@ MainTab:CreateKeybind({
             S.AimbotActive = not S.AimbotActive
             if not S.AimbotActive then
                 S.CurrentTarget = nil
+                S.AimbotCandidates = {}
                 S.SilentAimTargetCache = nil
                 S.SilentAimTargetCacheTime = 0
                 if S.SetADSState then S.SetADSState(false) end
@@ -459,7 +466,7 @@ end})
 
 VisualTab:CreateSection("Tactical Overlays (Geometries)")
 VisualTab:CreateToggle({Name = "Chams (Surface Highlights)", CurrentValue = S.ChamsEnabled, Flag = "EnableChamsMode", Callback = function(v) S.ChamsEnabled = v end})
-VisualTab:CreateSlider({Name = "Chams Opacity", Range = {1, 10}, Increment = 1, CurrentValue = S.ChamsOpacity, Flag = "ChamsOpacity", Callback = function(v) S.ChamsOpacity = v end})
+
 VisualTab:CreateToggle({Name = "2D Bounding Boxes", CurrentValue = S.BoxModeEnabled, Flag = "EnableBoxMode", Callback = function(v) S.BoxModeEnabled = v end})
 VisualTab:CreateToggle({Name = "Skeletal Mapping (R6/R15)", CurrentValue = S.SkeletonModeEnabled, Flag = "EnableSkeletonMode", Callback = function(v) S.SkeletonModeEnabled = v end})
 VisualTab:CreateToggle({Name = "Distance Snaplines", CurrentValue = S.SnaplinesEnabled, Flag = "SnaplinesEnabled", Callback = function(v) S.SnaplinesEnabled = v end})
@@ -1359,6 +1366,14 @@ CustomizationTab:CreateDropdown({Name = "Preset — Nemesis Players", Options = 
 end})
 CustomizationTab:CreateColorPicker({Name = "Fine — Nemesis Player ESP Color", Color = S.NemesisHighlightColor or Color3.fromRGB(150,0,255), Flag = "NemesisHighlightColorPicker", Callback = function(Value) S.NemesisHighlightColor = Value end})
 
+CustomizationTab:CreateToggle({Name = "Use Preset Color — Blacklisted Players", CurrentValue = false, Flag = "BlacklistPresetToggle", Callback = function(v)
+    applyPreset(v, "BlacklistColorDd", nil, "BlacklistedTagColor")
+end})
+CustomizationTab:CreateDropdown({Name = "Preset — Blacklisted Players", Options = ColorDropdownOptions, CurrentOption = {"Orange"}, Flag = "BlacklistColorDd", Callback = function(v)
+    local f = Rayfield.Flags and Rayfield.Flags["BlacklistPresetToggle"]
+    if not (f and f.CurrentValue) then return end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.BlacklistedTagColor = rgb end
+end})
 CustomizationTab:CreateColorPicker({Name = "Fine — Blacklisted Player Tag Color", Color = S.BlacklistedTagColor or Color3.fromRGB(255,140,0), Flag = "BlacklistedTagColorPicker", Callback = function(Value) S.BlacklistedTagColor = Value end})
 
 -- ─── Section: Chams (Through-Wall) ────────────────────────────────────────
@@ -1385,6 +1400,7 @@ CustomizationTab:CreateDropdown({Name = "Preset — Kill Flash Color", Options =
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.KillFlashColor = rgb end
 end})
 CustomizationTab:CreateColorPicker({Name = "Fine — Kill Flash Color", Color = S.KillFlashColor or Color3.fromRGB(255,255,255), Flag = "KillFlashColorPicker", Callback = function(Value) S.KillFlashColor = Value end})
+CustomizationTab:CreateSlider({Name = "Kill Flash Fade Duration (Seconds)", Range = {0.1, 3.0}, Increment = 0.1, CurrentValue = S.KillFlashDuration or 0.8, Flag = "KillFlashDuration", Callback = function(v) S.KillFlashDuration = v end})
 
 -- ─── Section: Visibility Indicator Colors ─────────────────────────────────
 CustomizationTab:CreateSection("Visibility Indicator Colors")
@@ -1584,6 +1600,11 @@ MiscTab:CreateButton({
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
 UpdateLogTab:CreateSection("Version 2.1.2 (Refinement Update)")
+UpdateLogTab:CreateLabel("- FIX Aimbot Snap-Back: Aimbot candidates are now fully cleared when deactivated, preventing snap-backs to old targets.")
+UpdateLogTab:CreateLabel("- FIX Chams Color & Opacity: Custom colors now properly apply to Chams, and the opacity scale (0-100) works seamlessly.")
+UpdateLogTab:CreateLabel("- FIX Blacklisted Tag Colors: Added missing preset toggle and dropdown options for blacklisted tags.")
+UpdateLogTab:CreateLabel("- NEW Kill Flash Fade: The kill confirmation flash now smoothly fades out instead of abruptly disappearing.")
+UpdateLogTab:CreateLabel("- NEW Kill Flash Duration: Added a slider to configure the exact duration of the kill confirmation fade.")
 UpdateLogTab:CreateLabel("- FIX Lock-On Delay: Visibility precompute loop now restarts immediately (no gap wait). Sub-frame delay.")
 UpdateLogTab:CreateLabel("- FIX Optimistic Nil Visibility: New players in FOV circle lock on instantly; background corrects within 1-2 frames.")
 UpdateLogTab:CreateLabel("- NEW Server Info: Home tab shows game name, Place ID, Job ID, and live player count (refreshes every 10s).")

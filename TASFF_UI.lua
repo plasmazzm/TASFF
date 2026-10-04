@@ -318,6 +318,7 @@ MainTab:CreateToggle({Name = "Enable Aimbot Engine", CurrentValue = S.TargetingE
         S.CurrentTarget = nil
         S.AimbotCandidates = {}
         S.SilentAimTargetCache = nil
+        S.LastCustomTargetData = nil
     end
 end})
 MainTab:CreateDropdown({
@@ -343,6 +344,7 @@ MainTab:CreateKeybind({
                 S.CurrentTarget = nil
                 S.AimbotCandidates = {}
                 S.SilentAimTargetCache = nil
+                S.LastCustomTargetData = nil
                 S.SilentAimTargetCacheTime = 0
                 if S.SetADSState then S.SetADSState(false) end
             end
@@ -482,7 +484,8 @@ VisualTab:CreateToggle({Name = "Render NPC Tags", CurrentValue = S.UseNPCInfoTag
 VisualTab:CreateToggle({Name = "Use Display Names (vs Usernames)", CurrentValue = S.ShowDisplayName, Flag = "ShowDisplay", Callback = function(v) S.ShowDisplayName = v end})
 VisualTab:CreateToggle({Name = "Display Equipped Weapon/Tool", CurrentValue = S.ShowToolCheck, Flag = "UseToolCheck", Callback = function(v) S.ShowToolCheck = v end})
 VisualTab:CreateToggle({Name = "Show [LOCKED] / [SILENT] on Tag", CurrentValue = S.ShowLockIndicators, Flag = "ShowLockIndicators", Callback = function(v) S.ShowLockIndicators = v end})
-VisualTab:CreateToggle({Name = "Kill Confirmation Flash (White)", CurrentValue = S.KillConfirmFlashEnabled, Flag = "KillConfirmFlash", Callback = function(v) S.KillConfirmFlashEnabled = v end})
+VisualTab:CreateToggle({Name = "Kill Confirmation Flash (Custom Color)", CurrentValue = S.KillConfirmFlashEnabled, Flag = "KillConfirmFlash", Callback = function(v) S.KillConfirmFlashEnabled = v end})
+VisualTab:CreateSlider({Name = "Kill Flash Fade Duration", Range = {0.1, 3.0}, Increment = 0.1, CurrentValue = S.KillFlashDuration or 0.8, Flag = "KillFlashDuration", Callback = function(v) S.KillFlashDuration = v end})
 
 VisualTab:CreateSection("Heads-Up Display (HUD)")
 VisualTab:CreateParagraph({
@@ -857,7 +860,7 @@ SettingsTab:CreateSection("Entity & Team Filtering")
 SettingsTab:CreateToggle({Name = "Target Players", CurrentValue = S.TargetPlayers, Flag = "TargetPlayers", Callback = function(v) S.TargetPlayers = v end})
 SettingsTab:CreateToggle({Name = "Target NPCs (Mob/AI Support)", CurrentValue = S.TargetNPCs, Flag = "TargetNPCs", Callback = function(v) S.TargetNPCs = v end})
 SettingsTab:CreateToggle({Name = "Enforce Team Check (Ignore Teammates)", CurrentValue = S.TeamCheck, Flag = "TeamCheck", Callback = function(v) S.TeamCheck = v end})
-SettingsTab:CreateToggle({Name = "Ignore Dead Targets", CurrentValue = S.IgnoreDead, Flag = "IgnoreDead", Callback = function(v) S.IgnoreDead = v end})
+
 
 SettingsTab:CreateSection("Player Management Registry")
 SettingsTab:CreateParagraph({
@@ -1400,7 +1403,7 @@ CustomizationTab:CreateDropdown({Name = "Preset — Kill Flash Color", Options =
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.KillFlashColor = rgb end
 end})
 CustomizationTab:CreateColorPicker({Name = "Fine — Kill Flash Color", Color = S.KillFlashColor or Color3.fromRGB(255,255,255), Flag = "KillFlashColorPicker", Callback = function(Value) S.KillFlashColor = Value end})
-CustomizationTab:CreateSlider({Name = "Kill Flash Fade Duration (Seconds)", Range = {0.1, 3.0}, Increment = 0.1, CurrentValue = S.KillFlashDuration or 0.8, Flag = "KillFlashDuration", Callback = function(v) S.KillFlashDuration = v end})
+
 
 -- ─── Section: Visibility Indicator Colors ─────────────────────────────────
 CustomizationTab:CreateSection("Visibility Indicator Colors")
@@ -1600,7 +1603,10 @@ MiscTab:CreateButton({
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
 UpdateLogTab:CreateSection("Version 2.1.2 (Refinement Update)")
-UpdateLogTab:CreateLabel("- FIX Aimbot Snap-Back: Aimbot candidates are now fully cleared when deactivated, preventing snap-backs to old targets.")
+UpdateLogTab:CreateLabel("- FIX Aimbot Snap-Back: Fixed edge case where Visible On Screen targeting cached old dead limbs and snapped back instantly.")
+UpdateLogTab:CreateLabel("- FIX Dead Target Filtering: Completely eliminated the Ignore Dead toggle - aimbot engine now permanently ignores corpses.")
+UpdateLogTab:CreateLabel("- FIX Kill Flash Rendering: Fading sequence now renders correctly because corpses are briefly preserved for the ESP renderer.")
+UpdateLogTab:CreateLabel("- FIX Threat Intelligence: Expanded kill feed parsing to detect 'creatorTag', 'Killer', and 'killer' object tags.")
 UpdateLogTab:CreateLabel("- FIX Chams Color & Opacity: Custom colors now properly apply to Chams, and the opacity scale (0-100) works seamlessly.")
 UpdateLogTab:CreateLabel("- FIX Blacklisted Tag Colors: Added missing preset toggle and dropdown options for blacklisted tags.")
 UpdateLogTab:CreateLabel("- NEW Kill Flash Fade: The kill confirmation flash now smoothly fades out instead of abruptly disappearing.")

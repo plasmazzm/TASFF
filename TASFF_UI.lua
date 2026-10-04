@@ -1272,6 +1272,18 @@ local function applyPreset(useFlag, ddFlag, updater, field)
     end)
 end
 
+-- ─── Section: General Base Colors ───────────────────────────────────────────
+CustomizationTab:CreateSection("General Base Colors - Default Highlight & Name Tags")
+CustomizationTab:CreateToggle({Name = "Use Preset Color — Default Highlight & Tags", CurrentValue = false, Flag = "HighlightPresetToggle", Callback = function(v)
+    applyPreset(v, "HighlightColorDd", nil, "HighlightColor")
+end})
+CustomizationTab:CreateDropdown({Name = "Preset — Default Highlight & Tags", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "HighlightColorDd", Callback = function(v)
+    local f = Rayfield.Flags and Rayfield.Flags["HighlightPresetToggle"]
+    if not (f and f.CurrentValue) then return end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.HighlightColor = rgb end
+end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Default Highlight & Tag Color", Color = S.HighlightColor or Color3.fromRGB(255,255,255), Flag = "HighlightColorPicker", Callback = function(Value) S.HighlightColor = Value end})
+
 -- ─── Section: On-Screen Overlays (FOV Circle & Crosshair) ─────────────────
 CustomizationTab:CreateSection("On-Screen Overlays — FOV & Crosshair")
 CustomizationTab:CreateToggle({Name = "Use Preset Color — FOV Circle", CurrentValue = false, Flag = "FOVPresetToggle", Callback = function(v)
@@ -1603,6 +1615,8 @@ MiscTab:CreateButton({
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
 UpdateLogTab:CreateSection("Version 2.1.2 (Refinement Update)")
+UpdateLogTab:CreateLabel("- FIX VoS Wallcheck Locking: Visible On Screen mode now actively drops targets when they are fully occluded, fixing the stuck [LOCKED] tag issue.")
+UpdateLogTab:CreateLabel("- FIX Missing Colors UI: Restored missing Customization options for Default Highlight & Name Tags.")
 UpdateLogTab:CreateLabel("- FIX Aimbot Snap-Back: Fixed edge case where Visible On Screen targeting cached old dead limbs and snapped back instantly.")
 UpdateLogTab:CreateLabel("- FIX Dead Target Filtering: Completely eliminated the Ignore Dead toggle - aimbot engine now permanently ignores corpses.")
 UpdateLogTab:CreateLabel("- FIX Kill Flash Rendering: Fading sequence now renders correctly because corpses are briefly preserved for the ESP renderer.")

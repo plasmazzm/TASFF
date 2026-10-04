@@ -873,10 +873,18 @@ task.spawn(function()
 
             -- Players
             if S.TargetPlayers then
+                local checkParts = {partName}
+                if S.TargetPart == "Visible On Screen" then
+                    checkParts = {"HumanoidRootPart", "Head", "UpperTorso", "LeftUpperArm", "RightUpperArm"}
+                end
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p ~= Player and p.Character then
-                        local ok, result = pcall(IsVisibleWallcheck, p.Character, partName, ignoreList)
-                        S.VisibilityPrecomputed[p.Character] = ok and result or false
+                        local isVis = false
+                        for _, cp in ipairs(checkParts) do
+                            local ok, result = pcall(IsVisibleWallcheck, p.Character, cp, ignoreList)
+                            if ok and result then isVis = true; break end
+                        end
+                        S.VisibilityPrecomputed[p.Character] = isVis
                         task.wait()   -- yield for exactly 1 frame between each raycast burst
                     end
                 end
@@ -884,11 +892,19 @@ task.spawn(function()
 
             -- NPCs
             if S.TargetNPCs then
+                local checkParts = {partName}
+                if S.TargetPart == "Visible On Screen" then
+                    checkParts = {"HumanoidRootPart", "Head", "UpperTorso", "LeftUpperArm", "RightUpperArm"}
+                end
                 local npcs = S.CachedNPCs or {}
                 for _, npc in ipairs(npcs) do
                     if npc and npc.Parent then
-                        local ok, result = pcall(IsVisibleWallcheck, npc, partName, ignoreList)
-                        S.VisibilityPrecomputed[npc] = ok and result or false
+                        local isVis = false
+                        for _, cp in ipairs(checkParts) do
+                            local ok, result = pcall(IsVisibleWallcheck, npc, cp, ignoreList)
+                            if ok and result then isVis = true; break end
+                        end
+                        S.VisibilityPrecomputed[npc] = isVis
                         task.wait()
                     end
                 end
@@ -1542,8 +1558,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     -- Now that visibility is precomputed in background loop ③, this is pure
     -- table lookups. Running every frame eliminates the FOV-entry lock delay.
     if MasterEnabled and AimbotActive and TargetingEnabled then
-        local tp = S.TargetPart
-        local bypassWC = (tp ~= "Visible On Screen") and S.WallCheck or false
+        local bypassWC = S.WallCheck or false
         S.AimbotCandidates = GetPotentialTargets(false, bypassWC, cachedIgnoreList, S.AimbotRenderDistance)
     else
         S.AimbotCandidates = {}

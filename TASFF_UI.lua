@@ -6,6 +6,12 @@
 -- // ============================================================ // --
 
 local S           = _G.TASFF_State
+
+local function SanitizeKeyName(k)
+    if type(k) == "string" and k ~= "" then return k:gsub("Enum%.KeyCode%.", "")
+    elseif typeof(k) == "EnumItem" then return k.Name end
+    return nil
+end
 local Rayfield    = getgenv().TASFF and getgenv().TASFF.Rayfield
 local Players     = game:GetService("Players")
 local Player      = Players.LocalPlayer
@@ -61,7 +67,7 @@ end
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local Window = Rayfield:CreateWindow({
-    Name            = "TASFF V2.0.0",
+    Name            = "TASFF V2.1.0",
     Icon            = 7488932264,
     LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
@@ -100,16 +106,154 @@ local Window = Rayfield:CreateWindow({
     },
     ConfigurationSaving = {
         Enabled    = true,
-        FolderName = "TASFF V2.0.0",
+        FolderName = "TASFF V2.1.0",
         FileName   = "MainConfig"
     }
 })
+
 
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                        1. COMBAT TAB                         // --
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
+-- // ── HOME TAB ────────────────────────────────────────────────── // --
+
+local HomeTab = Window:CreateTab("Home", "home")
+
+HomeTab:CreateSection("Welcome")
+HomeTab:CreateParagraph({
+    Title   = "TASFF v2.1.0 — The Aimbot Script Final Form",
+    Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
+           .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
+           .. "Controls: " .. tostring(S.ToggleCount or 64) .. " Toggles | " .. tostring(S.SliderCount or 27) .. " Sliders | " .. tostring(S.DropdownCount or 27) .. " Dropdowns\n"
+           .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
+})
+
+HomeTab:CreateSection("Quick Feature Status")
+HomeTab:CreateParagraph({
+    Title   = "How to Read",
+    Content = "Select a category from the dropdown below. Enabled features appear first (✔), then disabled (✘). Changes made in other tabs are reflected on next category switch."
+})
+
+local function BuildStatusContent(category)
+    local on, off = {}, {}
+    local function check(label, flag)
+        if flag then table.insert(on, "  \xE2\x9C\x94 " .. label)
+        else table.insert(off, "  \xE2\x9C\x98 " .. label) end
+    end
+    if category == "Combat" then
+        check("Master Switch",          S.MasterEnabled)
+        check("Aimbot Engine",          S.TargetingEnabled)
+        check("Silent Aim",             S.SilentAimEnabled)
+        check("Sticky Aim",             S.StickyAimEnabled)
+        check("Dynamic Recoil (DRC)",   S.DynamicRecoilEnabled)
+        check("Auto ADS",               S.AutoADSEnabled)
+        check("Randomize Hitboxes",     S.RandomizeHitboxEnabled)
+        check("Target Near Center",     S.TargetNearCenter)
+        check("Target Switch Delay",    S.TargetSwitchDelayEnabled)
+        check("Grace Period",           S.GracePeriodEnabled)
+        check("Triggerbot",             S.AutoClickEnabled)
+        check("Melee Mode",             S.MeleeModeEnabled)
+    elseif category == "Visuals" then
+        check("Highlights (Players)",   S.UseHighlight)
+        check("Highlights (NPCs)",      S.UseNPCHighlight)
+        check("Info Tags (Players)",    S.UseInfoTag)
+        check("Info Tags (NPCs)",       S.UseNPCInfoTag)
+        check("Snaplines",              S.SnaplinesEnabled)
+        check("OOF Arrows",             S.OOFArrowsEnabled)
+        check("Box ESP",                S.BoxModeEnabled)
+        check("Skeleton ESP",           S.SkeletonModeEnabled)
+        check("Chams",                  S.ChamsEnabled)
+        check("Visibility Colors",      S.VisibilityColorsEnabled)
+        check("Show Display Name",      S.ShowDisplayName)
+        check("Show Tool Check",        S.ShowToolCheck)
+    elseif category == "Intel" then
+        check("Threat Detector",        S.ThreatDetectorEnabled)
+        check("Nemesis System",         S.NemesisEnabled)
+        check("Click-to-Mark",          S.ClickToMarkEnabled)
+        check("Focus Mode ESP",         S.FocusMode)
+        check("Wall Check",             S.WallCheck)
+        check("Team Check",             S.TeamCheck)
+        check("Target Players",         S.TargetPlayers)
+        check("Target NPCs",            S.TargetNPCs)
+    elseif category == "Automation" then
+        check("Auto-Engage on Equip",   S.AutoEnableOnEquip)
+        check("Intelligent Equip Filter", S.IntelligentEquipFilter)
+        check("Weapon-Type Gating",     S.WeaponTypeGating)
+        check("FOV Circle",             S.ShowFOV)
+        check("Invisible FOV",          S.InvisibleFOV)
+        check("Hide Blacklisted ESP",   S.HideBlacklistedESP)
+    end
+    local lines = {}
+    if #on > 0 then
+        table.insert(lines, "ENABLED"); for _, l in ipairs(on) do table.insert(lines, l) end
+    end
+    if #off > 0 then
+        if #on > 0 then table.insert(lines, "") end
+        table.insert(lines, "DISABLED"); for _, l in ipairs(off) do table.insert(lines, l) end
+    end
+    if #lines == 0 then return "No features in this category." end
+    return table.concat(lines, "\n")
+end
+
+local DashboardParagraph = HomeTab:CreateParagraph({
+    Title   = "Status — Combat",
+    Content = BuildStatusContent("Combat")
+})
+S.DashboardParagraph = DashboardParagraph
+
+HomeTab:CreateDropdown({
+    Name          = "Status Category",
+    Options       = {"Combat", "Visuals", "Intel", "Automation"},
+    CurrentOption = {"Combat"},
+    Flag          = "DashboardCategory",
+    Callback      = function(v)
+        local cat = v[1] or "Combat"
+        S.DashboardCategory = cat
+        if DashboardParagraph then
+            pcall(function()
+                DashboardParagraph:Set({Title = "Status — " .. cat, Content = BuildStatusContent(cat)})
+            end)
+        end
+    end
+})
+
+HomeTab:CreateSection("Session Statistics")
+local SessionStatsLabel = HomeTab:CreateParagraph({
+    Title   = "Current Session",
+    Content = "Locks: 0  |  Fires: 0  |  Threats: 0  |  Nemeses: 0"
+})
+S.SessionStatsLabel = SessionStatsLabel
+
+task.spawn(function()
+    S.SessionStartTime = tick()
+    task.wait(3)
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        if SessionStatsLabel then
+            pcall(function()
+                local uptime = math.floor(tick() - (S.SessionStartTime or tick()))
+                local mins, secs = math.floor(uptime / 60), uptime % 60
+                SessionStatsLabel:Set({
+                    Title   = "Current Session (up " .. mins .. "m " .. secs .. "s)",
+                    Content = string.format(
+                        "Target Locks: %d  |  Trigger Fires: %d  |  Threats: +%d  |  Nemeses: +%d",
+                        S.SessionTargetLocks  or 0,
+                        S.SessionTriggerFires or 0,
+                        S.SessionThreatsAdded or 0,
+                        S.SessionNemesesAdded or 0
+                    )
+                })
+            end)
+        end
+        task.wait(5)
+    end
+end)
+
+-- // ── COMBAT TAB ──────────────────────────────────────────────── // --
+
 local MainTab = Window:CreateTab("Combat", "crosshair")
+
+
 
 MainTab:CreateSection("Command & Control")
 MainTab:CreateParagraph({
@@ -139,12 +283,14 @@ MainTab:CreateDropdown({
 
 MainTab:CreateSection("Activation & Automation")
 MainTab:CreateKeybind({
-    Name            = "Aimbot Activation Key",
-    CurrentKeybind  = S.AimbotKeybind or "E",
-    Flag            = "AimbotKeybind",
-    Callback        = function(key)
-        S.AimbotKeybind = key
-        if S.MasterEnabled then
+        Name            = "Aimbot Activation Key",
+        CurrentKeybind  = S.AimbotKeybind or "E",
+        Flag            = "AimbotKeybind",
+        Callback        = function(key)
+            local validKey = SanitizeKeyName(key)
+            local isRebind = (validKey ~= nil and validKey ~= S.AimbotKeybind)
+            if validKey then S.AimbotKeybind = validKey end
+            if not isRebind and S.MasterEnabled then
             S.AimbotActive = not S.AimbotActive
             if not S.AimbotActive then
                 S.CurrentTarget = nil
@@ -157,9 +303,15 @@ MainTab:CreateToggle({Name = "Auto ADS (Automatic Scope)", CurrentValue = S.Auto
     S.AutoADSEnabled = v
     if not v and S.SetADSState then S.SetADSState(false) end
 end})
-MainTab:CreateKeybind({Name = "Auto ADS Input Key", CurrentKeybind = S.AutoADSKeybind or "MouseButton2", Flag = "AutoADSKey", Callback = function(key)
-    S.AutoADSKeybind = key
-end})
+MainTab:CreateInput({
+        Name = "Auto ADS Input Key (Text)",
+        PlaceholderText = "e.g. MouseButton2, F",
+        RemoveTextAfterFocusLost = false,
+        Flag = "AutoADSKeyInput",
+        Callback = function(text)
+            if text and text ~= "" then S.AutoADSKeybind = text end
+        end
+    })
 
 MainTab:CreateSection("Target Selection & Sorting")
 MainTab:CreateDropdown({
@@ -184,10 +336,21 @@ end})
 MainTab:CreateSlider({Name = "Maximum Acquisition Range (Studs)", Range = {100, 1000}, Increment = 25, CurrentValue = S.AimbotRenderDistance, Flag = "AimbotRenderDist", Callback = function(v)
     S.AimbotRenderDistance = v
 end})
+MainTab:CreateToggle({Name = "Enable Health Threshold Gate", CurrentValue = S.HealthThresholdEnabled, Flag = "HealthThresholdEnabled", Callback = function(v) S.HealthThresholdEnabled = v end})
+MainTab:CreateSlider({Name = "Minimum Target HP to Engage (%)", Range = {0, 100}, Increment = 1, CurrentValue = S.HealthThreshold or 0, Flag = "HealthThreshold", Callback = function(v) S.HealthThreshold = v end})
 
 MainTab:CreateSection("Smoothing & Prediction")
-MainTab:CreateSlider({Name = "Tracking Smoothness", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.Smoothness, Flag = "SmoothSpeed", Callback = function(v)
+MainTab:CreateSlider({Name = "Tracking Smoothness (Legit/Camera)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.Smoothness, Flag = "SmoothSpeed", Callback = function(v)
     S.Smoothness = v
+end})
+MainTab:CreateSlider({Name = "Advanced Legit Smoothness X (Horizontal)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.SmoothnessX, Flag = "SmoothnessX", Callback = function(v)
+    S.SmoothnessX = v
+end})
+MainTab:CreateSlider({Name = "Advanced Legit Smoothness Y (Vertical)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.SmoothnessY, Flag = "SmoothnessY", Callback = function(v)
+    S.SmoothnessY = v
+end})
+MainTab:CreateSlider({Name = "Blatant Snap Speed (100 = Instant)", Range = {5, 100}, Increment = 5, CurrentValue = S.BlatantSnapSpeed, Flag = "BlatantSnapSpeed", Callback = function(v)
+    S.BlatantSnapSpeed = v
 end})
 MainTab:CreateSlider({Name = "Velocity Prediction Intensity", Range = {0, 0.5}, Increment = 0.01, CurrentValue = S.PredictionAmount, Flag = "PredIntense", Callback = function(v)
     S.PredictionAmount = v
@@ -195,6 +358,8 @@ end})
 MainTab:CreateToggle({Name = "Dynamic Recoil Control (DRC)", CurrentValue = S.DynamicRecoilEnabled, Flag = "DynamicRecoil", Callback = function(v)
     S.DynamicRecoilEnabled = v
 end})
+
+
 
 MainTab:CreateSection("Advanced Engagement Logic")
 MainTab:CreateToggle({Name = "Universal Silent Aim (Magic Bullet)", CurrentValue = S.SilentAimEnabled, Flag = "SilentAimEnabled", Callback = function(v)
@@ -266,6 +431,8 @@ VisualTab:CreateToggle({Name = "Render Player Tags", CurrentValue = S.UseInfoTag
 VisualTab:CreateToggle({Name = "Render NPC Tags", CurrentValue = S.UseNPCInfoTag, Flag = "UseNPCInfoTag", Callback = function(v) S.UseNPCInfoTag = v end})
 VisualTab:CreateToggle({Name = "Use Display Names (vs Usernames)", CurrentValue = S.ShowDisplayName, Flag = "ShowDisplay", Callback = function(v) S.ShowDisplayName = v end})
 VisualTab:CreateToggle({Name = "Display Equipped Weapon/Tool", CurrentValue = S.ShowToolCheck, Flag = "UseToolCheck", Callback = function(v) S.ShowToolCheck = v end})
+VisualTab:CreateToggle({Name = "Show [LOCKED] / [SILENT] on Tag", CurrentValue = S.ShowLockIndicators, Flag = "ShowLockIndicators", Callback = function(v) S.ShowLockIndicators = v end})
+VisualTab:CreateToggle({Name = "Kill Confirmation Flash (White)", CurrentValue = S.KillConfirmFlashEnabled, Flag = "KillConfirmFlash", Callback = function(v) S.KillConfirmFlashEnabled = v end})
 
 VisualTab:CreateSection("Heads-Up Display (HUD)")
 VisualTab:CreateParagraph({
@@ -278,6 +445,8 @@ VisualTab:CreateToggle({Name = "Render FOV Boundary (Circle)", CurrentValue = S.
 end})
 VisualTab:CreateToggle({Name = "Invisible FOV Constraint", CurrentValue = S.InvisibleFOV, Flag = "InvisibleFOV", Callback = function(v) S.InvisibleFOV = v end})
 VisualTab:CreateSlider({Name = "FOV Boundary Radius", Range = {30, 600}, Increment = 5, CurrentValue = S.FOVSize, Flag = "FOVSize", Callback = function(v) S.FOVSize = v end})
+VisualTab:CreateToggle({Name = "Dynamic FOV Auto-Scale by Distance", CurrentValue = S.DynamicFOVEnabled, Flag = "DynamicFOVEnabled", Callback = function(v) S.DynamicFOVEnabled = v end})
+VisualTab:CreateSlider({Name = "Dynamic FOV Max Radius", Range = {30, 1000}, Increment = 10, CurrentValue = S.DynamicFOVMax or 400, Flag = "DynamicFOVMax", Callback = function(v) S.DynamicFOVMax = v end})
 VisualTab:CreateDropdown({
     Name          = "FOV Tracking Origin",
     Options       = {"Screen Center", "Mouse Tracking"},
@@ -372,50 +541,229 @@ end})
 -- //                       4. ADVANCED TAB                        // --
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
-local AdvancedTab = Window:CreateTab("Advanced", "cpu")
 
-AdvancedTab:CreateSection("Threat Intelligence & Retaliation")
-AdvancedTab:CreateParagraph({
-    Title   = "Threat System",
-    Content = "Automatically tags players who damage you into your Priority list. After the configured timeout, threats expire and can optionally be pushed straight into your Blacklist."
+-- Intel Tab block to INSERT before local AdvancedTab
+local IntelTab = Window:CreateTab("Intel", "shield-alert")
+
+IntelTab:CreateSection("Intel Monitor")
+IntelTab:CreateParagraph({
+    Title   = "How It Works",
+    Content = "All tracked players (marked, threats, nemeses, registry) appear here sorted by threat score. Select a name then use the action buttons below."
 })
-AdvancedTab:CreateToggle({Name = "Enable Threat Detector (Damage Tracking)", CurrentValue = S.ThreatDetectorEnabled, Flag = "ThreatDetector", Callback = function(v)
+
+local IntelMonitorLabel = IntelTab:CreateParagraph({
+    Title   = "Intel Monitor (0 tracked)",
+    Content = "No tracked players."
+})
+S.IntelMonitorLabel = IntelMonitorLabel
+
+IntelTab:CreateInput({
+    Name                  = "Select Player by Name",
+    PlaceholderText       = "Enter exact username...",
+    RemoveTextAfterFocusLost = false,
+    Flag                  = "IntelSelectInput",
+    Callback              = function(text)
+        if text and text ~= "" then
+            S.IntelSelected = text
+            if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
+        end
+    end
+})
+
+IntelTab:CreateButton({
+    Name     = "Remove Selected",
+    Callback = function()
+        if S.IntelSelected == "" then
+            if S.Notify then S.Notify({Title="Intel",Content="No player selected.",Duration=2,Image="alert-circle"}) end
+            return
+        end
+        if S.RemoveFromIntel then S.RemoveFromIntel(S.IntelSelected, false) end
+    end
+})
+
+IntelTab:CreateButton({
+    Name     = "Remove Selected (Nemesis)",
+    Callback = function()
+        if S.IntelSelected == "" then
+            if S.Notify then S.Notify({Title="Intel",Content="No player selected.",Duration=2,Image="alert-circle"}) end
+            return
+        end
+        if S.RemoveFromIntel then S.RemoveFromIntel(S.IntelSelected, true) end
+    end
+})
+
+IntelTab:CreateButton({
+    Name     = "Clear All Non-Nemesis",
+    Callback = function()
+        for name, data in pairs(S.IntelPlayers) do
+            if not data.nemesis then
+                S.IntelPlayers[name] = nil
+                S.ThreatMemory[name] = nil
+                local idx = table.find(S.PriorityPlayers, name)
+                if idx then table.remove(S.PriorityPlayers, idx) end
+            end
+        end
+        S.IntelSelected = ""
+        if S.SyncPriorityUI then S.SyncPriorityUI() end
+        if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
+        if S.Notify then S.Notify({Title="Intel",Content="Cleared all non-Nemesis entries.",Duration=2,Image="trash-2"}) end
+    end
+})
+
+local LockHistoryLabel = IntelTab:CreateParagraph({
+    Title   = "Target Lock History",
+    Content = "No locks yet."
+})
+S.LockHistoryLabel = LockHistoryLabel
+task.spawn(function()
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        task.wait(1)
+        if S.LockHistoryLabel and S.LockHistory then
+            local lines = {}
+            for i, log in ipairs(S.LockHistory) do
+                local ago = math.floor(tick() - log.time)
+                table.insert(lines, i .. ". " .. log.name .. " (" .. ago .. "s ago)")
+            end
+            if #lines > 0 then
+                pcall(function() S.LockHistoryLabel:Set({Title="Target Lock History", Content=table.concat(lines, "\n")}) end)
+            end
+        end
+    end
+end)
+
+IntelTab:CreateSection("Priority Settings")
+IntelTab:CreateParagraph({
+    Title   = "Priority Behavior Mode",
+    Content = "Boost: Priority players are sorted first but aimbot still targets others when none are available. Exclusive: Aimbot ONLY targets priority-listed players (old StrictPrioritize behavior)."
+})
+IntelTab:CreateDropdown({
+    Name          = "Priority Behavior",
+    Options       = {"Boost", "Exclusive"},
+    CurrentOption = {S.PriorityBehavior or "Boost"},
+    Flag          = "PriorityBehavior",
+    Callback      = function(v)
+        local val = type(v) == "table" and v[1] or v
+        S.PriorityBehavior = val
+        S.StrictPrioritize = (val == "Exclusive")
+    end
+})
+
+local IntelPriorityDropdown = IntelTab:CreateDropdown({
+    Name            = "Priority Registry (Preferred Targets)",
+    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
+    CurrentOption   = {},
+    MultipleOptions = true,
+    Flag            = "IntelPriorityPlayers",
+    Callback        = function(v)
+        local removed = {}
+        for _, oldName in ipairs(S.PriorityPlayers) do
+            if not table.find(v, oldName) then table.insert(removed, oldName) end
+        end
+        for _, remName in ipairs(removed) do
+            S.ThreatMemory[remName] = nil
+            S.NemesisMemory[remName] = nil
+            S.IntelPlayers[remName] = nil
+        end
+        for _, newName in ipairs(v) do
+            if not S.IntelPlayers[newName] then
+                if S.AddToIntel then S.AddToIntel(newName, "Registry", 0) end
+            end
+        end
+        S.PriorityPlayers = v
+        if S.SyncPriorityUI then S.SyncPriorityUI() end
+    end
+})
+S.PriorityDropdownRef = IntelPriorityDropdown
+
+IntelTab:CreateSection("Threat Intelligence")
+IntelTab:CreateToggle({Name = "Enable Live Kill Feed Notifications", CurrentValue = S.KillFeedEnabled, Flag = "KillFeedEnabled", Callback = function(v)
+    S.KillFeedEnabled = v
+end})
+IntelTab:CreateToggle({Name = "Enable Kill-Count Threat Auto-Flag", CurrentValue = S.KillCountThreatEnabled, Flag = "KillCountThreat", Callback = function(v)
+    S.KillCountThreatEnabled = v
+end})
+IntelTab:CreateSlider({Name = "Kills Before Threat Flag", Range = {1, 10}, Increment = 1, CurrentValue = S.KillsBeforeThreat, Flag = "KillsBeforeThreat", Callback = function(v)
+    S.KillsBeforeThreat = v
+end})
+IntelTab:CreateToggle({Name = "Enable Threat Detector (Damage Tracking)", CurrentValue = S.ThreatDetectorEnabled, Flag = "ThreatDetector", Callback = function(v)
     S.ThreatDetectorEnabled = v
 end})
-AdvancedTab:CreateToggle({Name = "Enable Nemesis System (Death Tracking)", CurrentValue = S.NemesisEnabled, Flag = "NemesisEnabled", Callback = function(v)
-    S.NemesisEnabled = v
+IntelTab:CreateToggle({Name = "Threat Neutralization (Auto-expire on kill)", CurrentValue = S.ThreatNeutralizationEnabled, Flag = "ThreatNeutralization", Callback = function(v)
+    S.ThreatNeutralizationEnabled = v
 end})
-AdvancedTab:CreateSlider({Name = "Threat Memory Expiration (Seconds)", Range = {1, 60}, Increment = 1, CurrentValue = S.ThreatTimeout, Flag = "ThreatTimeout", Callback = function(v)
+IntelTab:CreateSlider({Name = "Threat Memory Expiration (Seconds)", Range = {1, 60}, Increment = 1, CurrentValue = S.ThreatTimeout, Flag = "ThreatTimeout", Callback = function(v)
     S.ThreatTimeout = v
 end})
-AdvancedTab:CreateToggle({Name = "Auto-Blacklist Expired Threats", CurrentValue = S.BlacklistExpiredThreats, Flag = "BlacklistExpiredThreats", Callback = function(v)
+IntelTab:CreateSlider({Name = "Proximity Threat Radius (Studs)", Range = {20, 200}, Increment = 10, CurrentValue = S.ThreatProximityRadius or 80, Flag = "ThreatProximityRadius", Callback = function(v) S.ThreatProximityRadius = v end})
+IntelTab:CreateSlider({Name = "False Positive Cooldown (Seconds)", Range = {0.5, 10}, Increment = 0.5, CurrentValue = S.ThreatFPCooldown or 1.5, Flag = "ThreatFPCooldown", Callback = function(v) S.ThreatFPCooldown = v end})
+IntelTab:CreateToggle({Name = "Auto-Blacklist Expired Threats", CurrentValue = S.BlacklistExpiredThreats, Flag = "BlacklistExpiredThreats", Callback = function(v)
     S.BlacklistExpiredThreats = v
 end})
-
--- Core's ThreatMonitorLoop reads S.ThreatListLabel every second and calls :Set()
-ThreatListLabel = AdvancedTab:CreateParagraph({
-    Title   = "Live Threat Monitor",
-    Content = "No active threats detected."
-})
-S.ThreatListLabel = ThreatListLabel
-
-AdvancedTab:CreateSection("Target Marking & Overrides")
-AdvancedTab:CreateParagraph({
-    Title   = "Hover-To-Mark Target Selection",
-    Content = "Hover your cursor near any player (even through walls) and press your designated input to manually add or remove them from your Priority List."
-})
-AdvancedTab:CreateToggle({Name = "Enable Target Marking", CurrentValue = S.ClickToMarkEnabled, Flag = "ClickToMark", Callback = function(v) S.ClickToMarkEnabled = v end})
-AdvancedTab:CreateDropdown({Name = "Mark Activation Input", Options = {"Mouse Click Only", "Keybind Only", "Both"}, CurrentOption = {S.MarkMethod}, Flag = "MarkMethod", Callback = function(v)
-    S.MarkMethod = v[1]
+IntelTab:CreateToggle({Name = "Auto-Expire Tracked Players on Disconnect", CurrentValue = S.AutoExpireOnDisconnect, Flag = "AutoExpireOnDisconnect", Callback = function(v)
+    S.AutoExpireOnDisconnect = v
 end})
-AdvancedTab:CreateKeybind({
+
+IntelTab:CreateSection("Nemesis System")
+IntelTab:CreateToggle({Name = "Enable Nemesis System (Death Tracking)", CurrentValue = S.NemesisEnabled, Flag = "NemesisEnabled", Callback = function(v)
+    S.NemesisEnabled = v
+end})
+IntelTab:CreateSlider({Name = "Strikes Before Nemesis Flag", Range = {1, 10}, Increment = 1, CurrentValue = S.KillsBeforeNemesis, Flag = "KillsBeforeNemesis", Callback = function(v)
+    S.KillsBeforeNemesis = v
+end})
+local NemesisViewer = IntelTab:CreateParagraph({
+    Title   = "Permanent Nemesis Roster",
+    Content = "No nemeses."
+})
+local function RefreshNemesisViewer()
+    local names = {}
+    for n, _ in pairs(S.NemesisMemory or {}) do table.insert(names, n) end
+    if #names == 0 then
+        pcall(function() NemesisViewer:Set({Title="Permanent Nemesis Roster", Content="No permanent nemeses."}) end)
+    else
+        pcall(function() NemesisViewer:Set({Title="Permanent Nemesis Roster", Content=table.concat(names, "\n")}) end)
+    end
+end
+IntelTab:CreateButton({Name="Refresh Nemesis Roster", Callback=RefreshNemesisViewer})
+task.spawn(RefreshNemesisViewer)
+
+IntelTab:CreateSection("Spectator Mode")
+local SpectateDropdown = IntelTab:CreateDropdown({
+    Name            = "Spectate Target",
+    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
+    CurrentOption   = {S.SpectateTarget or ""},
+    MultipleOptions = false,
+    Flag            = "SpectateTargetDropdown",
+    Callback        = function(v)
+        local val = type(v) == "table" and v[1] or v
+        S.SpectateTarget = val
+    end
+})
+local SpectateToggle = IntelTab:CreateToggle({Name = "Spectate Player", CurrentValue = S.SpectatePlayerEnabled, Flag = "SpectatePlayer", Callback = function(v)
+    S.SpectatePlayerEnabled = v
+end})
+S.SyncSpectatorUI = function(state) pcall(function() SpectateToggle:Set(state) end) end
+IntelTab:CreateButton({Name="Refresh Player List", Callback=function()
+    if S.GetPlayerNames then
+        local names = S.GetPlayerNames()
+        pcall(function() SpectateDropdown:Refresh(names, true) end)
+        if S.PriorityDropdownRef and S.PriorityDropdownRef.Refresh then pcall(function() S.PriorityDropdownRef:Refresh(names, true) end) end
+    end
+end})
+
+IntelTab:CreateSection("Click-to-Mark")
+IntelTab:CreateToggle({Name = "Enable Target Marking", CurrentValue = S.ClickToMarkEnabled, Flag = "ClickToMark", Callback = function(v) S.ClickToMarkEnabled = v end})
+IntelTab:CreateDropdown({Name = "Mark Activation Input", Options = {"Mouse Click Only", "Keybind Only", "Both"}, CurrentOption = {S.MarkMethod}, Flag = "MarkMethod", Callback = function(v)
+    S.MarkMethod = type(v) == "table" and v[1] or v
+end})
+IntelTab:CreateKeybind({
     Name           = "Target Mark Keybind",
     CurrentKeybind = S.MarkKeybind or "T",
     Flag           = "MarkKeybind",
     Callback       = function(key)
-        local wasRebind = (tostring(key) ~= tostring(S.MarkKeybind))
-        S.MarkKeybind = key
-        if not wasRebind and S.ClickToMarkEnabled and (S.MarkMethod == "Keybind Only" or S.MarkMethod == "Both") then
+        local validKey = SanitizeKeyName(key)
+        local isRebind = (validKey ~= nil and validKey ~= S.MarkKeybind)
+        if validKey then S.MarkKeybind = validKey end
+        if not isRebind and S.ClickToMarkEnabled and (S.MarkMethod == "Keybind Only" or S.MarkMethod == "Both") then
             if S.MasterEnabled and S.AimbotActive and S.CurrentTarget ~= nil then return end
             local toolEquipped = Player.Character and Player.Character:FindFirstChildOfClass("Tool") ~= nil
             if toolEquipped then return end
@@ -423,25 +771,16 @@ AdvancedTab:CreateKeybind({
         end
     end
 })
-AdvancedTab:CreateToggle({Name = "Strict Focus (Lock ONLY to Marked Targets)", CurrentValue = S.StrictPrioritize, Flag = "StrictPrioritize", Callback = function(v)
-    S.StrictPrioritize = v
+IntelTab:CreateToggle({Name = "Focus Mode (Visual ESP Only on Priority Targets)", CurrentValue = S.FocusMode, Flag = "FocusMode", Callback = function(v)
+    S.FocusMode = v
 end})
 
--- Core's SyncPriorityUI reads S.PriorityMonitorLabel and calls :Set()
-PriorityMonitorLabel = AdvancedTab:CreateParagraph({
-    Title   = "Active Priority Targets (0)",
-    Content = "No priority targets currently selected."
-})
-S.PriorityMonitorLabel = PriorityMonitorLabel
 
-AdvancedTab:CreateButton({
-    Name     = "Purge Priority List",
-    Callback = function()
-        S.PriorityPlayers = {}
-        if S.SyncPriorityUI then S.SyncPriorityUI() end
-        if S.Notify then S.Notify({Title = "TASFF Mark", Content = "Cleared all priority targets.", Duration = 2, Image = "delete"}) end
-    end
-})
+local AdvancedTab = Window:CreateTab("Advanced", "cpu")
+
+AdvancedTab:CreateSection("Target Marking (Legacy - See Intel Tab)")
+-- (Mark/Priority controls moved to Intel tab)
+
 
 AdvancedTab:CreateSection("Environment Penetration (Wallchecks)")
 AdvancedTab:CreateToggle({Name = "Enforce Line of Sight (Wallcheck)", CurrentValue = S.WallCheck, Flag = "WallCheck", Callback = function(v) S.WallCheck = v end})
@@ -466,8 +805,8 @@ SettingsTab:CreateToggle({Name = "Ignore Dead Targets", CurrentValue = S.IgnoreD
 
 SettingsTab:CreateSection("Player Management Registry")
 SettingsTab:CreateParagraph({
-    Title   = "Priority & Blacklist Routing",
-    Content = "Blacklisted players will be completely ignored by all targeting routines. Priority targets will be focused first when Strict Prioritize or Focus Mode is enabled."
+    Title   = "Blacklist & Priority",
+    Content = "Blacklisted players are ignored by all targeting. Priority targets and Intel system controls have moved to the Intel tab."
 })
 SettingsTab:CreateDropdown({
     Name            = "Blacklist Registry (Ignored)",
@@ -482,27 +821,27 @@ SettingsTab:CreateDropdown({
         end
     end
 })
-
-PriorityDropdownRef = SettingsTab:CreateDropdown({
-    Name            = "Priority Registry (Preferred)",
+SettingsTab:CreateToggle({
+    Name         = "Hide Blacklisted Player ESP (off = show [BLACKLISTED] tag)",
+    CurrentValue = S.HideBlacklistedESP,
+    Flag         = "HideBlacklistedESP",
+    Callback     = function(v) S.HideBlacklistedESP = v end
+})
+SettingsTab:CreateToggle({
+    Name         = "Enable ESP Whitelist Filter",
+    CurrentValue = S.ESPWhitelistEnabled,
+    Flag         = "ESPWhitelistEnabled",
+    Callback     = function(v) S.ESPWhitelistEnabled = v end
+})
+SettingsTab:CreateDropdown({
+    Name            = "ESP Whitelist Registry (Only target & show these)",
     Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
     CurrentOption   = {},
     MultipleOptions = true,
-    Flag            = "PriorityPlayers",
-    Callback        = function(v)
-        local removed = {}
-        for _, oldName in ipairs(S.PriorityPlayers) do
-            if not table.find(v, oldName) then table.insert(removed, oldName) end
-        end
-        for _, remName in ipairs(removed) do
-            S.ThreatMemory[remName]  = nil
-            S.NemesisMemory[remName] = nil
-        end
-        S.PriorityPlayers = v
-        if S.SyncPriorityUI then S.SyncPriorityUI() end
-    end
+    Flag            = "ESPWhitelistDropdown",
+    Callback        = function(v) S.ESPWhitelist = v end
 })
-S.PriorityDropdownRef = PriorityDropdownRef
+
 
 SettingsTab:CreateSection("Weapon & Inventory Automation")
 SettingsTab:CreateParagraph({
@@ -512,6 +851,29 @@ SettingsTab:CreateParagraph({
 SettingsTab:CreateToggle({Name = "Auto-Engage Aimbot on Weapon Equip", CurrentValue = S.AutoEnableOnEquip, Flag = "AutoEquipAim", Callback = function(v)
     S.AutoEnableOnEquip = v
 end})
+SettingsTab:CreateToggle({Name = "Auto-Disable Aimbot on Death", CurrentValue = S.AutoDisableOnDeath, Flag = "AutoDisableOnDeath", Callback = function(v)
+    S.AutoDisableOnDeath = v
+end})
+SettingsTab:CreateToggle({
+    Name         = "Intelligent Equip Filter (Keyword Classifier)",
+    CurrentValue = S.IntelligentEquipFilter,
+    Flag         = "IntelligentEquipFilter",
+    Callback     = function(v)
+        S.IntelligentEquipFilter = v
+        if S.Notify then S.Notify({Title="TASFF Intel",Content=v and "Equip filter ON — non-weapons will not trigger aimbot." or "Equip filter OFF — all tools trigger aimbot.",Duration=2,Image="cpu"}) end
+    end
+})
+SettingsTab:CreateToggle({
+    Name         = "Weapon-Type Gating (Triggerbot/Melee Smart Block)",
+    CurrentValue = S.WeaponTypeGating,
+    Flag         = "WeaponTypeGating",
+    Callback     = function(v)
+        S.WeaponTypeGating = v
+        if S.Notify then S.Notify({Title="TASFF Intel",Content=v and "Type gating ON — melee won't triggerbot; ranged won't melee." or "Type gating OFF — all weapons use all features.",Duration=2,Image="cpu"}) end
+    end
+})
+
+
 
 SettingsTab:CreateButton({
     Name     = "Blacklist Currently Equipped Tool",
@@ -559,6 +921,26 @@ SettingsTab:CreateButton({
         else
             if S.Notify then S.Notify({Title = "TASFF Arsenal", Content = "Select a valid tool to remove.", Duration = 2, Image = "alert-triangle"}) end
         end
+    end
+})
+
+SettingsTab:CreateButton({
+    Name     = "Save Tool Registry to Disk",
+    Callback = function()
+        if S.SaveToolBlacklist then 
+            S.SaveToolBlacklist() 
+            if S.Notify then S.Notify({Title="TASFF Arsenal", Content="Tool registry saved permanently.", Duration=2, Image="save"}) end
+        end
+    end
+})
+
+SettingsTab:CreateButton({
+    Name     = "Clear Tool Registry",
+    Callback = function()
+        S.ToolBlacklist = {}
+        if BlacklistDropdown then pcall(function() BlacklistDropdown:Refresh({"No Registry Items Found"}, true) end) end
+        if S.SaveToolBlacklist then S.SaveToolBlacklist() end
+        if S.Notify then S.Notify({Title="TASFF Arsenal", Content="Tool registry cleared.", Duration=2, Image="trash"}) end
     end
 })
 
@@ -612,6 +994,7 @@ PresetsTab:CreateButton({
                 -- Advanced & Logic
                 ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
+                KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -711,6 +1094,34 @@ PresetsTab:CreateButton({
         else
             if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected to delete.", Duration = 2, Image = "alert-triangle"}) end
         end
+    end
+})
+
+PresetsTab:CreateSection("Built-In Game Profiles")
+PresetsTab:CreateParagraph({
+    Title   = "Quick-Load Configs",
+    Content = "Pre-configured profiles for popular games. Loading these will override your current settings."
+})
+
+PresetsTab:CreateButton({
+    Name = "Load Da Hood Config (Legit)",
+    Callback = function()
+        pcall(function() Rayfield.Flags["AimMethod"]:Set("Legit (Camera)") end)
+        pcall(function() Rayfield.Flags["TargetPart"]:Set("Head") end)
+        pcall(function() Rayfield.Flags["PredIntense"]:Set(0.12) end)
+        pcall(function() Rayfield.Flags["SmoothSpeed"]:Set(1.5) end)
+        if S.Notify then S.Notify({Title="TASFF Presets", Content="Loaded Da Hood (Legit) profile.", Duration=2, Image="check"}) end
+    end
+})
+
+PresetsTab:CreateButton({
+    Name = "Load Phantom Forces Config (Blatant)",
+    Callback = function()
+        pcall(function() Rayfield.Flags["AimMethod"]:Set("Blatant") end)
+        pcall(function() Rayfield.Flags["TargetPart"]:Set("Head") end)
+        pcall(function() Rayfield.Flags["BlatantSnapSpeed"]:Set(100) end)
+        pcall(function() Rayfield.Flags["WallCheck"]:Set(true) end)
+        if S.Notify then S.Notify({Title="TASFF Presets", Content="Loaded Phantom Forces (Blatant) profile.", Duration=2, Image="check"}) end
     end
 })
 
@@ -1006,13 +1417,20 @@ MiscTab:CreateParagraph({
 MiscTab:CreateToggle({Name = "Silence All Notifications", CurrentValue = S.DisableNotifications, Flag = "DisableNotifications", Callback = function(v)
     S.DisableNotifications = v
 end})
+MiscTab:CreateSlider({Name = "Notification Throttle (Max per 3s)", Range = {1, 10}, Increment = 1, CurrentValue = S.NotifyMaxPer3s or 5, Flag = "NotifyThrottle", Callback = function(v) S.NotifyMaxPer3s = v end})
+
+MiscTab:CreateToggle({Name = "Anti-AFK (Prevent Kick)", CurrentValue = S.AntiAFKEnabled, Flag = "AntiAFK", Callback = function(v) S.AntiAFKEnabled = v end})
+MiscTab:CreateToggle({Name = "FPS Watcher (Auto-Tune Performance Mode)", CurrentValue = S.FPSWatcherEnabled, Flag = "FPSWatcher", Callback = function(v) S.FPSWatcherEnabled = v end})
 
 MiscTab:CreateKeybind({
-    Name           = "Global Panic Keybind",
-    CurrentKeybind = S.PanicKeybind or "Delete",
-    Flag           = "PanicKeybind",
-    Callback       = function(key) S.PanicKeybind = key end
-})
+        Name           = "Global Panic Keybind",
+        CurrentKeybind = S.PanicKeybind or "Delete",
+        Flag           = "PanicKeybind",
+        Callback       = function(key)
+            local validKey = SanitizeKeyName(key)
+            if validKey then S.PanicKeybind = validKey end
+        end
+    })
 
 MiscTab:CreateButton({
     Name     = "Execute Panic Protocol",
@@ -1052,6 +1470,8 @@ MiscTab:CreateButton({
         S.MeleeModeEnabled = false;     S.MeleeDetectionRange = 5;      S.MeleeClickInterval = 100
         S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
         S.BlacklistExpiredThreats = false
+        S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
+        S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
         S.ClickToMarkEnabled = false;   S.MarkMethod = "Both"
         S.StrictPrioritize = false;     S.WallCheck = true
         S.NoCollisionCheck = false;     S.TransparencyCheck = false;    S.TransparencyThreshold = 0.5
@@ -1078,7 +1498,47 @@ MiscTab:CreateButton({
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
-UpdateLogTab:CreateSection("Version 2.0.0 (Current Release)")
+UpdateLogTab:CreateSection("Version 2.1.0 (Current Release)")
+UpdateLogTab:CreateLabel("- Performance Engine Rewrite: Replaced frame-skip monolith with a 4-slot rotating pipeline.")
+UpdateLogTab:CreateLabel("- Pipeline Design: Each slot (ESP scan / Aimbot scan / VoS raycasts / Maintenance) fires one per frame.")
+UpdateLogTab:CreateLabel("- Target selection and aim application now run every frame — aimbot is never delayed by performance mode.")
+UpdateLogTab:CreateLabel("- Three background task.spawn loops (NPC cache / Workspace sweep / Cache cleanup) replace frame counters.")
+UpdateLogTab:CreateLabel("- Silent Aim Fix: Mouse movement (Advanced Legit) is blocked when SA is on; camera modes still drive correctly.")
+UpdateLogTab:CreateLabel("- Advanced Legit Rewrite: Smoothstep ease + independent X/Y smoothness sliders + micro-offset humanizer.")
+UpdateLogTab:CreateLabel("- Blatant Snap Speed: Configurable 5-100 lerp speed slider (100 = instant, legacy behavior).")
+UpdateLogTab:CreateLabel("- Panic Keybind Fix: Uses enum-to-enum comparison via GetKeyCode() — no longer breaks after config restore.")
+UpdateLogTab:CreateLabel("- Intelligent Equip Filter: Keyword classifier prevents aimbot activation for non-weapon tools.")
+UpdateLogTab:CreateLabel("- Weapon-Type Gating: Triggerbot blocked for classified melee weapons; proximity melee blocked for ranged.")
+UpdateLogTab:CreateLabel("- Blacklisted Player ESP: Blacklisted players now show with [BLACKLISTED] tag in orange instead of disappearing.")
+UpdateLogTab:CreateLabel("- Hide Blacklisted ESP toggle: Optionally fully hide blacklisted players from ESP instead of tagging them.")
+UpdateLogTab:CreateLabel("- VoS Priority Parts: Configurable list of body parts checked first in Visible On Screen mode.")
+UpdateLogTab:CreateLabel("- New TASFF_Lists.lua module: Keyword tables for weapons, melee, non-weapons; game configs; feature list.")
+UpdateLogTab:CreateLabel("- Session statistics fields added: target locks, trigger fires, threats/nemeses added.")
+
+UpdateLogTab:CreateSection("Version 2.1.0")
+UpdateLogTab:CreateLabel("- Final Architecture Push: Consolidated performance, security, and rendering engines.")
+UpdateLogTab:CreateLabel("- Aimbot Engine: Moved candidate scanning entirely out of pipeline for zero-delay lock-on.")
+UpdateLogTab:CreateLabel("- Threat Neutralization: Instant target death detection added to render loop, fixing delayed threat removal.")
+UpdateLogTab:CreateLabel("- Dynamic FOV Auto-Scale: FOV constraint now scales down seamlessly across distances.")
+UpdateLogTab:CreateLabel("- Advanced Combat: Health Threshold Gating added to ignore players below specific HP ranges.")
+UpdateLogTab:CreateLabel("- Advanced Automation: Auto-Disable Aimbot on Death added to prevent post-death buggy locks.")
+UpdateLogTab:CreateLabel("- Threat Intelligence: FP Cooldowns, Prox Radius limits, Velocity direction checks, and Nemesis Decay added.")
+UpdateLogTab:CreateLabel("- Security & Metrics: Integrated Anti-AFK watcher, FPS Auto-Tuner, and Notification Throttling.")
+UpdateLogTab:CreateLabel("- Storage: Tool Registry Save/Load functionality and Game Config Quick-Load templates implemented.")
+
+UpdateLogTab:CreateSection("Version 2.0.5")
+
+UpdateLogTab:CreateLabel("- The 'Intel Update': Consolidated all player-tracking features into a new centralized Intel Tab.")
+UpdateLogTab:CreateLabel("- Visible on Screen (VoS) Rewrite: Now raycasts 20 limbs independently and ignores own body parts.")
+UpdateLogTab:CreateLabel("- Priority Behavior Overhaul: Replaced StrictPrioritize with Boost vs. Exclusive dropdown options.")
+UpdateLogTab:CreateLabel("- Live Intel Monitor: Dynamic dashboard tracking Marked, Threats, and Nemeses with a points-based heatmap.")
+UpdateLogTab:CreateLabel("- Auto-Flag Systems: Kill-Count Threat detection and automated Nemesis Strike system added.")
+UpdateLogTab:CreateLabel("- Threat Neutralization: Automatically removes Threat tags when the enemy is neutralized (dies).")
+UpdateLogTab:CreateLabel("- Spectator Mode: Bound your camera to any tracked target to monitor them remotely (fixed native conflicts).")
+UpdateLogTab:CreateLabel("- Live Kill Feed: Built-in notification feed explicitly designed to debug Intel logic and false positives.")
+UpdateLogTab:CreateLabel("- Assorted Bug Fixes: Fixed Sticky Aim gaps, Enum.KeyCode errors on mouse binds, and wallcheck conflicts.")
+
+UpdateLogTab:CreateSection("Version 2.0.0")
 UpdateLogTab:CreateLabel("- Version bump to V2.0.0 � modular refactor across 4 files (State/Core/UI/Loader)")
 UpdateLogTab:CreateLabel("- Resolved the Lua 200-local engine limit via _G.TASFF_State shared module pattern")
 UpdateLogTab:CreateLabel("- Restored the original TASFF black-and-red UI theme with complete monolith feature parity")

@@ -86,22 +86,26 @@ local FeatureList = {
     "Kill Feed", "Threat Neutralization", "Auto-Expire on Disconnect",
     "Click-to-Mark", "Focus Mode", "Target Lock History",
     "Auto-Disable on Death", "ESP Whitelist",
+    "Disconnect Notification",
     -- Automation
     "Auto-Engage on Equip", "Intelligent Equip Filter",
     "Tool Blacklist (Persistent)", "Rapid Aim Mode Hotkey",
     -- System
     "Performance Pipeline", "Performance Auto-Tune", "Anti-AFK",
-    "Auto-Update Checker", "Panic System", "Panic on Focus Loss",
+    "Auto-Update Checker", "Panic System (Permanent)", "Panic on Focus Loss",
     "Notification Throttle", "Debug Mode", "Preset Profiles",
     "Quick-Load Game Configs", "UI Theme Editor",
     "Team Check", "Ignore Dead Targets",
+    -- Customization
+    "Custom ESP Colors (per category)", "Custom OOF Arrow Color",
+    "Custom Chams Color", "Custom Kill Flash Color",
 }
 
 S.FeatureCount = #FeatureList
-S.ToggleCount = 64
-S.SliderCount = 27
+S.ToggleCount = 68
+S.SliderCount = 29
 S.DropdownCount = 27
-S.KeybindCount = 3
+S.KeybindCount = 5
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --
 -- Applied via the Presets tab "Quick-Load Game Config" dropdown.

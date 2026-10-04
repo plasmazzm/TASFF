@@ -251,6 +251,7 @@ local function TriggerPanic()
     S.MasterEnabled = false
     S.AimbotActive  = false
     S.CurrentTarget = nil
+    S.PanicLocked   = true   -- permanent lock — only cleared by re-execution
     SetADSState(false)
     if S.IsHoldingClick then
         S.IsHoldingClick = false
@@ -264,10 +265,18 @@ local function TriggerPanic()
             if key then VirtualInputManager:SendKeyEvent(false, key, false, game) end
         end)
     end
+    S.SilentAimTargetCache = nil
     ClearVisuals()
     ClearCrosshair()
     if S.FOVCircle then S.FOVCircle.Visible = false end
-    Notify({Title = "TASFF Panic", Content = "All combat & visual routines halted.", Duration = 3, Image = "octagon-pause"})
+    -- Use Roblox StarterGui notification — Rayfield may already be destroyed at this point
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title    = "TASFF PANIC",
+            Text     = "All routines halted. Re-execute to restore.",
+            Duration = 6,
+        })
+    end)
 end
 S.TriggerPanic = TriggerPanic
 
@@ -278,7 +287,14 @@ local function UnloadScript()
     if getgenv().TASFF and getgenv().TASFF.Connections then
         for _, conn in ipairs(getgenv().TASFF.Connections) do pcall(function() conn:Disconnect() end) end
     end
-    Notify({Title = "TASFF", Content = "Script and interface fully unloaded.", Duration = 2, Image = "log-out"})
+    -- Native Roblox notification — fired before Rayfield GUI is destroyed
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title    = "TASFF Unloaded",
+            Text     = "Script and interface fully terminated.",
+            Duration = 5,
+        })
+    end)
     pcall(function() if Rayfield and Rayfield.Destroy then Rayfield:Destroy() end end)
     pcall(function()
         for _, gui in ipairs(CoreGui:GetChildren()) do
@@ -708,12 +724,25 @@ end
 S.HandleClickToMark = HandleClickToMark
 
 table.insert(getgenv().TASFF.Connections, UserInputService.InputBegan:Connect(function(input, gpe)
-    -- v2.1.0 fix: enum-to-enum comparison via GetKeyCode() — immune to string format
-    -- inconsistencies that occur after Rayfield:LoadConfiguration() restores saved flags
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then
+        -- Still process mouse-button marks below
+    end
     if input.KeyCode ~= Enum.KeyCode.Unknown then
         local panicKey = GetKeyCode(S.PanicKeybind)
         if panicKey and input.KeyCode == panicKey then
             TriggerPanic(); return
+        end
+        -- Feature 17: Rapid Aim Mode Cycle
+        if not gpe and S.RapidModeCycleEnabled then
+            local cycleKey = GetKeyCode(S.RapidModeCycleKey)
+            if cycleKey and input.KeyCode == cycleKey then
+                local modes = {"Legit (Camera)", "Advanced Legit (Mouse)", "Blatant"}
+                local cur = S.Mode or "Legit (Camera)"
+                local idx = table.find(modes, cur) or 1
+                S.Mode = modes[(idx % #modes) + 1]
+                Notify({Title="TASFF Mode", Content="Aim mode → "..S.Mode, Duration=1.5, Image="refresh-cw"})
+                if S.DebugMode then print("[TASFF Debug] Aim mode cycled to: "..S.Mode) end
+            end
         end
     end
 
@@ -1187,18 +1216,29 @@ local function HookNeutralization(p)
         hum.Died:Connect(function()
             local killerName = "Unknown"
             local killerObj = nil
-            local creator = hum:FindFirstChild("creator")
-            if creator and creator:IsA("ObjectValue") and creator.Value and creator.Value:IsA("Player") then
-                killerObj = creator.Value
-                killerName = killerObj.Name
+            
+            -- Detect creator (covers ObjectValue and StringValue variants)
+            local creator = hum:FindFirstChild("creator") or hum:FindFirstChild("Creator") or hum:FindFirstChild("KilledBy")
+            if creator then
+                if creator:IsA("ObjectValue") and creator.Value and creator.Value:IsA("Player") then
+                    killerObj = creator.Value
+                    killerName = killerObj.Name
+                elseif creator:IsA("StringValue") and creator.Value ~= "" then
+                    local pObj = Players:FindFirstChild(creator.Value)
+                    if pObj then
+                        killerObj = pObj
+                        killerName = pObj.Name
+                    end
+                end
             end
 
             if S.KillFeedEnabled and killerName ~= "Unknown" and killerName ~= p.Name then
                 Notify({Title="TASFF Intel", Content=killerName.." killed "..p.Name, Duration=2, Image="crosshair"})
             end
 
-            if S.KillCountThreatEnabled and killerObj then
-                if killerObj ~= Player and killerObj ~= p then
+            if killerObj and killerObj ~= Player and killerObj ~= p then
+                -- Add to global kill count for auto-flagging
+                if S.KillCountThreatEnabled then
                     S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
                     if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
                         local kData = S.IntelPlayers and S.IntelPlayers[killerName]
@@ -1208,6 +1248,13 @@ local function HookNeutralization(p)
                             Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
                         end
                     end
+                end
+                
+                -- Issue 3 Fix: Give prioritized/intel players points for scoring a kill
+                local isPrio = table.find(S.PriorityPlayers or {}, killerName)
+                local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+                if isPrio or kData then
+                    if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
                 end
             end
 
@@ -1231,8 +1278,15 @@ for _, ep in ipairs(Players:GetPlayers()) do pcall(HookNeutralization, ep) end
 
 -- Auto-Expire on Disconnect
 table.insert(getgenv().TASFF.Connections, Players.PlayerRemoving:Connect(function(p)
-    if S.AutoExpireOnDisconnect and S.IntelPlayers and S.IntelPlayers[p.Name] and not S.IntelPlayers[p.Name].nemesis then
+    local wasPrio = table.find(S.PriorityPlayers or {}, p.Name)
+    local wasIntel = S.IntelPlayers and S.IntelPlayers[p.Name]
+    if S.AutoExpireOnDisconnect and wasIntel and not wasIntel.nemesis then
         if S.RemoveFromIntel then S.RemoveFromIntel(p.Name, false) end
+    end
+    -- Notify regardless of auto-expire if the player was tracked
+    if wasPrio or wasIntel then
+        local label = wasIntel and (wasIntel.nemesis and "Nemesis" or wasIntel.source) or "Priority"
+        Notify({Title="TASFF Intel", Content="["..label.."] "..p.Name.." left the game.", Duration=4, Image="user-minus"})
     end
 end))
 
@@ -1273,8 +1327,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     EnsureDrawings()
     local cachedIgnoreList = GetIgnoreList()
 
-    local MasterEnabled    = S.MasterEnabled
-    local AimbotActive     = S.AimbotActive
+    local MasterEnabled    = S.MasterEnabled and not S.PanicLocked
+    local AimbotActive     = S.AimbotActive  and not S.PanicLocked
     local TargetingEnabled = S.TargetingEnabled
     local heldTool          = Player.Character and Player.Character:FindFirstChildOfClass("Tool")
     local isToolBlacklisted = heldTool and table.find(S.ToolBlacklist, heldTool.Name)
@@ -1582,11 +1636,15 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             end
 
             local bc=HLC or t.TeamColor
-            if isRecentlyDead then bc=Color3.fromRGB(255, 255, 255)
-            elseif isBlacklisted then bc=Color3.fromRGB(255,140,0)         -- orange for blacklisted
-            elseif isNemesis then bc=Color3.fromRGB(150,0,255)
-            elseif isPriority then bc=Color3.fromRGB(255,50,50)
-            elseif VCE then bc=isVisNow and VC or HC end
+            if isRecentlyDead then bc = S.KillFlashColor or Color3.fromRGB(255, 255, 255)
+            elseif isBlacklisted then bc = S.BlacklistedTagColor or Color3.fromRGB(255, 140, 0)
+            elseif isNemesis then bc = S.NemesisHighlightColor or Color3.fromRGB(150, 0, 255)
+            elseif isPriority then bc = S.PriorityHighlightColor or Color3.fromRGB(255, 50, 50)
+            elseif VCE then
+                local isThreat = S.IntelPlayers and S.IntelPlayers[t.Name] and (S.IntelPlayers[t.Name].source == "Threat")
+                if isThreat then bc = S.ThreatHighlightColor or Color3.fromRGB(255, 60, 0)
+                else bc = isVisNow and VC or HC end
+            end
 
             h.Adornee=t.Instance
             if t.IsPlayer then h.Enabled=UH else h.Enabled=UNH end
@@ -1809,11 +1867,13 @@ oldIndex = hookmetamethod(game, "__index", function(t, k)
     if k~="Hit" and k~="Target" and k~="UnitRay" then return oldIndex(t,k) end
     if checkcaller() then return oldIndex(t,k) end
     if S.SilentAimEnabled and S.MasterEnabled and S.SilentAimTargetCache and S.SilentAimTargetCache.Instance then
-        local bone=S.SilentAimTargetCache.Instance:FindFirstChild(S.TargetPart) or S.SilentAimTargetCache.Instance:FindFirstChild("HumanoidRootPart")
-        if bone then
-            if k=="Hit" then return bone.CFrame end
-            if k=="Target" then return bone end
-            if k=="UnitRay" then local o=Camera.CFrame.Position; return Ray.new(o,(bone.Position-o).Unit) end
+        if t and (t:IsA("Mouse") or t:IsA("PlayerMouse") or t:IsA("PluginMouse")) then
+            local bone=S.SilentAimTargetCache.Instance:FindFirstChild(S.TargetPart) or S.SilentAimTargetCache.Instance:FindFirstChild("HumanoidRootPart")
+            if bone then
+                if k=="Hit" then return bone.CFrame end
+                if k=="Target" then return bone end
+                if k=="UnitRay" then local o=workspace.CurrentCamera.CFrame.Position; return Ray.new(o,(bone.Position-o).Unit) end
+            end
         end
     end
     return oldIndex(t,k)
@@ -1839,6 +1899,25 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
             if method=="Raycast" then ov=args[2]
             elseif method=="Blockcast" or method=="Spherecast" or method=="Shapecast" then ov=args[3]
             else ov=args[1].Direction end
+            
+            -- Camera freeze prevention (PopperCam raycast bypass)
+            local camPos = workspace.CurrentCamera.CFrame.Position
+            local toCam = camPos - origin
+            local dirVec = typeof(ov)=="Vector3" and ov or (ov and ov.Unit)
+            if toCam.Magnitude > 0.5 and dirVec and dirVec.Magnitude > 0.1 then
+                if dirVec.Unit:Dot(toCam.Unit) > 0.99 then
+                    return oldNamecall(self,...) -- Ignore camera script raycasts
+                end
+            end
+            
+            -- Also ignore if calling script is clearly the camera
+            if getcallingscript then
+                local cs = getcallingscript()
+                if cs and (cs.Name == "CameraModule" or cs.Name == "ZoomController" or cs.Name == "Popper") then
+                    return oldNamecall(self,...)
+                end
+            end
+
             local cL=(typeof(ov)=="Vector3" and ov.Magnitude) or 1000
             local dir=(bone.Position-origin).Unit*cL
             if method=="Raycast" then args[2]=dir

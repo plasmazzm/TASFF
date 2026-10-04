@@ -99,12 +99,17 @@ local FeatureList = {
     -- Customization
     "Custom ESP Colors (per category)", "Custom OOF Arrow Color",
     "Custom Chams Color", "Custom Kill Flash Color",
+    -- v2.1.2 Additions
+    "Session User Kill Count", "Priority Player Kill Tracking",
+    "DisplayName in Dropdowns", "Server Info Panel",
+    "Notification Duration Control", "Suppress Rayfield Ads",
+    "UI Theme Editor (Live)", "Per-Section Theming Controls",
 }
 
 S.FeatureCount = #FeatureList
-S.ToggleCount = 68
-S.SliderCount = 29
-S.DropdownCount = 27
+S.ToggleCount = 76     -- +8: per-section preset toggles (FOV, Crosshair, Box, Skeleton, Snap, Priority, Threat, Nemesis, KillFlash, Visible, Hidden)
+S.SliderCount = 31     -- +2: NotificationDuration, Chams Opacity moved here
+S.DropdownCount = 38   -- +11: per-section preset dropdowns
 S.KeybindCount = 5
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --

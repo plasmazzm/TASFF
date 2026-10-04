@@ -66,12 +66,24 @@ local function GetKeyCode(name)
 end
 S.GetKeyCode = GetKeyCode
 
+local _notifyCount = 0
+local _notifyWindowStart = tick()
 local function Notify(options)
-    if not S.DisableNotifications and Rayfield and Rayfield.Notify then
+    if S.DisableNotifications then return end
+    -- Feature 23: Notification Throttle
+    local now = tick()
+    if now - _notifyWindowStart >= 3 then
+        _notifyWindowStart = now; _notifyCount = 0
+    end
+    local limit = S.NotifyMaxPer3s or 5
+    if _notifyCount >= limit then return end  -- drop excess
+    _notifyCount = _notifyCount + 1
+    if Rayfield and Rayfield.Notify then
         pcall(function() Rayfield:Notify(options) end)
     end
 end
 S.Notify = Notify
+
 
 local function NewDrawing(className)
     if not (Drawing and Drawing.new) then return nil end
@@ -379,12 +391,13 @@ S.AddToIntel = AddToIntel
 local function RemoveFromIntel(name, forceRemoveNemesis)
     if not name or name == "" then return end
     local data = S.IntelPlayers[name]
-    if not data then return end
-    if data.nemesis and not forceRemoveNemesis then
+    if data and data.nemesis and not forceRemoveNemesis then
         Notify({Title="Intel",Content="Use 'Remove Nemesis' to remove a Nemesis player.",Duration=2,Image="shield-off"})
         return
     end
-    S.IntelPlayers[name] = nil
+    if data then
+        S.IntelPlayers[name] = nil
+    end
     S.ThreatMemory[name] = nil
     S.NemesisMemory[name] = nil
     local idx = table.find(S.PriorityPlayers, name)
@@ -393,6 +406,7 @@ local function RemoveFromIntel(name, forceRemoveNemesis)
     if S.IntelSelected == name then S.IntelSelected = "" end
     RebuildIntelMonitor()
 end
+
 S.RemoveFromIntel = RemoveFromIntel
 
 
@@ -500,11 +514,14 @@ local function IsVisibleCachedWrapper(model, partName, ignoreList)
     return result
 end
 S.IsVisibleCachedWrapper = IsVisibleCachedWrapper
+local _lastFP = {}
 local function RegisterThreat(attackerName, isKill)
     if not attackerName or attackerName == Player.Name then return end
     if isKill then
         if S.NemesisEnabled then
             S.PlayerNemesisStrikes[attackerName] = (S.PlayerNemesisStrikes[attackerName] or 0) + 1
+            if not S.PlayerNemesisStrikeTimes then S.PlayerNemesisStrikeTimes = {} end
+            S.PlayerNemesisStrikeTimes[attackerName] = tick()
             local strikes = S.PlayerNemesisStrikes[attackerName]
             local req = S.KillsBeforeNemesis or 3
             if strikes >= req then
@@ -522,6 +539,11 @@ local function RegisterThreat(attackerName, isKill)
             if S.AddToIntel then S.AddToIntel(attackerName, "Threat", 25) end
         end
     else
+        -- FP Cooldown Check
+        local cd = S.ThreatFPCooldown or 1.5
+        if tick() - (_lastFP[attackerName] or 0) < cd then return end
+        _lastFP[attackerName] = tick()
+
         ThreatMemory[attackerName] = tick()
         local isNew = not table.find(S.PriorityPlayers, attackerName)
         S.SessionThreatsAdded = (S.SessionThreatsAdded or 0) + 1
@@ -550,11 +572,17 @@ local function HookThreatHealth(char)
             else
                 local myPos = char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart.Position
                 if myPos then
-                    local nearestAttacker, nearestDist = nil, 250
+                    local nearestAttacker, nearestDist = nil, S.ThreatProximityRadius or 80
                     for _, p in ipairs(Players:GetPlayers()) do
                         if p ~= Player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                            local d = (p.Character.HumanoidRootPart.Position - myPos).Magnitude
-                            if d < nearestDist then nearestDist = d; nearestAttacker = p.Name end
+                            local root = p.Character.HumanoidRootPart
+                            local d = (root.Position - myPos).Magnitude
+                            if d < nearestDist then
+                                local vel = root.AssemblyLinearVelocity
+                                if vel.Magnitude < 5 or vel.Unit:Dot((myPos - root.Position).Unit) > 0.3 then
+                                    nearestDist = d; nearestAttacker = p.Name
+                                end
+                            end
                         end
                     end
                     if nearestAttacker then RegisterThreat(nearestAttacker, isKill) end
@@ -564,6 +592,7 @@ local function HookThreatHealth(char)
         lastHealth = newHealth
     end)
 end
+
 
 task.spawn(function()
     while getgenv().TASFF and getgenv().TASFF.Running do
@@ -583,6 +612,16 @@ task.spawn(function()
             end
         end
         if changed then SyncPriorityUI() end
+
+        -- Feature 18: Nemesis Strike Decay
+        for name, timestamp in pairs(S.PlayerNemesisStrikeTimes or {}) do
+            if now - timestamp >= 120 then
+                if (S.PlayerNemesisStrikes[name] or 0) > 0 then
+                    S.PlayerNemesisStrikes[name] = S.PlayerNemesisStrikes[name] - 1
+                    S.PlayerNemesisStrikeTimes[name] = tick()
+                end
+            end
+        end
     end
 end)
 
@@ -779,6 +818,110 @@ end)
 pcall(UpdateWorkspaceIgnores)
 pcall(UpdateNPCs)
 
+-- // ── v2.1.0 Feature 10: ToolBlacklist Save/Load ──────────────── // --
+local BLFILE = "TASFF_ToolBlacklist.json"
+local function SaveToolBlacklist()
+    pcall(function()
+        local json = (HttpService and HttpService.JSONEncode) and
+            HttpService:JSONEncode(S.ToolBlacklist or {}) or "[]"
+        writefile(BLFILE, json)
+    end)
+end
+local function LoadToolBlacklist()
+    pcall(function()
+        if isfile and isfile(BLFILE) then
+            local raw = readfile(BLFILE)
+            local ok, tbl = pcall(function() return HttpService:JSONDecode(raw) end)
+            if ok and type(tbl) == "table" then
+                S.ToolBlacklist = tbl
+                if S.BlacklistDropdownRef then
+                    local lst = #S.ToolBlacklist > 0 and S.ToolBlacklist or {"No Registry Items Found"}
+                    pcall(function() S.BlacklistDropdownRef:Refresh(lst, true) end)
+                end
+            end
+        end
+    end)
+end
+S.SaveToolBlacklist = SaveToolBlacklist
+S.LoadToolBlacklist = LoadToolBlacklist
+pcall(LoadToolBlacklist)   -- load on startup
+
+-- // ── v2.1.0 Feature 8: Focus-Loss Panic ──────────────────────── // --
+table.insert(getgenv().TASFF.Connections, game:GetService("UserInputService").WindowFocusReleased:Connect(function()
+    if S.PanicOnFocusLoss and S.MasterEnabled then
+        if S.TriggerPanic then S.TriggerPanic() end
+    end
+end))
+
+-- // ── v2.1.0 Feature 20: Auto-Disable on Death ─────────────────── // --
+local function HookAutoDisableOnDeath(char)
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local conn; conn = hum.Died:Connect(function()
+        if S.AutoDisableOnDeath then
+            S.AimbotActive = false; S.CurrentTarget = nil
+            if S.SetADSState then S.SetADSState(false) end
+            Notify({Title="TASFF",Content="Aimbot disabled — you died.",Duration=2,Image="x"})
+        end
+        if conn then conn:Disconnect() end
+    end)
+    table.insert(getgenv().TASFF.Connections, conn)
+end
+if Player.Character then task.defer(HookAutoDisableOnDeath, Player.Character) end
+table.insert(getgenv().TASFF.Connections, Player.CharacterAdded:Connect(function(char)
+    task.wait(1)   -- wait for Humanoid to replicate
+    HookAutoDisableOnDeath(char)
+end))
+
+-- // ── v2.1.0 Feature 25: Anti-AFK ─────────────────────────────── // --
+task.spawn(function()
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        task.wait(55)
+        if S.AntiAFKEnabled then
+            pcall(function()
+                local VIM = game:GetService("VirtualInputManager")
+                VIM:SendMouseMoveEvent(1, 0, game)
+                task.wait(0.05)
+                VIM:SendMouseMoveEvent(-1, 0, game)
+            end)
+        end
+    end
+end)
+
+-- // ── v2.1.0 Feature 26: FPS Watcher / Auto-Tune ───────────────── // --
+task.spawn(function()
+    task.wait(3)   -- let game settle first
+    local lastManualMode = S.PerformanceMode or "Medium"
+    local autoDowngraded  = false
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        task.wait(2)
+        if not S.FPSWatcherEnabled then
+            -- If we previously auto-downgraded, restore user's setting
+            if autoDowngraded then
+                S.PerformanceMode = lastManualMode; autoDowngraded = false
+                Notify({Title="TASFF FPS",Content="FPS stable — restored to "..lastManualMode..".",Duration=2,Image="cpu"})
+            end
+        else
+            local fps = math.floor(1 / (S._lastDeltaTime or 0.0167))
+            -- Save user's current mode before any auto-change
+            if not autoDowngraded then lastManualMode = S.PerformanceMode or "Medium" end
+            local order = {"Ultra High","High","Medium","Low","Ultra Low"}
+            local curIdx = table.find(order, S.PerformanceMode or "Medium") or 3
+            if fps < 30 and curIdx < #order then
+                -- FPS too low — step down one level
+                S.PerformanceMode = order[curIdx + 1]; autoDowngraded = true
+                Notify({Title="TASFF FPS",Content="Low FPS ("..fps..") — stepped to "..S.PerformanceMode..".",Duration=2,Image="cpu"})
+            elseif fps > 55 and autoDowngraded and curIdx > 1 then
+                -- FPS recovered — step back up
+                S.PerformanceMode = order[curIdx - 1]
+                if S.PerformanceMode == lastManualMode then autoDowngraded = false end
+                Notify({Title="TASFF FPS",Content="FPS recovered — stepped to "..S.PerformanceMode..".",Duration=2,Image="cpu"})
+            end
+        end
+    end
+end)
+
 
 local function CleanupCaches()
     local now = tick()
@@ -913,6 +1056,10 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         if not model then return end
         local targetName = isPlayer and pObj.Name or model.Name
         local isBlacklisted = isPlayer and table.find(S.BlacklistedPlayers or {}, targetName) ~= nil
+        -- Feature 21: ESP Whitelist
+        if isPlayer and S.ESPWhitelistEnabled and not isBlacklisted then
+            if not table.find(S.ESPWhitelist or {}, targetName) then return end
+        end
         -- v2.1.0: blacklisted players are filtered from aimbot but shown in ESP (with tag or hidden per setting)
         if isBlacklisted then
             if performWallCheck then return end  -- never aim at blacklisted
@@ -922,6 +1069,16 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso")
         if not root then return end
         local hum = model:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health <= 0 then
+            if S.ThreatNeutralizationEnabled then
+                local data = S.IntelPlayers and S.IntelPlayers[targetName]
+                local isPrio = table.find(S.PriorityPlayers or {}, targetName)
+                if (data and not data.nemesis) or isPrio then
+                    if S.RemoveFromIntel then S.RemoveFromIntel(targetName, false) end
+                    if S.Notify then S.Notify({Title="Intel",Content="Neutralized: "..targetName.." removed from Intel.",Duration=2,Image="check-circle"}) end
+                end
+            end
+        end
         if not hum or (S.IgnoreDead and hum.Health <= 0) then return end
         local isTeammate = isPlayer and Player.Team and pObj.Team and pObj.Team == Player.Team
         if S.TeamCheck and isTeammate then return end
@@ -944,7 +1101,15 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         local sPos, onScreen = Camera:WorldToViewportPoint(pos)
         local screenPos = ApplyScreenCalibration(Vector2.new(sPos.X, sPos.Y))
         local distFromCenter = (screenPos - screenCenter).Magnitude
-        if ignoreFOV or (onScreen and (not S.ShowFOV or distFromCenter <= S.FOVSize)) then
+        
+        -- Feature 6: Dynamic FOV
+        local currentFov = S.FOVSize
+        if not ignoreFOV and S.DynamicFOVEnabled and distFromCam > 0 then
+            currentFov = S.FOVSize * (distFromCam / 100)
+            if S.DynamicFOVMax and currentFov > S.DynamicFOVMax then currentFov = S.DynamicFOVMax end
+        end
+
+        if ignoreFOV or (onScreen and (not S.ShowFOV or distFromCenter <= currentFov)) then
             table.insert(results, {
                 Instance=model, Root=root, Name=targetName, IsPlayer=isPlayer,
                 IsTeammate=isTeammate, IsBlacklisted=isBlacklisted,
@@ -1045,14 +1210,16 @@ local function HookNeutralization(p)
 
             if not S.ThreatNeutralizationEnabled then return end
             local data = S.IntelPlayers and S.IntelPlayers[p.Name]
-            if data and not data.nemesis and S.RemoveFromIntel then
-                S.RemoveFromIntel(p.Name, false)
+            local isPrio = table.find(S.PriorityPlayers or {}, p.Name)
+            if (data and not data.nemesis) or isPrio then
+                if S.RemoveFromIntel then S.RemoveFromIntel(p.Name, false) end
                 Notify({Title="Intel",Content="Neutralized: "..p.Name.." removed from Intel.",Duration=2,Image="check-circle"})
             end
         end)
     end
     -- Hook current character (if already spawned)
     if p.Character then task.spawn(hookHum, p.Character) end
+
     -- Hook all future respawns
     p.CharacterAdded:Connect(hookHum)
 end
@@ -1098,6 +1265,7 @@ end
 
 local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     if not S.ScriptInitialized then return end
+    S._lastDeltaTime = deltaTime   -- v2.1.0: FPS watcher reads this
     UpdateSpectator()
     EnsureDrawings()
     local cachedIgnoreList = GetIgnoreList()
@@ -1111,6 +1279,9 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     local heldToolClass = heldTool and S.ClassifyTool and S.ClassifyTool(heldTool.Name) or "Unknown"
     local isNonWeaponEquipped = S.IntelligentEquipFilter and heldTool and heldToolClass == "NonWeapon"
     local canAimWithTool    = not S.AutoEnableOnEquip or (heldTool and not isToolBlacklisted and not isNonWeaponEquipped)
+    -- v2.1.0 Feature 5: Health Threshold Gate
+    local healthThreshold   = S.HealthThresholdEnabled and (S.HealthThreshold or 0) or 0
+
 
     local screenCenter  = GetAimPosition()
     local shouldShowFOV = S.ShowFOV and not S.InvisibleFOV and MasterEnabled and AimbotActive
@@ -1119,7 +1290,15 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             PrepareDrawing(S.FOVCircle)
             S.FOVCircle.Position = screenCenter
             pcall(function() S.FOVCircle.Point = screenCenter end)
-            S.FOVCircle.Radius  = S.FOVSize
+            local drawFov = S.FOVSize
+            if S.DynamicFOVEnabled and S.CurrentTarget and S.CurrentTarget.Root then
+                local d = (S.CurrentTarget.Root.Position - Camera.CFrame.Position).Magnitude
+                if d > 0 then
+                    drawFov = S.FOVSize * (d / 100)
+                    if S.DynamicFOVMax and drawFov > S.DynamicFOVMax then drawFov = S.DynamicFOVMax end
+                end
+            end
+            S.FOVCircle.Radius  = drawFov
             S.FOVCircle.Color   = S.FOVColor or S.FOVCircle.Color
             S.FOVCircle.Visible = true
         else
@@ -1149,8 +1328,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         end
     end
     -- // ── v2.1.0 Pipeline: Scanning Slots (one per frame) ─────── // --
-    -- Only the expensive scanning calls (GetPotentialTargets + VoS raycasts)
-    -- are gated here. Target selection and aim application run every frame below.
+    -- Slot 1 (aimbot candidate scan) moved OUTSIDE the pipeline — runs every frame.
+    -- Since visibility is now precomputed (background loop ③), GetPotentialTargets
+    -- has ZERO raycasts and costs only table lookups + WorldToViewportPoint — negligible.
+    -- Pipeline now handles: Slot 0 = ESP list, Slot 1 = VoS, Slot 2 = Maintenance.
     do
         local pm = S.PerformanceMode or "Medium"
         local prf = S.PipelineRestFrames
@@ -1170,18 +1351,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end
 
             elseif slot == 1 then
-                -- Slot 1: Build aimbot candidate list (with wallcheck raycasts)
-                if MasterEnabled and AimbotActive and TargetingEnabled then
-                    local tp = S.TargetPart
-                    local bypassWC = (tp ~= "Visible On Screen") and S.WallCheck or false
-                    S.AimbotCandidates = GetPotentialTargets(false, bypassWC, cachedIgnoreList, S.AimbotRenderDistance)
-                else
-                    S.AimbotCandidates = {}
-                end
-
-            elseif slot == 2 then
-                -- Slot 2: VoS scan — up to 20 raycasts on current target limbs
-                -- Priority parts (from S.VOSPriorityParts) are checked first
+                -- Slot 1: VoS scan — raycasts on current target limbs (still expensive enough to gate)
                 local tp = S.TargetPart
                 if tp == "Visible On Screen" and S.CurrentTarget and S.CurrentTarget.Instance and S.CurrentTarget.Instance.Parent then
                     local rigParts = {"Head","Torso","UpperTorso","LowerTorso","Left Arm","LeftUpperArm","LeftLowerArm","LeftHand","Right Arm","RightUpperArm","RightLowerArm","RightHand","Left Leg","LeftUpperLeg","LeftLowerLeg","LeftFoot","Right Leg","RightUpperLeg","RightLowerLeg","RightFoot"}
@@ -1215,8 +1385,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     S.LastCustomTargetData = nil
                 end
 
-            elseif slot == 3 then
-                -- Slot 3: Timestamp pruning + AutoADS + Silent Aim cache expiry
+            elseif slot == 2 then
+                -- Slot 2: Timestamp pruning + AutoADS + Silent Aim cache expiry
                 for model, _ in pairs(TargetFirstSeenTimestamps) do
                     if not model or not model.Parent or not model:FindFirstChildOfClass("Humanoid") then
                         TargetFirstSeenTimestamps[model] = nil
@@ -1228,10 +1398,23 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end
             end
 
-            S.PipelineSlot = (slot + 1) % 4
+            S.PipelineSlot = (slot + 1) % 3
             S.PipelineRestCount = restTarget
         end
     end
+
+    -- // ── Aimbot Candidate Scan (every frame — zero raycasts) ─── // --
+    -- Now that visibility is precomputed in background loop ③, this is pure
+    -- table lookups. Running every frame eliminates the FOV-entry lock delay.
+    if MasterEnabled and AimbotActive and TargetingEnabled then
+        local tp = S.TargetPart
+        local bypassWC = (tp ~= "Visible On Screen") and S.WallCheck or false
+        S.AimbotCandidates = GetPotentialTargets(false, bypassWC, cachedIgnoreList, S.AimbotRenderDistance)
+    else
+        S.AimbotCandidates = {}
+    end
+
+
 
     -- // ── v2.1.0 Every-Frame: Target Selection (full FPS, no gating) // --
     -- Reads S.AimbotCandidates (written by Slot 1), sorts and picks target
@@ -1268,7 +1451,12 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local d = (S.CurrentTarget.Root.Position - Camera.CFrame.Position).Magnitude
                 if d > S.AimbotRenderDistance then outOfBounds = true end
                 local sp2, os2 = Camera:WorldToViewportPoint(S.CurrentTarget.Root.Position)
-                if S.ShowFOV and os2 and (Vector2.new(sp2.X, sp2.Y) - screenCenter).Magnitude > S.FOVSize then outOfBounds = true end
+                local currentFov = S.FOVSize
+                if S.DynamicFOVEnabled and d > 0 then
+                    currentFov = S.FOVSize * (d / 100)
+                    if S.DynamicFOVMax and currentFov > S.DynamicFOVMax then currentFov = S.DynamicFOVMax end
+                end
+                if S.ShowFOV and os2 and (Vector2.new(sp2.X, sp2.Y) - screenCenter).Magnitude > currentFov then outOfBounds = true end
             end
             if hum and hum.Health > 0 and not typeMismatch and not wallCheckFailed and not outOfBounds then
                 StickyLockActive = true
@@ -1287,6 +1475,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 if not c.Instance or not c.Instance.Parent then continue end
                 local hum = c.Instance:FindFirstChildOfClass("Humanoid")
                 if not hum or (S.IgnoreDead and hum.Health <= 0) then continue end
+                -- Feature 5: Health Threshold Gate
+                if healthThreshold > 0 and hum.MaxHealth > 0 and ((hum.Health / hum.MaxHealth) * 100 < healthThreshold) then continue end
                 if S.GracePeriodEnabled and graceCondition then
                     if not TargetFirstSeenTimestamps[c.Instance] then TargetFirstSeenTimestamps[c.Instance] = now end
                     if (now - TargetFirstSeenTimestamps[c.Instance]) * 1000 < S.GracePeriodMs then continue end
@@ -1319,6 +1509,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 S.CurrentTarget = filtered[1]
                 if S.CurrentTarget and (not prev or prev.Instance ~= S.CurrentTarget.Instance) then
                     S.SessionTargetLocks = (S.SessionTargetLocks or 0) + 1
+                    -- Feature 19: Lock History
+                    if not S.LockHistory then S.LockHistory = {} end
+                    table.insert(S.LockHistory, 1, {name=S.CurrentTarget.Name, time=tick()})
+                    if #S.LockHistory > 5 then table.remove(S.LockHistory) end
                 end
             end
         end
@@ -1372,8 +1566,21 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             if not (h and tag) then continue end
             local isVisNow=true
             if VCE then isVisNow=IsVisibleCachedWrapper(t.Instance,"HumanoidRootPart",cachedIgnoreList) end
+            
+            -- Feature 15: Kill Confirm Flash
+            local isRecentlyDead = false
+            if S.KillConfirmFlashEnabled then
+                local hum = t.Instance:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health <= 0 then
+                    if not S.DeadTargetsCache then S.DeadTargetsCache = {} end
+                    if not S.DeadTargetsCache[t.Instance] then S.DeadTargetsCache[t.Instance] = tick() end
+                    if (tick() - S.DeadTargetsCache[t.Instance]) < 0.4 then isRecentlyDead = true end
+                end
+            end
+
             local bc=HLC or t.TeamColor
-            if isBlacklisted then bc=Color3.fromRGB(255,140,0)         -- orange for blacklisted
+            if isRecentlyDead then bc=Color3.fromRGB(255, 255, 255)
+            elseif isBlacklisted then bc=Color3.fromRGB(255,140,0)         -- orange for blacklisted
             elseif isNemesis then bc=Color3.fromRGB(150,0,255)
             elseif isPriority then bc=Color3.fromRGB(255,50,50)
             elseif VCE then bc=isVisNow and VC or HC end
@@ -1412,6 +1619,12 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     if isBlacklisted then hdr=hdr.."[BLACKLISTED] "
                     elseif isNemesis then hdr=hdr.."[NEMESIS] " elseif isPriority then hdr=hdr.."[PRIORITY] " end
                     if t.IsTeammate then hdr=hdr.."[TEAM] " end
+                    
+                    -- Feature 16: Lock Indicators
+                    if S.ShowLockIndicators and isPrimary then
+                        if S.SilentAimEnabled then hdr=hdr.."[SILENT] " else hdr=hdr.."[LOCKED] " end
+                    end
+
 
                     local ns=""
                     if t.IsPlayer and SDisp then local po=Players:FindFirstChild(t.Name); if po then ns="("..po.DisplayName..") " end end

@@ -155,6 +155,15 @@ _G.TASFF_State = {
     VisibilityColorsEnabled     = false,
     VisibleColor                = Color3.fromRGB(0, 255, 0),
     HiddenColor                 = Color3.fromRGB(255, 0, 0),
+    BlacklistedTagColor         = Color3.fromRGB(255, 140, 0),   -- orange by default
+    PriorityHighlightColor      = Color3.fromRGB(255, 50, 50),   -- bright red for marked
+    ThreatHighlightColor        = Color3.fromRGB(255, 60, 0),    -- red-orange for threat
+    NemesisHighlightColor       = Color3.fromRGB(150, 0, 255),   -- purple for nemesis
+    KillFlashColor              = Color3.fromRGB(255, 255, 255), -- white flash on kill
+    OOFArrowColor               = Color3.fromRGB(255, 100, 0),
+    ChamsColor                  = Color3.fromRGB(255, 30, 30),
+    BoxColor                    = Color3.fromRGB(200, 40, 40),
+    SkeletonColor               = Color3.fromRGB(200, 40, 40),
 
     -- // ── ESP Drawing Caches ─────────────────────────────────── // --
     SnaplineCache               = {},
@@ -182,8 +191,11 @@ _G.TASFF_State = {
     -- // ── Script Meta ────────────────────────────────────────── // --
     AimbotKeybind               = "E",
     PanicKeybind                = "Delete",
+    PanicLocked                 = false,     -- set true by TriggerPanic; only cleared by re-exec
+    RapidModeCycleKey           = "P",       -- Feature 17: cycles aim mode on press
     ScriptInitialized           = false,
     DisableNotifications        = false,
+    DebugMode                   = false,     -- Feature 27: verbose console output
     PresetFileName              = "TASFF_V1.5.5_Presets.json",
     ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
     CurrentVersion              = "2.1.0",

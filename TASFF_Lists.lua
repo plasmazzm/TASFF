@@ -98,6 +98,10 @@ local FeatureList = {
 }
 
 S.FeatureCount = #FeatureList
+S.ToggleCount = 64
+S.SliderCount = 27
+S.DropdownCount = 27
+S.KeybindCount = 3
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --
 -- Applied via the Presets tab "Quick-Load Game Config" dropdown.

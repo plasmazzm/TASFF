@@ -107,7 +107,7 @@ local FeatureList = {
 }
 
 S.FeatureCount = #FeatureList
-S.ToggleCount = 77     -- +1 BlacklistPresetToggle
+S.ToggleCount = 76     -- -1 IgnoreDead toggle
 S.SliderCount = 31     -- (+1 KillFlashDuration, -1 duplicate ChamsOpacity)
 S.DropdownCount = 39   -- +1 BlacklistColorDd
 S.KeybindCount = 5

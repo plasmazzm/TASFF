@@ -1,1787 +1,339 @@
 -- // ============================================================ // --
--- //   TASFF_UI.lua                                             // --
--- //   Rayfield UI â€” structure identical to the original        // --
--- //   monolith. Callbacks write to _G.TASFF_State (S).        // --
--- //   Must be loaded AFTER TASFF_Core.lua.                    // --
+-- //   TASFF_State.lua                                            // --
+-- //   Shared state table. Loaded first by TASFF_Loader.lua.     // --
+-- //   All other modules access state via:                        // --
+-- //       local S = _G.TASFF_State                              // --
 -- // ============================================================ // --
 
-local S           = _G.TASFF_State
+_G.TASFF_State = {
 
-local function SanitizeKeyName(k)
-    if type(k) == "string" and k ~= "" then return k:gsub("Enum%.KeyCode%.", "")
-    elseif typeof(k) == "EnumItem" then return k.Name end
-    return nil
-end
-local Rayfield    = getgenv().TASFF and getgenv().TASFF.Rayfield
-local Players     = game:GetService("Players")
-local Player      = Players.LocalPlayer
-local HttpService = game:GetService("HttpService")
+    -- // ── Combat Core ────────────────────────────────────────── // --
+    MasterEnabled               = false,
+    AimbotActive                = false,
+    TargetingEnabled            = true,
+    StickyAimEnabled            = false,
+    TeamCheck                   = false,
+    WallCheck                   = true,
+    IgnoreDead                  = true,
+    ShowFOV                     = false,
+    InvisibleFOV                = false,
+    FOVSize                     = 100,
+    TargetPart                  = "Head",
+    VOSPriorityParts            = {},            -- parts to prefer first in VoS scan (e.g. {"Head","UpperTorso"})
+    Mode                        = "Legit (Camera)",
+    Smoothness                  = 1.5,           -- used by Legit (Camera) and as fallback
+    SmoothnessX                 = 1.5,           -- horizontal smoothness for Advanced Legit (Mouse)
+    SmoothnessY                 = 1.5,           -- vertical smoothness for Advanced Legit (Mouse)
+    BlatantSnapSpeed            = 100,           -- 100 = instant snap; <100 = lerp fraction
+    PredictionAmount            = 0.16,
 
--- // â”€â”€ UI-Local Variables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
+    -- // ── v1.5.0 Combat Upgrades ─────────────────────────────── // --
+    TargetSwitchDelayEnabled    = false,
+    SwitchDelayMs               = 200,
+    LastKillTime                = 0,
+    DynamicRecoilEnabled        = false,
+    SilentAimEnabled            = false,
+    RandomizeHitboxEnabled      = false,
+    PriorityMode                = "None",
+    VitalityMode                = "None",
+    StrictPrioritize            = false,   -- kept for preset backward compat; use PriorityBehavior instead
 
-local SelectedPresetToManage = ""
-local SelectedBlacklistTool  = ""
-local BlacklistDropdown      = nil   -- tool weapons registry dropdown
-local PriorityDropdownRef    = nil   -- priority players dropdown
-local PresetDropdownRef      = nil   -- saved profiles dropdown
-local PerformanceIndicator   = nil   -- paragraph element ref
-local PriorityMonitorLabel   = nil   -- paragraph element ref
-local ThreatListLabel        = nil   -- paragraph element ref
-local PresetInputName        = ""
+    -- // ── Threat System ──────────────────────────────────────── // --
+    ThreatDetectorEnabled       = false,
+    ThreatMemory                = {},
+    ThreatTimeout               = 10,
+    BlacklistExpiredThreats     = false,
+    NemesisEnabled              = true,
+    NemesisMemory               = {},
 
--- // â”€â”€ Theming Color Map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
+    -- // -- Intel System (v2.0.5) ------------------------------------ // --
+    IntelPlayers                = {},
+    IntelSelected               = "",
+    PriorityBehavior            = "Boost",
+    ThreatNeutralizationEnabled = false,
+    AutoExpireOnDisconnect      = false,
+    
+    -- // -- Intel System Features (v2.0.5) --------------------------- // --
+    KillCountThreatEnabled      = false,
+    KillFeedEnabled             = false,
+    KillsBeforeThreat           = 3,
+    PlayerKillCounts            = {},
+    KillsBeforeNemesis          = 3,
+    PlayerNemesisStrikes        = {},
+    SpectatePlayerEnabled       = false,
+    SpectateTarget              = "",
 
-local ColorPresetMap = {
-    ["Purple"]  = Color3.fromRGB(138, 43,  226),
-    ["Cyan"]    = Color3.fromRGB(0,   255, 255),
-    ["Red"]     = Color3.fromRGB(255, 0,   0),
-    ["Black"]   = Color3.fromRGB(0,   0,   0),
-    ["Yellow"]  = Color3.fromRGB(255, 255, 0),
-    ["Lime"]    = Color3.fromRGB(0,   255, 0),
-    ["Green"]   = Color3.fromRGB(0,   128, 0),
-    ["Orange"]  = Color3.fromRGB(255, 165, 0),
-    ["White"]   = Color3.fromRGB(255, 255, 255),
-    ["Blue"]    = Color3.fromRGB(0,   0,   255),
-    ["Brown"]   = Color3.fromRGB(139, 69,  19),
-    ["Pink"]    = Color3.fromRGB(255, 192, 203),
-    ["Gray"]    = Color3.fromRGB(128, 128, 128),
-    ["Maroon"]  = Color3.fromRGB(128, 0,   0),
-    ["Tan"]     = Color3.fromRGB(210, 180, 140),
-    ["Coral"]   = Color3.fromRGB(255, 127, 80),
-    ["Banana"]  = Color3.fromRGB(250, 218, 94),
-    ["Rose"]    = Color3.fromRGB(255, 0,   127),
-}
-local ColorDropdownOptions = {
-    "Purple","Cyan","Red","Black","Yellow","Lime","Green","Orange",
-    "White","Blue","Brown","Pink","Gray","Maroon","Tan","Coral","Banana","Rose"
-}
+    -- // ── Auto ADS ───────────────────────────────────────────── // --
+    AutoADSEnabled              = false,
+    AutoADSKeybind              = "MouseButton2",
+    IsHoldingADS                = false,
 
-local function GetPresetNamesList()
-    local t = {}
-    for k, _ in pairs(S.SavedPresets) do table.insert(t, k) end
-    return #t > 0 and t or {"No Profiles Found"}
-end
+    -- // ── Click-to-Mark & Focus ──────────────────────────────── // --
+    ClickToMarkEnabled          = false,
+    MarkKeybind                 = "T",
+    MarkMethod                  = "Both",
+    FocusMode                   = false,
 
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                          WINDOW                              // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
+    -- // ── Mouse Triggerbot ───────────────────────────────────── // --
+    AutoClickEnabled            = false,
+    ClickInterval               = 100,
+    ClickMethod                 = "Mash",
+    TriggerbotClickMode         = "Virtual",
+    ThirdPersonTriggerbot       = false,
+    LastClickTime               = 0,
+    IsHoldingClick              = false,
 
-local Window = Rayfield:CreateWindow({
-    Name            = "TASFF V2.1.0",
-    Icon            = 7488932264,
-    LoadingTitle    = "The Aimbot Script Final Form",
-    LoadingSubtitle = "by Plasmazzm",
-    Theme = {
-        TextColor                     = Color3.fromRGB(240, 240, 240),
-        Background                    = Color3.fromRGB(15,  15,  15),
-        Topbar                        = Color3.fromRGB(20,  20,  20),
-        Shadow                        = Color3.fromRGB(10,  10,  10),
-        NotificationBackground        = Color3.fromRGB(15,  15,  15),
-        NotificationActionsBackground = Color3.fromRGB(35,  35,  35),
-        TabBackground                 = Color3.fromRGB(25,  25,  25),
-        TabStroke                     = Color3.fromRGB(35,  35,  35),
-        TabBackgroundSelected         = Color3.fromRGB(180, 40,  40),
-        TabTextColor                  = Color3.fromRGB(240, 240, 240),
-        SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
-        ElementBackground             = Color3.fromRGB(25,  25,  25),
-        ElementBackgroundHover        = Color3.fromRGB(35,  35,  35),
-        SecondaryElementBackground    = Color3.fromRGB(20,  20,  20),
-        ElementStroke                 = Color3.fromRGB(40,  40,  40),
-        SecondaryElementStroke        = Color3.fromRGB(35,  35,  35),
-        SliderBackground              = Color3.fromRGB(100, 20,  20),
-        SliderProgress                = Color3.fromRGB(200, 35,  35),
-        SliderStroke                  = Color3.fromRGB(255, 50,  50),
-        ToggleBackground              = Color3.fromRGB(25,  25,  25),
-        ToggleEnabled                 = Color3.fromRGB(200, 35,  35),
-        ToggleDisabled                = Color3.fromRGB(60,  60,  60),
-        ToggleEnabledStroke           = Color3.fromRGB(255, 50,  50),
-        ToggleDisabledStroke          = Color3.fromRGB(80,  80,  80),
-        ToggleEnabledOuterStroke      = Color3.fromRGB(100, 20,  20),
-        ToggleDisabledOuterStroke     = Color3.fromRGB(45,  45,  45),
-        DropdownSelected              = Color3.fromRGB(180, 40,  40),
-        DropdownUnselected            = Color3.fromRGB(25,  25,  25),
-        InputBackground               = Color3.fromRGB(20,  20,  20),
-        InputStroke                   = Color3.fromRGB(80,  20,  20),
-        PlaceholderColor              = Color3.fromRGB(150, 150, 150),
+    -- // ── Key Triggerbot ─────────────────────────────────────── // --
+    KeyTriggerbotEnabled        = false,
+    KeyTriggerbotKey            = "F",
+    KeyTriggerMode              = "Single Press",
+    IsHoldingTriggerKey         = false,
+    LastKeyTriggerTime          = 0,
+
+    -- // ── Melee Mode ─────────────────────────────────────────── // --
+    MeleeModeEnabled            = false,
+    MeleeDetectionRange         = 5,
+    MeleeClickInterval          = 100,
+
+    -- // ── Wallcheck & Penetration ────────────────────────────── // --
+    NoCollisionCheck            = false,
+    TransparencyCheck           = false,
+    TransparencyThreshold       = 0.5,
+    DecalsCheck                 = false,
+
+    -- // ── Target Lists & Active State ────────────────────────── // --
+    BlacklistedPlayers          = {},
+    PriorityPlayers             = {},
+    CurrentTarget               = nil,
+    ActivePartName              = "Head",
+
+    -- // ── Visual Targeting Flags ─────────────────────────────── // --
+    VisualMode                  = "Single",
+    TargetPlayers               = true,
+    TargetNPCs                  = false,
+    UseHighlight                = true,
+    UseInfoTag                  = true,
+    UseNPCHighlight             = true,
+    UseNPCInfoTag               = true,
+    TargetNearCenter            = false,
+    AutoEnableOnEquip           = false,
+    ToolBlacklist               = {},
+    EnableCrosshair             = false,
+    CrosshairStyle              = "Plus",
+    CrosshairSize               = 10,
+    ShowToolCheck               = false,
+    ShowDisplayName             = false,
+    UsePresetColors             = false,
+
+    -- // ── Range & Grace Period ───────────────────────────────── // --
+    AimbotRenderDistance        = 1000,
+    GracePeriodEnabled          = false,
+    GracePeriodMs               = 150,
+
+    -- // ── Runtime Caches ─────────────────────────────────────── // --
+    TargetFirstSeenTimestamps   = {},
+    VisibilityCache             = {},
+    VisibilityCacheTime         = {},
+    SilentAimTargetCache        = nil,
+    SilentAimTargetCacheTime    = 0,
+    LastVisualList              = {},
+    LastCustomTargetData    = nil,
+
+    -- // ── ESP Visual Settings ────────────────────────────────── // --
+    ESPRenderDistance           = 1000,
+    ChamsEnabled                = false,
+    ChamsOpacity                = 10,
+    BoxModeEnabled              = false,
+    SkeletonModeEnabled         = false,
+
+    -- // ── v1.5.0 Visual Additions ────────────────────────────── // --
+    SnaplinesEnabled            = false,
+    SnaplineOrigin              = "Bottom",
+    StreamProofESP              = true,
+    OOFArrowsEnabled            = false,
+    OOFArrowRadius              = 150,
+    HighlightColor              = Color3.fromRGB(255, 255, 255),
+    VisibilityColorsEnabled     = false,
+    VisibleColor                = Color3.fromRGB(0, 255, 0),
+    HiddenColor                 = Color3.fromRGB(255, 0, 0),
+    BlacklistedTagColor         = Color3.fromRGB(255, 140, 0),   -- orange by default
+    PriorityHighlightColor      = Color3.fromRGB(255, 50, 50),   -- bright red for marked
+    ThreatHighlightColor        = Color3.fromRGB(255, 60, 0),    -- red-orange for threat
+    NemesisHighlightColor       = Color3.fromRGB(150, 0, 255),   -- purple for nemesis
+    KillFlashColor              = Color3.fromRGB(255, 255, 255), -- white flash on kill
+    KillFlashDuration           = 0.8,                           -- seconds for flash to fade
+    OOFArrowColor               = Color3.fromRGB(255, 100, 0),
+    ChamsColor                  = Color3.fromRGB(255, 30, 30),
+    BoxColor                    = Color3.fromRGB(200, 40, 40),
+    SkeletonColor               = Color3.fromRGB(200, 40, 40),
+
+    -- // ── ESP Drawing Caches ─────────────────────────────────── // --
+    SnaplineCache               = {},
+    OOFArrowCache               = {},
+    BoxCache                    = {},
+    SkeletonCache               = {},
+    HighlightCache              = {},
+    TagCache                    = {},
+    CachedNPCs                  = {},
+    CachedWorkspaceIgnores      = {},
+
+    -- // ── Drawing Objects ────────────────────────────────────── // --
+    DrawingsReady               = false,
+    FOVCircle                   = nil,
+    CrosshairElements           = {
+        Dot    = nil,
+        Top    = nil,
+        Bottom = nil,
+        Left   = nil,
+        Right  = nil,
+        Square = nil,
+        Circle = nil,
     },
-    ConfigurationSaving = {
-        Enabled    = true,
-        FolderName = "TASFF V2.1.0",
-        FileName   = "MainConfig"
-    }
-})
 
-
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                        1. COMBAT TAB                         // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
-
--- // ── HOME TAB ────────────────────────────────────────────────── // --
-
-local HomeTab = Window:CreateTab("Home", "home")
-
-HomeTab:CreateSection("Welcome")
-HomeTab:CreateParagraph({
-    Title   = "TASFF v2.1.0 — The Aimbot Script Final Form",
-    Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
-           .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 64) .. " Toggles | " .. tostring(S.SliderCount or 27) .. " Sliders | " .. tostring(S.DropdownCount or 27) .. " Dropdowns\n"
-           .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
-})
-
-HomeTab:CreateSection("Server Info")
-local serverInfoLabel = HomeTab:CreateParagraph({
-    Title   = "Game Server",
-    Content = "Fetching server info..."
-})
-task.spawn(function()
-    -- Fetch game name via MarketplaceService
-    local gameName = tostring(game.PlaceId)
-    pcall(function()
-        local info = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-        if info and info.Name then gameName = info.Name end
-    end)
-    -- Initial render
-    local function refreshServerInfo()
-        local playerCount = #Players:GetPlayers()
-        local maxPlayers  = game:GetService("Players").MaxPlayers
-        local serverId    = tostring(game.JobId):sub(1, 8)
-        local region      = "Unknown"
-        pcall(function()
-            local rs = game:GetService("LocalizationService").RobloxLocaleId
-            if rs and rs ~= "" then region = rs end
-        end)
-        pcall(function()
-            serverInfoLabel:Set({
-                Title   = "Game Server",
-                Content = string.format(
-                    "Game    : %s\nPlace   : %d\nJob     : %s...\nPlayers : %d / %d",
-                    gameName, game.PlaceId, serverId, playerCount, maxPlayers
-                )
-            })
-        end)
-    end
-    refreshServerInfo()
-    -- Refresh player count every 10s
-    while getgenv().TASFF and getgenv().TASFF.Running do
-        task.wait(10)
-        refreshServerInfo()
-    end
-end)
-
-HomeTab:CreateSection("Quick Feature Status")
-HomeTab:CreateParagraph({
-    Title   = "How to Read",
-    Content = "Select a category from the dropdown below. Enabled features appear first (✔), then disabled (✘). Changes made in other tabs are reflected on next category switch."
-})
-
-local function BuildStatusContent(category)
-    local on, off = {}, {}
-    local function check(label, flag)
-        if flag then table.insert(on, "  \xE2\x9C\x94 " .. label)
-        else table.insert(off, "  \xE2\x9C\x98 " .. label) end
-    end
-    if category == "Combat" then
-        check("Master Switch",          S.MasterEnabled)
-        check("Aimbot Engine",          S.TargetingEnabled)
-        check("Silent Aim",             S.SilentAimEnabled)
-        check("Sticky Aim",             S.StickyAimEnabled)
-        check("Dynamic Recoil (DRC)",   S.DynamicRecoilEnabled)
-        check("Auto ADS",               S.AutoADSEnabled)
-        check("Randomize Hitboxes",     S.RandomizeHitboxEnabled)
-        check("Target Near Center",     S.TargetNearCenter)
-        check("Target Switch Delay",    S.TargetSwitchDelayEnabled)
-        check("Grace Period",           S.GracePeriodEnabled)
-        check("Triggerbot",             S.AutoClickEnabled)
-        check("Melee Mode",             S.MeleeModeEnabled)
-    elseif category == "Visuals" then
-        check("Highlights (Players)",   S.UseHighlight)
-        check("Highlights (NPCs)",      S.UseNPCHighlight)
-        check("Info Tags (Players)",    S.UseInfoTag)
-        check("Info Tags (NPCs)",       S.UseNPCInfoTag)
-        check("Snaplines",              S.SnaplinesEnabled)
-        check("OOF Arrows",             S.OOFArrowsEnabled)
-        check("Box ESP",                S.BoxModeEnabled)
-        check("Skeleton ESP",           S.SkeletonModeEnabled)
-        check("Chams",                  S.ChamsEnabled)
-        check("Visibility Colors",      S.VisibilityColorsEnabled)
-        check("Show Display Name",      S.ShowDisplayName)
-        check("Show Tool Check",        S.ShowToolCheck)
-    elseif category == "Intel" then
-        check("Threat Detector",        S.ThreatDetectorEnabled)
-        check("Nemesis System",         S.NemesisEnabled)
-        check("Click-to-Mark",          S.ClickToMarkEnabled)
-        check("Focus Mode ESP",         S.FocusMode)
-        check("Wall Check",             S.WallCheck)
-        check("Team Check",             S.TeamCheck)
-        check("Target Players",         S.TargetPlayers)
-        check("Target NPCs",            S.TargetNPCs)
-    elseif category == "Automation" then
-        check("Auto-Engage on Equip",   S.AutoEnableOnEquip)
-        check("Intelligent Equip Filter", S.IntelligentEquipFilter)
-        check("Weapon-Type Gating",     S.WeaponTypeGating)
-        check("FOV Circle",             S.ShowFOV)
-        check("Invisible FOV",          S.InvisibleFOV)
-        check("Hide Blacklisted ESP",   S.HideBlacklistedESP)
-    end
-    local lines = {}
-    if #on > 0 then
-        table.insert(lines, "ENABLED"); for _, l in ipairs(on) do table.insert(lines, l) end
-    end
-    if #off > 0 then
-        if #on > 0 then table.insert(lines, "") end
-        table.insert(lines, "DISABLED"); for _, l in ipairs(off) do table.insert(lines, l) end
-    end
-    if #lines == 0 then return "No features in this category." end
-    return table.concat(lines, "\n")
-end
-
-local DashboardParagraph = HomeTab:CreateParagraph({
-    Title   = "Status — Combat",
-    Content = BuildStatusContent("Combat")
-})
-S.DashboardParagraph = DashboardParagraph
-
-HomeTab:CreateDropdown({
-    Name          = "Status Category",
-    Options       = {"Combat", "Visuals", "Intel", "Automation"},
-    CurrentOption = {"Combat"},
-    Flag          = "DashboardCategory",
-    Callback      = function(v)
-        local cat = v[1] or "Combat"
-        S.DashboardCategory = cat
-        if DashboardParagraph then
-            pcall(function()
-                DashboardParagraph:Set({Title = "Status — " .. cat, Content = BuildStatusContent(cat)})
-            end)
-        end
-    end
-})
-
-HomeTab:CreateSection("Session Statistics")
-local SessionStatsLabel = HomeTab:CreateParagraph({
-    Title   = "Current Session",
-    Content = "Locks: 0  |  Kills: 0  |  Fires: 0  |  Threats: 0  |  Nemeses: 0"
-})
-S.SessionStatsLabel = SessionStatsLabel
-
-task.spawn(function()
-    S.SessionStartTime = tick()
-    task.wait(3)
-    while getgenv().TASFF and getgenv().TASFF.Running do
-        if SessionStatsLabel then
-            pcall(function()
-                local uptime = math.floor(tick() - (S.SessionStartTime or tick()))
-                local mins, secs = math.floor(uptime / 60), uptime % 60
-                SessionStatsLabel:Set({
-                    Title   = "Current Session (up " .. mins .. "m " .. secs .. "s)",
-                    Content = string.format(
-                        "Target Locks: %d  |  Your Kills: %d  |  Trigger Fires: %d\nThreats: +%d  |  Nemeses: +%d",
-                        S.SessionTargetLocks  or 0,
-                        S.SessionUserKills    or 0,
-                        S.SessionTriggerFires or 0,
-                        S.SessionThreatsAdded or 0,
-                        S.SessionNemesesAdded or 0
-                    )
-                })
-            end)
-        end
-        task.wait(5)
-    end
-end)
-
--- // ── COMBAT TAB ──────────────────────────────────────────────── // --
-
-local MainTab = Window:CreateTab("Combat", "crosshair")
-
-
-
-MainTab:CreateSection("Command & Control")
-MainTab:CreateParagraph({
-    Title   = "TASFF â€” The Aimbot Script Final Form",
-    Content = "The definitive combat suite. Master Switch is the global killswitch â€” nothing runs while it's off. Aimbot Engine controls active target acquisition and tracking independently."
-})
-MainTab:CreateToggle({Name = "Master Switch (Killswitch)", CurrentValue = S.MasterEnabled, Flag = "MasterSwitch", Callback = function(v)
-    S.MasterEnabled = v
-    if not v then
-        S.AimbotActive = false; S.CurrentTarget = nil; S.AimbotCandidates = {}
-        if S.SetADSState    then S.SetADSState(false)  end
-        if S.ClearVisuals   then S.ClearVisuals()      end
-        if S.ClearCrosshair then S.ClearCrosshair()    end
-        if S.FOVCircle      then S.FOVCircle.Visible = false end
-    end
-end})
-MainTab:CreateToggle({Name = "Enable Aimbot Engine", CurrentValue = S.TargetingEnabled, Flag = "TargetSystemToggle", Callback = function(v)
-    S.TargetingEnabled = v
-    if not v then
-        S.AimbotActive = false
-        S.CurrentTarget = nil
-        S.AimbotCandidates = {}
-        S.SilentAimTargetCache = nil
-        S.LastCustomTargetData = nil
-    end
-end})
-MainTab:CreateDropdown({
-    Name          = "Primary Aim Method",
-    Options       = {"Legit (Camera)", "Advanced Legit (Mouse)", "Blatant", "Flickbot (Click-Teleport)"},
-    CurrentOption = {S.Mode},
-    Flag          = "AimMethod",
-    Callback      = function(v) S.Mode = v[1] end
-})
-
-MainTab:CreateSection("Activation & Automation")
-MainTab:CreateKeybind({
-        Name            = "Aimbot Activation Key",
-        CurrentKeybind  = S.AimbotKeybind or "E",
-        Flag            = "AimbotKeybind",
-        Callback        = function(key)
-            local validKey = SanitizeKeyName(key)
-            local isRebind = (validKey ~= nil and validKey ~= S.AimbotKeybind)
-            if validKey then S.AimbotKeybind = validKey end
-            if not isRebind and S.MasterEnabled and not S.PanicLocked then
-            S.AimbotActive = not S.AimbotActive
-            if not S.AimbotActive then
-                S.CurrentTarget = nil
-                S.AimbotCandidates = {}
-                S.SilentAimTargetCache = nil
-                S.LastCustomTargetData = nil
-                S.SilentAimTargetCacheTime = 0
-                if S.SetADSState then S.SetADSState(false) end
-            end
-        end
-    end
-})
-MainTab:CreateToggle({Name = "Auto ADS (Automatic Scope)", CurrentValue = S.AutoADSEnabled, Flag = "AutoADS", Callback = function(v)
-    S.AutoADSEnabled = v
-    if not v and S.SetADSState then S.SetADSState(false) end
-end})
-MainTab:CreateInput({
-        Name = "Auto ADS Input Key (Text)",
-        PlaceholderText = "e.g. MouseButton2, F",
-        RemoveTextAfterFocusLost = false,
-        Flag = "AutoADSKeyInput",
-        Callback = function(text)
-            if text and text ~= "" then S.AutoADSKeybind = text end
-        end
-    })
-
-MainTab:CreateSection("Target Selection & Sorting")
-MainTab:CreateDropdown({
-    Name          = "Primary Hitbox (Bodypart)",
-    Options       = {"Head", "HumanoidRootPart", "Torso", "Visible On Screen"},
-    CurrentOption = {S.TargetPart},
-    Flag          = "TargetPart",
-    Callback      = function(v) S.TargetPart = v[1]; S.ActivePartName = v[1] end
-})
-MainTab:CreateToggle({Name = "Randomize Hitboxes (Legit Variance)", CurrentValue = S.RandomizeHitboxEnabled, Flag = "RandomizeHitbox", Callback = function(v)
-    S.RandomizeHitboxEnabled = v
-end})
-MainTab:CreateDropdown({Name = "Distance Sorting", Options = {"None", "Closest", "Farthest"}, CurrentOption = {S.PriorityMode}, Flag = "PriorityMode", Callback = function(v)
-    S.PriorityMode = v[1]
-end})
-MainTab:CreateDropdown({Name = "Health Sorting", Options = {"None", "Weakest (HP)", "Strongest (HP)"}, CurrentOption = {S.VitalityMode}, Flag = "VitalityMode", Callback = function(v)
-    S.VitalityMode = v[1]
-end})
-MainTab:CreateToggle({Name = "Prioritize Targets Near Screen Center", CurrentValue = S.TargetNearCenter, Flag = "TargetNearCenter", Callback = function(v)
-    S.TargetNearCenter = v
-end})
-MainTab:CreateSlider({Name = "Maximum Acquisition Range (Studs)", Range = {100, 1000}, Increment = 25, CurrentValue = S.AimbotRenderDistance, Flag = "AimbotRenderDist", Callback = function(v)
-    S.AimbotRenderDistance = v
-end})
-MainTab:CreateToggle({Name = "Enable Health Threshold Gate", CurrentValue = S.HealthThresholdEnabled, Flag = "HealthThresholdEnabled", Callback = function(v) S.HealthThresholdEnabled = v end})
-MainTab:CreateSlider({Name = "Minimum Target HP to Engage (%)", Range = {0, 100}, Increment = 1, CurrentValue = S.HealthThreshold or 0, Flag = "HealthThreshold", Callback = function(v) S.HealthThreshold = v end})
-
-MainTab:CreateSection("Smoothing & Prediction")
-MainTab:CreateSlider({Name = "Tracking Smoothness (Legit/Camera)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.Smoothness, Flag = "SmoothSpeed", Callback = function(v)
-    S.Smoothness = v
-end})
-MainTab:CreateSlider({Name = "Advanced Legit Smoothness X (Horizontal)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.SmoothnessX, Flag = "SmoothnessX", Callback = function(v)
-    S.SmoothnessX = v
-end})
-MainTab:CreateSlider({Name = "Advanced Legit Smoothness Y (Vertical)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.SmoothnessY, Flag = "SmoothnessY", Callback = function(v)
-    S.SmoothnessY = v
-end})
-MainTab:CreateSlider({Name = "Blatant Snap Speed (100 = Instant)", Range = {5, 100}, Increment = 5, CurrentValue = S.BlatantSnapSpeed, Flag = "BlatantSnapSpeed", Callback = function(v)
-    S.BlatantSnapSpeed = v
-end})
-MainTab:CreateSlider({Name = "Velocity Prediction Intensity", Range = {0, 0.5}, Increment = 0.01, CurrentValue = S.PredictionAmount, Flag = "PredIntense", Callback = function(v)
-    S.PredictionAmount = v
-end})
-MainTab:CreateToggle({Name = "Dynamic Recoil Control (DRC)", CurrentValue = S.DynamicRecoilEnabled, Flag = "DynamicRecoil", Callback = function(v)
-    S.DynamicRecoilEnabled = v
-end})
-
-
-
-MainTab:CreateSection("Advanced Engagement Logic")
-MainTab:CreateToggle({Name = "Universal Silent Aim (Magic Bullet)", CurrentValue = S.SilentAimEnabled, Flag = "SilentAimEnabled", Callback = function(v)
-    S.SilentAimEnabled = v
-    if S.Notify then
-        S.Notify({Title = "Silent Aim", Content = v and "Silent Aim enabled." or "Silent Aim disabled.", Duration = 2, Image = v and "crosshair" or "x"})
-    end
-end})
-MainTab:CreateToggle({Name = "Sticky Aim (Target Lock Retention)", CurrentValue = S.StickyAimEnabled, Flag = "StickyAim", Callback = function(v)
-    S.StickyAimEnabled = v
-    if not v then S.CurrentTarget = nil end
-end})
-MainTab:CreateToggle({Name = "Target Switch Delay (Pause After Kill)", CurrentValue = S.TargetSwitchDelayEnabled, Flag = "TargetSwitchDelay", Callback = function(v)
-    S.TargetSwitchDelayEnabled = v
-end})
-MainTab:CreateSlider({Name = "Switch Delay Duration (ms)", Range = {50, 1000}, Increment = 10, CurrentValue = S.SwitchDelayMs, Flag = "SwitchDelayMs", Callback = function(v)
-    S.SwitchDelayMs = v
-end})
-MainTab:CreateToggle({Name = "Target Grace Period (Anti-Jitter)", CurrentValue = S.GracePeriodEnabled, Flag = "EnableGracePeriod", Callback = function(v)
-    S.GracePeriodEnabled = v
-end})
-MainTab:CreateSlider({Name = "Grace Period Delay (ms)", Range = {1, 1000}, Increment = 1, CurrentValue = S.GracePeriodMs, Flag = "GracePeriodMs", Callback = function(v)
-    S.GracePeriodMs = v
-end})
-
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                       2. VISUALS TAB                         // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
-
-local VisualTab = Window:CreateTab("Visuals", "eye")
-
-VisualTab:CreateSection("Global ESP Configurations")
-VisualTab:CreateParagraph({
-    Title   = "Focus Mode & Stream-Proofing",
-    Content = "Focus Mode isolates visual clutter by only drawing ESP on Priority Targets. Stream-Proof Rendering forces tags to bypass capture software like OBS."
-})
-VisualTab:CreateDropdown({Name = "ESP Target Mode", Options = {"Single", "Multiple", "All"}, CurrentOption = {S.VisualMode}, Flag = "VisualMode", Callback = function(v)
-    S.VisualMode = type(v) == "table" and v[1] or v
-    if S.ClearVisuals then S.ClearVisuals() end
-end})
-VisualTab:CreateToggle({Name = "Render Player ESP", CurrentValue = S.UseHighlight, Flag = "UseHighlight", Callback = function(v) S.UseHighlight = v end})
-VisualTab:CreateToggle({Name = "Render NPC ESP", CurrentValue = S.UseNPCHighlight, Flag = "UseNPCHighlight", Callback = function(v) S.UseNPCHighlight = v end})
-VisualTab:CreateToggle({Name = "Focus Mode (Isolate Priority Targets)", CurrentValue = S.FocusMode, Flag = "FocusMode", Callback = function(v) S.FocusMode = v end})
-VisualTab:CreateToggle({Name = "Stream-Proof Rendering (Tags)", CurrentValue = S.StreamProofESP, Flag = "StreamProofESP", Callback = function(v)
-    S.StreamProofESP = v
-    if S.ClearVisuals then S.ClearVisuals() end
-end})
-VisualTab:CreateToggle({Name = "Dynamic Visibility Colors (Green/Red)", CurrentValue = S.VisibilityColorsEnabled, Flag = "VisibilityColorsEnabled", Callback = function(v)
-    S.VisibilityColorsEnabled = v
-end})
-VisualTab:CreateSlider({Name = "Maximum ESP Distance (Studs)", Range = {100, 1000}, Increment = 25, CurrentValue = S.ESPRenderDistance, Flag = "ESPRenderDist", Callback = function(v)
-    S.ESPRenderDistance = v
-end})
-
-VisualTab:CreateSection("Tactical Overlays (Geometries)")
-VisualTab:CreateToggle({Name = "Chams (Surface Highlights)", CurrentValue = S.ChamsEnabled, Flag = "EnableChamsMode", Callback = function(v) S.ChamsEnabled = v end})
-
-VisualTab:CreateToggle({Name = "2D Bounding Boxes", CurrentValue = S.BoxModeEnabled, Flag = "EnableBoxMode", Callback = function(v) S.BoxModeEnabled = v end})
-VisualTab:CreateToggle({Name = "Skeletal Mapping (R6/R15)", CurrentValue = S.SkeletonModeEnabled, Flag = "EnableSkeletonMode", Callback = function(v) S.SkeletonModeEnabled = v end})
-VisualTab:CreateToggle({Name = "Distance Snaplines", CurrentValue = S.SnaplinesEnabled, Flag = "SnaplinesEnabled", Callback = function(v) S.SnaplinesEnabled = v end})
-VisualTab:CreateDropdown({Name = "Snapline Origin Point", Options = {"Bottom", "Center"}, CurrentOption = {S.SnaplineOrigin}, Flag = "SnaplineOrigin", Callback = function(v)
-    S.SnaplineOrigin = v[1]
-end})
-VisualTab:CreateToggle({Name = "Off-Screen Indicators (OOF Arrows)", CurrentValue = S.OOFArrowsEnabled, Flag = "OOFArrowsEnabled", Callback = function(v) S.OOFArrowsEnabled = v end})
-VisualTab:CreateSlider({Name = "OOF Indicator Radius", Range = {50, 400}, Increment = 10, CurrentValue = S.OOFArrowRadius, Flag = "OOFArrowRadius", Callback = function(v) S.OOFArrowRadius = v end})
-
-VisualTab:CreateSection("Target Intelligence Tags")
-VisualTab:CreateToggle({Name = "Render Player Tags", CurrentValue = S.UseInfoTag, Flag = "UseInfoTag", Callback = function(v) S.UseInfoTag = v end})
-VisualTab:CreateToggle({Name = "Render NPC Tags", CurrentValue = S.UseNPCInfoTag, Flag = "UseNPCInfoTag", Callback = function(v) S.UseNPCInfoTag = v end})
-VisualTab:CreateToggle({Name = "Use Display Names (vs Usernames)", CurrentValue = S.ShowDisplayName, Flag = "ShowDisplay", Callback = function(v) S.ShowDisplayName = v end})
-VisualTab:CreateToggle({Name = "Display Equipped Weapon/Tool", CurrentValue = S.ShowToolCheck, Flag = "UseToolCheck", Callback = function(v) S.ShowToolCheck = v end})
-VisualTab:CreateToggle({Name = "Show [LOCKED] / [SILENT] on Tag", CurrentValue = S.ShowLockIndicators, Flag = "ShowLockIndicators", Callback = function(v) S.ShowLockIndicators = v end})
-VisualTab:CreateToggle({Name = "Kill Confirmation Flash (Custom Color)", CurrentValue = S.KillConfirmFlashEnabled, Flag = "KillConfirmFlash", Callback = function(v) S.KillConfirmFlashEnabled = v end})
-VisualTab:CreateSlider({Name = "Kill Flash Fade Duration", Range = {0.1, 3.0}, Increment = 0.1, CurrentValue = S.KillFlashDuration or 0.8, Flag = "KillFlashDuration", Callback = function(v) S.KillFlashDuration = v end})
-
-VisualTab:CreateSection("Heads-Up Display (HUD)")
-VisualTab:CreateParagraph({
-    Title   = "Invisible FOV",
-    Content = "The Invisible FOV toggle allows your aimbot to strictly respect the FOV boundary limit without actually drawing the circle on your screen."
-})
-VisualTab:CreateToggle({Name = "Render FOV Boundary (Circle)", CurrentValue = S.ShowFOV, Flag = "ShowFOV", Callback = function(v)
-    S.ShowFOV = v
-    if not v and S.FOVCircle then S.FOVCircle.Visible = false end
-end})
-VisualTab:CreateToggle({Name = "Invisible FOV Constraint", CurrentValue = S.InvisibleFOV, Flag = "InvisibleFOV", Callback = function(v) S.InvisibleFOV = v end})
-VisualTab:CreateSlider({Name = "FOV Boundary Radius", Range = {30, 600}, Increment = 5, CurrentValue = S.FOVSize, Flag = "FOVSize", Callback = function(v) S.FOVSize = v end})
-VisualTab:CreateToggle({Name = "Dynamic FOV Auto-Scale by Distance", CurrentValue = S.DynamicFOVEnabled, Flag = "DynamicFOVEnabled", Callback = function(v) S.DynamicFOVEnabled = v end})
-VisualTab:CreateSlider({Name = "Dynamic FOV Max Radius", Range = {30, 1000}, Increment = 10, CurrentValue = S.DynamicFOVMax or 400, Flag = "DynamicFOVMax", Callback = function(v) S.DynamicFOVMax = v end})
-VisualTab:CreateDropdown({
-    Name          = "FOV Tracking Origin",
-    Options       = {"Screen Center", "Mouse Tracking"},
-    CurrentOption = {S.AimReferenceMode},
-    Flag          = "AimReferenceMode",
-    Callback      = function(v) S.AimReferenceMode = v[1] end
-})
-VisualTab:CreateToggle({Name = "Render Vector Crosshair", CurrentValue = S.EnableCrosshair, Flag = "UseCrosshair", Callback = function(v)
-    S.EnableCrosshair = v
-    if not v and S.ClearCrosshair then S.ClearCrosshair() end
-end})
-VisualTab:CreateDropdown({Name = "Vector Crosshair Style", Options = {"Plus", "Square", "Circle"}, CurrentOption = {S.CrosshairStyle}, Flag = "CrossStyle", Callback = function(v)
-    S.CrosshairStyle = type(v) == "table" and v[1] or v
-    if S.ClearCrosshair then S.ClearCrosshair() end
-end})
-VisualTab:CreateSlider({Name = "Vector Crosshair Size", Range = {2, 50}, Increment = 1, CurrentValue = S.CrosshairSize, Flag = "CrossSize", Callback = function(v) S.CrosshairSize = v end})
-
-VisualTab:CreateSection("Display Calibration")
-VisualTab:CreateToggle({Name = "Enable Manual Axis Calibration", CurrentValue = S.ManualCalibrationEnabled, Flag = "EnableCalibration", Callback = function(v) S.ManualCalibrationEnabled = v end})
-VisualTab:CreateSlider({Name = "Horizontal Axis Offset (Pixels)", Range = {-200, 200}, Increment = 1, CurrentValue = S.CalibrationOffsetX, Flag = "CalibrationX", Callback = function(v) S.CalibrationOffsetX = v end})
-VisualTab:CreateSlider({Name = "Vertical Axis Offset (Pixels)", Range = {-200, 200}, Increment = 1, CurrentValue = S.CalibrationOffsetY, Flag = "CalibrationY", Callback = function(v) S.CalibrationOffsetY = v end})
-
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                      3. TRIGGERBOT TAB                       // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
-
-local TriggerbotTab = Window:CreateTab("Triggerbot", "mouse-pointer-click")
-
-TriggerbotTab:CreateSection("Primary Trigger (Mouse)")
-TriggerbotTab:CreateParagraph({
-    Title   = "Simulation Engine & 3D Tracking",
-    Content = "Virtual: Emulates driver-level mouse events.\nPhysical: Hooks into native executor click functions.\n3rd Person Tracking: Fires at the target's exact screen coordinate instead of center screen."
-})
-TriggerbotTab:CreateToggle({Name = "Enable Mouse Triggerbot", CurrentValue = S.AutoClickEnabled, Flag = "EnableTriggerbot", Callback = function(v)
-    S.AutoClickEnabled = v
-    if not v and S.IsHoldingClick then
-        S.IsHoldingClick = false
-        game:GetService("VirtualInputManager"):SendMouseButtonEvent(0, 0, 0, false, game, 0)
-    end
-end})
-TriggerbotTab:CreateDropdown({Name = "Click Simulation Engine", Options = {"Virtual", "Physical"}, CurrentOption = {S.TriggerbotClickMode}, Flag = "TriggerbotClickMode", Callback = function(v)
-    S.TriggerbotClickMode = v[1]
-end})
-TriggerbotTab:CreateDropdown({Name = "Action Method", Options = {"Mash", "Hold"}, CurrentOption = {S.ClickMethod}, Flag = "ClickMethod", Callback = function(v)
-    S.ClickMethod = v[1]
-end})
-TriggerbotTab:CreateSlider({Name = "Mash Interval (ms)", Range = {1, 1000}, Increment = 1, CurrentValue = S.ClickInterval, Flag = "ClickInterval", Callback = function(v)
-    S.ClickInterval = v
-end})
-TriggerbotTab:CreateToggle({Name = "3rd Person Spatial Tracking", CurrentValue = S.ThirdPersonTriggerbot, Flag = "ThirdPersonTriggerbot", Callback = function(v)
-    S.ThirdPersonTriggerbot = v
-end})
-
-TriggerbotTab:CreateSection("Secondary Trigger (Keybinds)")
-TriggerbotTab:CreateParagraph({
-    Title   = "Key Triggerbot",
-    Content = "Automatically executes a custom keystroke (e.g., casting an ability, dashing, or swinging a sword) when the aimbot locks onto a valid target."
-})
-TriggerbotTab:CreateToggle({Name = "Enable Key Triggerbot", CurrentValue = S.KeyTriggerbotEnabled, Flag = "KeyTriggerbotToggle", Callback = function(v)
-    S.KeyTriggerbotEnabled = v
-    if not v and S.IsHoldingTriggerKey then
-        S.IsHoldingTriggerKey = false
-        pcall(function()
-            local key = S.GetKeyCode and S.GetKeyCode(S.KeyTriggerbotKey)
-            if key then game:GetService("VirtualInputManager"):SendKeyEvent(false, key, false, game) end
-        end)
-    end
-end})
-TriggerbotTab:CreateInput({
-    Name                    = "Target Action Key (e.g. F, Q, E)",
-    PlaceholderText         = "F",
-    RemoveTextAfterFocusLost = false,
-    Flag                    = "KeyTriggerKeyInput",
-    Callback                = function(text)
-        if text and text ~= "" then S.KeyTriggerbotKey = text:upper() end
-    end
-})
-TriggerbotTab:CreateDropdown({Name = "Key Action Method", Options = {"Single Press", "Mash", "Hold"}, CurrentOption = {S.KeyTriggerMode}, Flag = "KeyTriggerMode", Callback = function(v)
-    S.KeyTriggerMode = v[1]
-end})
-
-TriggerbotTab:CreateSection("Proximity Auto-Melee")
-TriggerbotTab:CreateToggle({Name = "Enable Proximity Auto-Melee", CurrentValue = S.MeleeModeEnabled, Flag = "EnableMeleeMode", Callback = function(v) S.MeleeModeEnabled = v end})
-TriggerbotTab:CreateSlider({Name = "Melee Engagement Range (Studs)", Range = {1, 10}, Increment = 1, CurrentValue = S.MeleeDetectionRange, Flag = "MeleeRange", Callback = function(v)
-    S.MeleeDetectionRange = v
-end})
-TriggerbotTab:CreateSlider({Name = "Melee Strike Interval (ms)", Range = {1, 1000}, Increment = 1, CurrentValue = S.MeleeClickInterval, Flag = "MeleeClickInterval", Callback = function(v)
-    S.MeleeClickInterval = v
-end})
-
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                       4. ADVANCED TAB                        // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
-
-
--- Intel Tab block to INSERT before local AdvancedTab
-local IntelTab = Window:CreateTab("Intel", "shield-alert")
-
-IntelTab:CreateSection("Intel Monitor")
-IntelTab:CreateParagraph({
-    Title   = "How It Works",
-    Content = "All tracked players (marked, threats, nemeses, registry) appear here sorted by threat score. Select a name then use the action buttons below."
-})
-
-local IntelMonitorLabel = IntelTab:CreateParagraph({
-    Title   = "Intel Monitor (0 tracked)",
-    Content = "No tracked players."
-})
-S.IntelMonitorLabel = IntelMonitorLabel
-
-IntelTab:CreateInput({
-    Name                  = "Select Player by Name",
-    PlaceholderText       = "Enter exact username...",
-    RemoveTextAfterFocusLost = false,
-    Flag                  = "IntelSelectInput",
-    Callback              = function(text)
-        if text and text ~= "" then
-            S.IntelSelected = text
-            if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
-        end
-    end
-})
-
-IntelTab:CreateButton({
-    Name     = "Remove Selected",
-    Callback = function()
-        if S.IntelSelected == "" then
-            if S.Notify then S.Notify({Title="Intel",Content="No player selected.",Duration=2,Image="alert-circle"}) end
-            return
-        end
-        if S.RemoveFromIntel then S.RemoveFromIntel(S.IntelSelected, false) end
-    end
-})
-
-IntelTab:CreateButton({
-    Name     = "Remove Selected (Nemesis)",
-    Callback = function()
-        if S.IntelSelected == "" then
-            if S.Notify then S.Notify({Title="Intel",Content="No player selected.",Duration=2,Image="alert-circle"}) end
-            return
-        end
-        if S.RemoveFromIntel then S.RemoveFromIntel(S.IntelSelected, true) end
-    end
-})
-
-IntelTab:CreateButton({
-    Name     = "Clear All Non-Nemesis",
-    Callback = function()
-        for name, data in pairs(S.IntelPlayers) do
-            if not data.nemesis then
-                S.IntelPlayers[name] = nil
-                S.ThreatMemory[name] = nil
-                local idx = table.find(S.PriorityPlayers, name)
-                if idx then table.remove(S.PriorityPlayers, idx) end
-            end
-        end
-        S.IntelSelected = ""
-        if S.SyncPriorityUI then S.SyncPriorityUI() end
-        if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
-        if S.Notify then S.Notify({Title="Intel",Content="Cleared all non-Nemesis entries.",Duration=2,Image="trash-2"}) end
-    end
-})
-
-local LockHistoryLabel = IntelTab:CreateParagraph({
-    Title   = "Target Lock History",
-    Content = "No locks yet."
-})
-S.LockHistoryLabel = LockHistoryLabel
-task.spawn(function()
-    while getgenv().TASFF and getgenv().TASFF.Running do
-        task.wait(1)
-        if S.LockHistoryLabel and S.LockHistory then
-            local lines = {}
-            for i, log in ipairs(S.LockHistory) do
-                local ago = math.floor(tick() - log.time)
-                table.insert(lines, i .. ". " .. log.name .. " (" .. ago .. "s ago)")
-            end
-            if #lines > 0 then
-                pcall(function() S.LockHistoryLabel:Set({Title="Target Lock History", Content=table.concat(lines, "\n")}) end)
-            end
-        end
-    end
-end)
-
-IntelTab:CreateSection("Priority Settings")
-IntelTab:CreateParagraph({
-    Title   = "Priority Behavior Mode",
-    Content = "Boost: Priority players are sorted first but aimbot still targets others when none are available. Exclusive: Aimbot ONLY targets priority-listed players (old StrictPrioritize behavior)."
-})
-IntelTab:CreateDropdown({
-    Name          = "Priority Behavior",
-    Options       = {"Boost", "Exclusive"},
-    CurrentOption = {S.PriorityBehavior or "Boost"},
-    Flag          = "PriorityBehavior",
-    Callback      = function(v)
-        local val = type(v) == "table" and v[1] or v
-        S.PriorityBehavior = val
-        S.StrictPrioritize = (val == "Exclusive")
-    end
-})
-
-local IntelPriorityDropdown = IntelTab:CreateDropdown({
-    Name            = "Priority Registry (Preferred Targets)",
-    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
-    CurrentOption   = {},
-    MultipleOptions = true,
-    Flag            = "IntelPriorityPlayers",
-    Callback        = function(v)
-        -- Resolve display-name labels to real usernames
-        local resolved = {}
-        for _, label in ipairs(v) do
-            local name = (S.ResolvePlayerName and S.ResolvePlayerName(label)) or label
-            table.insert(resolved, name)
-        end
-        local removed = {}
-        for _, oldName in ipairs(S.PriorityPlayers) do
-            if not table.find(resolved, oldName) then table.insert(removed, oldName) end
-        end
-        for _, remName in ipairs(removed) do
-            S.ThreatMemory[remName] = nil
-            S.NemesisMemory[remName] = nil
-            S.IntelPlayers[remName] = nil
-        end
-        for _, newName in ipairs(resolved) do
-            if not S.IntelPlayers[newName] then
-                if S.AddToIntel then S.AddToIntel(newName, "Registry", 0) end
-            end
-        end
-        S.PriorityPlayers = resolved
-        if S.SyncPriorityUI then S.SyncPriorityUI() end
-    end
-})
-S.PriorityDropdownRef = IntelPriorityDropdown
-
-IntelTab:CreateSection("Threat Intelligence")
-IntelTab:CreateToggle({Name = "Enable Live Kill Feed Notifications", CurrentValue = S.KillFeedEnabled, Flag = "KillFeedEnabled", Callback = function(v)
-    S.KillFeedEnabled = v
-end})
-IntelTab:CreateToggle({Name = "Enable Kill-Count Threat Auto-Flag", CurrentValue = S.KillCountThreatEnabled, Flag = "KillCountThreat", Callback = function(v)
-    S.KillCountThreatEnabled = v
-end})
-IntelTab:CreateSlider({Name = "Kills Before Threat Flag", Range = {1, 10}, Increment = 1, CurrentValue = S.KillsBeforeThreat, Flag = "KillsBeforeThreat", Callback = function(v)
-    S.KillsBeforeThreat = v
-end})
-IntelTab:CreateToggle({Name = "Enable Threat Detector (Damage Tracking)", CurrentValue = S.ThreatDetectorEnabled, Flag = "ThreatDetector", Callback = function(v)
-    S.ThreatDetectorEnabled = v
-end})
-IntelTab:CreateToggle({Name = "Threat Neutralization (Auto-expire on kill)", CurrentValue = S.ThreatNeutralizationEnabled, Flag = "ThreatNeutralization", Callback = function(v)
-    S.ThreatNeutralizationEnabled = v
-end})
-IntelTab:CreateSlider({Name = "Threat Memory Expiration (Seconds)", Range = {1, 60}, Increment = 1, CurrentValue = S.ThreatTimeout, Flag = "ThreatTimeout", Callback = function(v)
-    S.ThreatTimeout = v
-end})
-IntelTab:CreateSlider({Name = "Proximity Threat Radius (Studs)", Range = {20, 200}, Increment = 10, CurrentValue = S.ThreatProximityRadius or 80, Flag = "ThreatProximityRadius", Callback = function(v) S.ThreatProximityRadius = v end})
-IntelTab:CreateSlider({Name = "False Positive Cooldown (Seconds)", Range = {0.5, 10}, Increment = 0.5, CurrentValue = S.ThreatFPCooldown or 1.5, Flag = "ThreatFPCooldown", Callback = function(v) S.ThreatFPCooldown = v end})
-IntelTab:CreateToggle({Name = "Auto-Blacklist Expired Threats", CurrentValue = S.BlacklistExpiredThreats, Flag = "BlacklistExpiredThreats", Callback = function(v)
-    S.BlacklistExpiredThreats = v
-end})
-IntelTab:CreateToggle({Name = "Auto-Expire Tracked Players on Disconnect", CurrentValue = S.AutoExpireOnDisconnect, Flag = "AutoExpireOnDisconnect", Callback = function(v)
-    S.AutoExpireOnDisconnect = v
-end})
-
-IntelTab:CreateSection("Nemesis System")
-IntelTab:CreateToggle({Name = "Enable Nemesis System (Death Tracking)", CurrentValue = S.NemesisEnabled, Flag = "NemesisEnabled", Callback = function(v)
-    S.NemesisEnabled = v
-end})
-IntelTab:CreateSlider({Name = "Strikes Before Nemesis Flag", Range = {1, 10}, Increment = 1, CurrentValue = S.KillsBeforeNemesis, Flag = "KillsBeforeNemesis", Callback = function(v)
-    S.KillsBeforeNemesis = v
-end})
-local NemesisViewer = IntelTab:CreateParagraph({
-    Title   = "Permanent Nemesis Roster",
-    Content = "No nemeses."
-})
-local function RefreshNemesisViewer()
-    local names = {}
-    for n, _ in pairs(S.NemesisMemory or {}) do table.insert(names, n) end
-    if #names == 0 then
-        pcall(function() NemesisViewer:Set({Title="Permanent Nemesis Roster", Content="No permanent nemeses."}) end)
-    else
-        pcall(function() NemesisViewer:Set({Title="Permanent Nemesis Roster", Content=table.concat(names, "\n")}) end)
-    end
-end
-IntelTab:CreateButton({Name="Refresh Nemesis Roster", Callback=RefreshNemesisViewer})
-task.spawn(RefreshNemesisViewer)
-
-IntelTab:CreateSection("Spectator Mode")
-local SpectateDropdown = IntelTab:CreateDropdown({
-    Name            = "Spectate Target",
-    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
-    CurrentOption   = {S.SpectateTarget or ""},
-    MultipleOptions = false,
-    Flag            = "SpectateTargetDropdown",
-    Callback        = function(v)
-        local val = type(v) == "table" and v[1] or v
-        S.SpectateTarget = val
-    end
-})
-local SpectateToggle = IntelTab:CreateToggle({Name = "Spectate Player", CurrentValue = S.SpectatePlayerEnabled, Flag = "SpectatePlayer", Callback = function(v)
-    S.SpectatePlayerEnabled = v
-end})
-S.SyncSpectatorUI = function(state) pcall(function() SpectateToggle:Set(state) end) end
-IntelTab:CreateButton({Name="Refresh Player List", Callback=function()
-    if S.GetPlayerNames then
-        local names = S.GetPlayerNames()
-        pcall(function() SpectateDropdown:Refresh(names, true) end)
-        if S.PriorityDropdownRef and S.PriorityDropdownRef.Refresh then pcall(function() S.PriorityDropdownRef:Refresh(names, true) end) end
-    end
-end})
-
-IntelTab:CreateSection("Click-to-Mark")
-IntelTab:CreateToggle({Name = "Enable Target Marking", CurrentValue = S.ClickToMarkEnabled, Flag = "ClickToMark", Callback = function(v) S.ClickToMarkEnabled = v end})
-IntelTab:CreateDropdown({Name = "Mark Activation Input", Options = {"Mouse Click Only", "Keybind Only", "Both"}, CurrentOption = {S.MarkMethod}, Flag = "MarkMethod", Callback = function(v)
-    S.MarkMethod = type(v) == "table" and v[1] or v
-end})
-IntelTab:CreateKeybind({
-    Name           = "Target Mark Keybind",
-    CurrentKeybind = S.MarkKeybind or "T",
-    Flag           = "MarkKeybind",
-    Callback       = function(key)
-        local validKey = SanitizeKeyName(key)
-        local isRebind = (validKey ~= nil and validKey ~= S.MarkKeybind)
-        if validKey then S.MarkKeybind = validKey end
-        if not isRebind and S.ClickToMarkEnabled and (S.MarkMethod == "Keybind Only" or S.MarkMethod == "Both") then
-            if S.MasterEnabled and S.AimbotActive and S.CurrentTarget ~= nil then return end
-            local toolEquipped = Player.Character and Player.Character:FindFirstChildOfClass("Tool") ~= nil
-            if toolEquipped then return end
-            if S.HandleClickToMark then S.HandleClickToMark() end
-        end
-    end
-})
-IntelTab:CreateToggle({Name = "Focus Mode (Visual ESP Only on Priority Targets)", CurrentValue = S.FocusMode, Flag = "FocusMode", Callback = function(v)
-    S.FocusMode = v
-end})
-
-
-local AdvancedTab = Window:CreateTab("Advanced", "cpu")
-
-AdvancedTab:CreateSection("Target Marking (Legacy - See Intel Tab)")
--- (Mark/Priority controls moved to Intel tab)
-
-
-AdvancedTab:CreateSection("Environment Penetration (Wallchecks)")
-AdvancedTab:CreateToggle({Name = "Enforce Line of Sight (Wallcheck)", CurrentValue = S.WallCheck, Flag = "WallCheck", Callback = function(v) S.WallCheck = v end})
-AdvancedTab:CreateToggle({Name = "Ignore Non-Collidable Objects (CanCollide = False)", CurrentValue = S.NoCollisionCheck, Flag = "NoCollisionCheck", Callback = function(v) S.NoCollisionCheck = v end})
-AdvancedTab:CreateToggle({Name = "Ignore Transparent Objects (Glass/Tint)", CurrentValue = S.TransparencyCheck, Flag = "TransparencyCheck", Callback = function(v) S.TransparencyCheck = v end})
-AdvancedTab:CreateSlider({Name = "Minimum Transparency Threshold", Range = {0.01, 1.0}, Increment = 0.05, CurrentValue = S.TransparencyThreshold, Flag = "TransparencyThreshold", Callback = function(v)
-    S.TransparencyThreshold = v
-end})
-AdvancedTab:CreateToggle({Name = "Ignore Decals & Textures", CurrentValue = S.DecalsCheck, Flag = "DecalsCheck", Callback = function(v) S.DecalsCheck = v end})
-
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                       5. SETTINGS TAB                        // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
-
-local SettingsTab = Window:CreateTab("Settings", "filter")
-
-SettingsTab:CreateSection("Entity & Team Filtering")
-SettingsTab:CreateToggle({Name = "Target Players", CurrentValue = S.TargetPlayers, Flag = "TargetPlayers", Callback = function(v) S.TargetPlayers = v end})
-SettingsTab:CreateToggle({Name = "Target NPCs (Mob/AI Support)", CurrentValue = S.TargetNPCs, Flag = "TargetNPCs", Callback = function(v) S.TargetNPCs = v end})
-SettingsTab:CreateToggle({Name = "Enforce Team Check (Ignore Teammates)", CurrentValue = S.TeamCheck, Flag = "TeamCheck", Callback = function(v) S.TeamCheck = v end})
-
-
-SettingsTab:CreateSection("Player Management Registry")
-SettingsTab:CreateParagraph({
-    Title   = "Blacklist & Priority",
-    Content = "Blacklisted players are ignored by all targeting. Priority targets and Intel system controls have moved to the Intel tab."
-})
-SettingsTab:CreateDropdown({
-    Name            = "Blacklist Registry (Ignored)",
-    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
-    CurrentOption   = {},
-    MultipleOptions = true,
-    Flag            = "BlacklistPlayers",
-    Callback        = function(v)
-        S.BlacklistedPlayers = v
-        if S.CurrentTarget and S.CurrentTarget.Name and table.find(v, S.CurrentTarget.Name) then
-            S.CurrentTarget = nil
-        end
-    end
-})
-SettingsTab:CreateToggle({
-    Name         = "Hide Blacklisted Player ESP (off = show [BLACKLISTED] tag)",
-    CurrentValue = S.HideBlacklistedESP,
-    Flag         = "HideBlacklistedESP",
-    Callback     = function(v) S.HideBlacklistedESP = v end
-})
-SettingsTab:CreateToggle({
-    Name         = "Enable ESP Whitelist Filter",
-    CurrentValue = S.ESPWhitelistEnabled,
-    Flag         = "ESPWhitelistEnabled",
-    Callback     = function(v) S.ESPWhitelistEnabled = v end
-})
-SettingsTab:CreateDropdown({
-    Name            = "ESP Whitelist Registry (Only target & show these)",
-    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
-    CurrentOption   = {},
-    MultipleOptions = true,
-    Flag            = "ESPWhitelistDropdown",
-    Callback        = function(v) S.ESPWhitelist = v end
-})
-
-
-SettingsTab:CreateSection("Weapon & Inventory Automation")
-SettingsTab:CreateParagraph({
-    Title   = "Smart Tool Management",
-    Content = "Automatically toggle the aimbot based on what you are holding. Blacklist non-weapons (like food or potions) to prevent the aimbot from locking on while you are healing."
-})
-SettingsTab:CreateToggle({Name = "Auto-Engage Aimbot on Weapon Equip", CurrentValue = S.AutoEnableOnEquip, Flag = "AutoEquipAim", Callback = function(v)
-    S.AutoEnableOnEquip = v
-end})
-SettingsTab:CreateToggle({Name = "Auto-Disable Aimbot on Death", CurrentValue = S.AutoDisableOnDeath, Flag = "AutoDisableOnDeath", Callback = function(v)
-    S.AutoDisableOnDeath = v
-end})
-SettingsTab:CreateToggle({
-    Name         = "Intelligent Equip Filter (Keyword Classifier)",
-    CurrentValue = S.IntelligentEquipFilter,
-    Flag         = "IntelligentEquipFilter",
-    Callback     = function(v)
-        S.IntelligentEquipFilter = v
-        if S.Notify then S.Notify({Title="TASFF Intel",Content=v and "Equip filter ON — non-weapons will not trigger aimbot." or "Equip filter OFF — all tools trigger aimbot.",Duration=2,Image="cpu"}) end
-    end
-})
-SettingsTab:CreateToggle({
-    Name         = "Weapon-Type Gating (Triggerbot/Melee Smart Block)",
-    CurrentValue = S.WeaponTypeGating,
-    Flag         = "WeaponTypeGating",
-    Callback     = function(v)
-        S.WeaponTypeGating = v
-        if S.Notify then S.Notify({Title="TASFF Intel",Content=v and "Type gating ON — melee won't triggerbot; ranged won't melee." or "Type gating OFF — all weapons use all features.",Duration=2,Image="cpu"}) end
-    end
-})
-
-
-
-SettingsTab:CreateButton({
-    Name     = "Blacklist Currently Equipped Tool",
-    Callback = function()
-        local char = Player.Character
-        local tool = char and char:FindFirstChildOfClass("Tool")
-        if tool then
-            if not table.find(S.ToolBlacklist, tool.Name) then
-                table.insert(S.ToolBlacklist, tool.Name)
-                if BlacklistDropdown then
-                    local newList = #S.ToolBlacklist > 0 and S.ToolBlacklist or {"No Registry Items Found"}
-                    pcall(function() BlacklistDropdown:Refresh(newList, true) end)
-                end
-                if S.Notify then S.Notify({Title = "TASFF Arsenal", Content = "Blacklisted tool: " .. tool.Name, Duration = 3, Image = "ban"}) end
-            else
-                if S.Notify then S.Notify({Title = "TASFF Arsenal", Content = tool.Name .. " is already blacklisted.", Duration = 2, Image = "info"}) end
-            end
-        else
-            if S.Notify then S.Notify({Title = "TASFF Arsenal", Content = "You are not holding a tool.", Duration = 2, Image = "alert-circle"}) end
-        end
-    end
-})
-
-BlacklistDropdown = SettingsTab:CreateDropdown({
-    Name          = "Blacklisted Weapons Registry",
-    Options       = #S.ToolBlacklist > 0 and S.ToolBlacklist or {"No Registry Items Found"},
-    CurrentOption = {"No Registry Items Found"},
-    Flag          = "ToolBlacklistDropdown",
-    Callback      = function(v) SelectedBlacklistTool = type(v) == "table" and v[1] or v end
-})
-S.BlacklistDropdownRef = BlacklistDropdown
-
-SettingsTab:CreateButton({
-    Name     = "Remove Selected Tool from Registry",
-    Callback = function()
-        if SelectedBlacklistTool and SelectedBlacklistTool ~= "No Registry Items Found" then
-            local idx = table.find(S.ToolBlacklist, SelectedBlacklistTool)
-            if idx then
-                table.remove(S.ToolBlacklist, idx)
-                local newList = #S.ToolBlacklist > 0 and S.ToolBlacklist or {"No Registry Items Found"}
-                if BlacklistDropdown then pcall(function() BlacklistDropdown:Refresh(newList, true) end) end
-                if S.Notify then S.Notify({Title = "TASFF Arsenal", Content = "Removed tool: " .. SelectedBlacklistTool, Duration = 3, Image = "check"}) end
-                SelectedBlacklistTool = ""
-            end
-        else
-            if S.Notify then S.Notify({Title = "TASFF Arsenal", Content = "Select a valid tool to remove.", Duration = 2, Image = "alert-triangle"}) end
-        end
-    end
-})
-
-SettingsTab:CreateButton({
-    Name     = "Save Tool Registry to Disk",
-    Callback = function()
-        if S.SaveToolBlacklist then 
-            S.SaveToolBlacklist() 
-            if S.Notify then S.Notify({Title="TASFF Arsenal", Content="Tool registry saved permanently.", Duration=2, Image="save"}) end
-        end
-    end
-})
-
-SettingsTab:CreateButton({
-    Name     = "Clear Tool Registry",
-    Callback = function()
-        S.ToolBlacklist = {}
-        if BlacklistDropdown then pcall(function() BlacklistDropdown:Refresh({"No Registry Items Found"}, true) end) end
-        if S.SaveToolBlacklist then S.SaveToolBlacklist() end
-        if S.Notify then S.Notify({Title="TASFF Arsenal", Content="Tool registry cleared.", Duration=2, Image="trash"}) end
-    end
-})
-
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                       6. PRESETS TAB                         // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
-
-local PresetsTab = Window:CreateTab("Presets", "folder-sync")
-
-PresetsTab:CreateSection("Local Profile Management")
-PresetsTab:CreateParagraph({
-    Title   = "Configuration Profiles",
-    Content = "Save your current setup (Aimbot, Visuals, Filtering, Logic) into a named preset. This allows you to rapidly swap between playstyles (e.g., 'Legit', 'Blatant', 'Rage')."
-})
-PresetsTab:CreateInput({
-    Name                     = "Preset Name",
-    PlaceholderText          = "Enter preset name...",
-    RemoveTextAfterFocusLost = false,
-    Flag                     = "PresetInputFlag",
-    Callback                 = function(text) PresetInputName = text end
-})
-
-PresetsTab:CreateButton({
-    Name     = "Save Current Configuration to Preset",
-    Callback = function()
-        if PresetInputName and PresetInputName ~= "" then
-            S.SavedPresets[PresetInputName] = {
-                -- Core & Combat
-                MasterEnabled = S.MasterEnabled, TargetingEnabled = S.TargetingEnabled, Mode = S.Mode,
-                TargetPart = S.TargetPart, PriorityMode = S.PriorityMode, VitalityMode = S.VitalityMode,
-                TargetNearCenter = S.TargetNearCenter, Smoothness = S.Smoothness, PredictionAmount = S.PredictionAmount,
-                SilentAimEnabled = S.SilentAimEnabled, DynamicRecoilEnabled = S.DynamicRecoilEnabled,
-                RandomizeHitboxEnabled = S.RandomizeHitboxEnabled, TargetSwitchDelayEnabled = S.TargetSwitchDelayEnabled,
-                SwitchDelayMs = S.SwitchDelayMs, GracePeriodEnabled = S.GracePeriodEnabled, GracePeriodMs = S.GracePeriodMs,
-                AimbotRenderDistance = S.AimbotRenderDistance, StickyAimEnabled = S.StickyAimEnabled, AutoADSEnabled = S.AutoADSEnabled,
-                -- Visuals & Overlays
-                VisualMode = S.VisualMode, UseHighlight = S.UseHighlight, UseNPCHighlight = S.UseNPCHighlight,
-                FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
-                ESPRenderDistance = S.ESPRenderDistance, ChamsEnabled = S.ChamsEnabled, ChamsOpacity = S.ChamsOpacity,
-                BoxModeEnabled = S.BoxModeEnabled, SkeletonModeEnabled = S.SkeletonModeEnabled, SnaplinesEnabled = S.SnaplinesEnabled,
-                SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius,
-                UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
-                ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
-                EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
-                ManualCalibrationEnabled = S.ManualCalibrationEnabled, CalibrationOffsetX = S.CalibrationOffsetX, CalibrationOffsetY = S.CalibrationOffsetY,
-                -- Triggerbot & Automation
-                AutoClickEnabled = S.AutoClickEnabled, TriggerbotClickMode = S.TriggerbotClickMode, ClickMethod = S.ClickMethod,
-                ClickInterval = S.ClickInterval, ThirdPersonTriggerbot = S.ThirdPersonTriggerbot, KeyTriggerbotEnabled = S.KeyTriggerbotEnabled,
-                KeyTriggerMode = S.KeyTriggerMode, MeleeModeEnabled = S.MeleeModeEnabled, MeleeDetectionRange = S.MeleeDetectionRange,
-                MeleeClickInterval = S.MeleeClickInterval,
-                -- Advanced & Logic
-                ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
-                BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
-                KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
-                StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
-                TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
-                -- Settings & Entities
-                TargetPlayers = S.TargetPlayers, TargetNPCs = S.TargetNPCs, TeamCheck = S.TeamCheck,
-                AutoEnableOnEquip = S.AutoEnableOnEquip, IgnoreDead = S.IgnoreDead,
-            }
-            if S.SavePresetsToFile then S.SavePresetsToFile() end
-            if PresetDropdownRef and PresetDropdownRef.Refresh then
-                pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
-            end
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Saved profile: " .. PresetInputName, Duration = 3, Image = "folder-plus"}) end
-        end
-    end
-})
-
-PresetDropdownRef = PresetsTab:CreateDropdown({
-    Name          = "Saved Profiles Database",
-    Options       = GetPresetNamesList(),
-    CurrentOption = {"No Profiles Found"},
-    Flag          = "PresetSelectDropdown",
-    Callback      = function(v) SelectedPresetToManage = type(v) == "table" and v[1] or v end
-})
-
-local STO_FLAG = {
-    MasterEnabled = "MasterSwitch", TargetingEnabled = "TargetSystemToggle", Mode = "AimMethod",
-    AimbotKeybind = "AimbotKeybind", TargetPart = "TargetPart", PriorityMode = "PriorityMode",
-    VitalityMode = "VitalityMode", TargetNearCenter = "TargetNearCenter", Smoothness = "SmoothSpeed",
-    PredictionAmount = "PredIntense", SilentAimEnabled = "SilentAimEnabled", DynamicRecoilEnabled = "DynamicRecoil",
-    RandomizeHitboxEnabled = "RandomizeHitbox", TargetSwitchDelayEnabled = "TargetSwitchDelay", SwitchDelayMs = "SwitchDelayMs",
-    GracePeriodEnabled = "EnableGracePeriod", GracePeriodMs = "GracePeriodMs", AimbotRenderDistance = "AimbotRenderDist",
-    StickyAimEnabled = "StickyAim", AutoADSEnabled = "AutoADS", VisualMode = "VisualMode", UseHighlight = "UseHighlight",
-    UseNPCHighlight = "UseNPCHighlight", FocusMode = "FocusMode", StreamProofESP = "StreamProofESP",
-    VisibilityColorsEnabled = "VisibilityColorsEnabled", ESPRenderDistance = "ESPRenderDist", ChamsEnabled = "EnableChamsMode",
-    ChamsOpacity = "ChamsOpacity", BoxModeEnabled = "EnableBoxMode", SkeletonModeEnabled = "EnableSkeletonMode",
-    SnaplinesEnabled = "SnaplinesEnabled", SnaplineOrigin = "SnaplineOrigin", OOFArrowsEnabled = "OOFArrowsEnabled",
-    OOFArrowRadius = "OOFArrowRadius", UseInfoTag = "UseInfoTag", UseNPCInfoTag = "UseNPCInfoTag", ShowDisplayName = "ShowDisplay",
-    ShowToolCheck = "UseToolCheck", ShowFOV = "ShowFOV", InvisibleFOV = "InvisibleFOV", FOVSize = "FOVSize",
-    AimReferenceMode = "AimReferenceMode", EnableCrosshair = "UseCrosshair", CrosshairStyle = "CrossStyle",
-    CrosshairSize = "CrossSize", ManualCalibrationEnabled = "EnableCalibration", CalibrationOffsetX = "CalibrationX",
-    CalibrationOffsetY = "CalibrationY", AutoClickEnabled = "EnableTriggerbot", TriggerbotClickMode = "TriggerbotClickMode",
-    ClickMethod = "ClickMethod", ClickInterval = "ClickInterval", ThirdPersonTriggerbot = "ThirdPersonTriggerbot",
-    KeyTriggerbotEnabled = "KeyTriggerbotToggle", KeyTriggerMode = "KeyTriggerMode", MeleeModeEnabled = "EnableMeleeMode",
-    MeleeDetectionRange = "MeleeRange", MeleeClickInterval = "MeleeClickInterval", ThreatDetectorEnabled = "ThreatDetector",
-    NemesisEnabled = "NemesisEnabled", ThreatTimeout = "ThreatTimeout", BlacklistExpiredThreats = "BlacklistExpiredThreats",
-    ClickToMarkEnabled = "ClickToMark", MarkMethod = "MarkMethod", StrictPrioritize = "StrictPrioritize", WallCheck = "WallCheck",
-    NoCollisionCheck = "NoCollisionCheck", TransparencyCheck = "TransparencyCheck", TransparencyThreshold = "TransparencyThreshold",
-    DecalsCheck = "DecalsCheck", TargetPlayers = "TargetPlayers", TargetNPCs = "TargetNPCs", TeamCheck = "TeamCheck",
-    AutoEnableOnEquip = "AutoEquipAim", IgnoreDead = "IgnoreDead"
+    -- // ── Script Meta ────────────────────────────────────────── // --
+    AimbotKeybind               = "E",
+    PanicKeybind                = "Delete",
+    PanicLocked                 = false,     -- set true by TriggerPanic; only cleared by re-exec
+    RapidModeCycleKey           = "P",       -- Feature 17: cycles aim mode on press
+    ScriptInitialized           = false,
+    DisableNotifications        = false,
+    NotificationDuration        = 3,     -- global notification duration override (seconds)
+    SuppressRayfieldAds         = false, -- hide Rayfield periodic ad notifications
+    DebugMode                   = false,     -- Feature 27: verbose console output
+    PresetFileName              = "TASFF_V1.5.5_Presets.json",
+    ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
+    CurrentVersion              = "2.1.0",
+
+    -- // ── Session Statistics (v2.1.0) ─────────────────────────── // --
+    SessionStartTime            = 0,
+    SessionTargetLocks          = 0,
+    SessionTriggerFires         = 0,
+    SessionThreatsAdded         = 0,
+    SessionNemesesAdded         = 0,
+    SessionUserKills            = 0,     -- kills where local player was confirmed killer
+
+    -- // ── Intel Kill Tracking ─────────────────────────────────── // --
+    PriorityPlayerKills         = {},    -- {[playerName] = killCount} for priority/intel players
+
+    -- // ── v2.1.0 Feature Flags ─────────────────────────────────── // --
+    HideBlacklistedESP          = false,     -- false = show [BLACKLISTED] tag; true = fully hide
+    IntelligentEquipFilter      = true,      -- use keyword classifier before auto-enabling aimbot
+    WeaponTypeGating            = true,      -- gate triggerbot/melee by classified weapon type
+    DashboardCategory           = "Combat",  -- home tab status panel active tab
+    LockHistory                 = {},        -- circular buffer [{name,time}], max 5 entries
+
+    -- // ── Performance Engine (v2.1.0 Pipeline) ────────────────── // --
+    PerformanceMode             = "Medium",
+    PerformanceModes            = {"Ultra High", "High", "Medium", "Low", "Ultra Low"},
+
+    -- Legacy tables kept for UI backward compat (updated in v2.2.0)
+    PerformanceIntervals        = {["Ultra High"]=1, ["High"]=2, ["Medium"]=3, ["Low"]=5, ["Ultra Low"]=10},
+    NPCIntervals                = {["Ultra High"]=2, ["High"]=3, ["Medium"]=5, ["Low"]=8, ["Ultra Low"]=12},
+    SweepIntervals              = {["Ultra High"]=1, ["High"]=2, ["Medium"]=3, ["Low"]=5, ["Ultra Low"]=8},
+    CacheIntervals              = {["Ultra High"]=15,["High"]=20,["Medium"]=30,["Low"]=45,["Ultra Low"]=60},
+    FrameCounters               = {HeavySystems=0, NPCs=0, WorkspaceSweep=0, CacheCleanup=0},
+
+    -- v2.1.0 Pipeline: one scanning slot per frame, rest frames between slots
+    PipelineSlot                = 0,
+    PipelineRestCount           = 0,
+    PipelineRestFrames          = {["Ultra High"]=0, ["High"]=1, ["Medium"]=2, ["Low"]=4, ["Ultra Low"]=7},
+
+    -- v2.1.0 Background task intervals (seconds) — replaces frame-counter loops
+    BackgroundIntervals = {
+        ["Ultra High"] = { NPC=0.3,  Sweep=0.2,  Cache=3  },
+        ["High"]       = { NPC=0.5,  Sweep=0.4,  Cache=5  },
+        ["Medium"]     = { NPC=0.8,  Sweep=0.6,  Cache=8  },
+        ["Low"]        = { NPC=1.2,  Sweep=1.0,  Cache=12 },
+        ["Ultra Low"]  = { NPC=2.0,  Sweep=1.5,  Cache=20 },
+    },
+
+    -- Aimbot candidate cache: written by pipeline Slot 1, sorted every frame
+    AimbotCandidates            = {},
+
+    -- v2.1.0 Visibility precompute: written by background loop ③, read by GetPotentialTargets
+    -- Key = character model, Value = bool. Eliminates raycasts from the render thread entirely.
+    VisibilityPrecomputed       = {},
+
+
+    -- // ── Calibration ────────────────────────────────────────── // --
+    AimReferenceMode            = "Screen Center",
+    ManualCalibrationEnabled    = false,
+    CalibrationOffsetX          = 0,
+    CalibrationOffsetY          = 0,
+
+    -- // ── Presets ────────────────────────────────────────────── // --
+    SavedPresets                = {},
+    SelectedPresetToManage      = "",
+
+    -- // ── Static Joint Data (shared by DrawSkeleton) ─────────── // --
+    R15Joints = {
+        {"Head","UpperTorso"},
+        {"UpperTorso","LowerTorso"},
+        {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+        {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+        {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+        {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+    },
+    R6Joints = {
+        {"Head","Torso"},
+        {"Torso","Left Arm"},
+        {"Torso","Right Arm"},
+        {"Torso","Left Leg"},
+        {"Torso","Right Leg"},
+    },
+
+    -- // ── Tool Observer Connection Handles ───────────────────── // --
+    ToolAddedConnection         = nil,
+    ToolRemovedConnection       = nil,
+
+    -- // ── UI Element References (set by TASFF_UI.lua) ────────── // --
+    PriorityDropdownRef         = nil,
+    PriorityMonitorLabel        = nil,
+    IntelMonitorLabel           = nil,   -- unified Intel Monitor paragraph ref
+    PerformanceIndicator        = nil,
+
+    -- // ── Cross-Chunk Function Slots (set by Core / UI) ──────── // --
+    TriggerPanic                = nil,
+    UnloadScript                = nil,
+    ClearVisuals                = nil,
+    ClearCrosshair              = nil,
+    SyncPriorityUI              = nil,
+    AddToIntel                  = nil,   -- function(name, source, extraPoints)
+    RemoveFromIntel             = nil,   -- function(name, forceRemoveNemesis)
+    RebuildIntelMonitor         = nil,   -- function() rebuilds the paragraph text
+    GetIntelSortedList          = nil,
+    SyncSpectatorUI             = nil,   -- function(state) updates UI toggle if core forces it off
+    SetADSState                 = nil,
+    GetPlayerNames              = nil,
+    HandleClickToMark           = nil,
+    UpdateWorkspaceIgnores      = nil,
+    IsVisibleWallcheck          = nil,
+    IsVisibleCachedWrapper      = nil,
+    NewDrawing                  = nil,
+    PrepareDrawing              = nil,
+    EnsureDrawings              = nil,
+    Notify                      = nil,
+    GetIgnoreList               = nil,
+    GetAimPosition              = nil,
+    ApplyScreenCalibration      = nil,
+    GetPotentialTargets         = nil,
+    CleanupCaches               = nil,
+    UpdateNPCs                  = nil,
+    ShouldRunSubsystem          = nil,
+    NormalizePerformanceMode    = nil,
+    GetVisualAssets             = nil,
+    DrawSkeleton                = nil,
+    LoadPresetsFromFile         = nil,
+    SavePresetsToFile           = nil,
+
+    -- // ── v2.1.0 Function Slots (set by TASFF_Lists.lua) ──────── // --
+    ClassifyTool                = nil,   -- ClassifyTool(name) → "Weapon"|"Melee"|"NonWeapon"|"Unknown"
+    IsRangedWeapon              = nil,
+    IsMeleeWeapon               = nil,
+    IsNonWeapon                 = nil,
+    FeatureCount                = 0,     -- populated by TASFF_Lists.lua on load
+    PresetGameConfigs           = {},    -- populated by TASFF_Lists.lua on load
 }
 
-PresetsTab:CreateButton({
-    Name     = "Load Selected Profile",
-    Callback = function()
-        local selected = PresetDropdownRef and PresetDropdownRef.CurrentOption
-        if type(selected) == "table" then
-            local k,v = next(selected)
-            selected = (type(v) == "boolean" and v) and k or (type(v) == "string" and v) or selected[1]
-        end
-        if not selected or selected == "" then selected = SelectedPresetToManage end
-        
-        if selected and S.SavedPresets[selected] then
-            local data = S.SavedPresets[selected]
-            for key, value in pairs(data) do 
-                local flag = STO_FLAG[key]
-                if flag and Rayfield.Flags[flag] then
-                    pcall(function() Rayfield.Flags[flag]:Set(value) end)
-                else
-                    S[key] = value
-                end
-            end
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Successfully loaded profile: " .. selected .. "\nUI has been updated.", Duration = 4, Image = "folder-open"}) end
-        else
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected.", Duration = 2, Image = "alert-circle"}) end
-        end
-    end
-})
 
-PresetsTab:CreateButton({
-    Name     = "Delete Selected Profile",
-    Callback = function()
-        local selected = PresetDropdownRef and PresetDropdownRef.CurrentOption
-        if type(selected) == "table" then
-            local k,v = next(selected)
-            selected = (type(v) == "boolean" and v) and k or (type(v) == "string" and v) or selected[1]
-        end
-        if not selected or selected == "" then selected = SelectedPresetToManage end
-
-        if selected and selected ~= "No Profiles Found" and S.SavedPresets[selected] then
-            S.SavedPresets[selected] = nil
-            if S.SavePresetsToFile then S.SavePresetsToFile() end
-            if PresetDropdownRef and PresetDropdownRef.Refresh then
-                local list = GetPresetNamesList()
-                pcall(function() PresetDropdownRef:Refresh(list, true) end)
-            end
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Deleted profile: " .. selected, Duration = 3, Image = "folder-minus"}) end
-            SelectedPresetToManage = ""
-        else
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected to delete.", Duration = 2, Image = "alert-triangle"}) end
-        end
-    end
-})
-
-PresetsTab:CreateSection("Built-In Game Profiles")
-PresetsTab:CreateParagraph({
-    Title   = "Quick-Load Configs",
-    Content = "Pre-configured profiles for popular games. Loading these will override your current settings."
-})
-
-PresetsTab:CreateButton({
-    Name = "Load Da Hood Config (Legit)",
-    Callback = function()
-        pcall(function() Rayfield.Flags["AimMethod"]:Set("Legit (Camera)") end)
-        pcall(function() Rayfield.Flags["TargetPart"]:Set("Head") end)
-        pcall(function() Rayfield.Flags["PredIntense"]:Set(0.12) end)
-        pcall(function() Rayfield.Flags["SmoothSpeed"]:Set(1.5) end)
-        if S.Notify then S.Notify({Title="TASFF Presets", Content="Loaded Da Hood (Legit) profile.", Duration=2, Image="check"}) end
-    end
-})
-
-PresetsTab:CreateButton({
-    Name = "Load Phantom Forces Config (Blatant)",
-    Callback = function()
-        pcall(function() Rayfield.Flags["AimMethod"]:Set("Blatant") end)
-        pcall(function() Rayfield.Flags["TargetPart"]:Set("Head") end)
-        pcall(function() Rayfield.Flags["BlatantSnapSpeed"]:Set(100) end)
-        pcall(function() Rayfield.Flags["WallCheck"]:Set(true) end)
-        if S.Notify then S.Notify({Title="TASFF Presets", Content="Loaded Phantom Forces (Blatant) profile.", Duration=2, Image="check"}) end
-    end
-})
-
-PresetsTab:CreateSection("Clipboard & Cloud Sharing")
-PresetsTab:CreateParagraph({
-    Title   = "Share Your Configurations",
-    Content = "Export your entire preset database to your clipboard as a JSON string to share with friends, or paste their string below to import their setups."
-})
-
-PresetsTab:CreateButton({
-    Name     = "Export Database to Clipboard",
-    Callback = function()
-        local sc = setclipboard or (getgenv and getgenv().setclipboard)
-        if sc then
-            sc(HttpService:JSONEncode(S.SavedPresets))
-            if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Saved all presets to clipboard! You can now paste and share.", Duration = 3, Image = "clipboard-copy"}) end
-        else
-            if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Your executor does not support setclipboard.", Duration = 3, Image = "alert-octagon"}) end
-        end
-    end
-})
-
-PresetsTab:CreateButton({
-    Name     = "Import Database from Clipboard",
-    Callback = function()
-        local gc = getclipboard or (getgenv and getgenv().getclipboard)
-        if gc then
-            local clipData = gc()
-            if type(clipData) ~= "string" or clipData == "" then
-                if S.Notify then S.Notify({Title = "Import Failed", Content = "Clipboard is empty or contains no text.", Duration = 3, Image = "file-warning"}) end
-                return
-            end
-            local success, decoded = pcall(function() return HttpService:JSONDecode(clipData) end)
-            if success and type(decoded) == "table" then
-                for k, v in pairs(decoded) do S.SavedPresets[k] = v end
-                if S.SavePresetsToFile then S.SavePresetsToFile() end
-                if PresetDropdownRef and PresetDropdownRef.Refresh then
-                    pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
-                end
-                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Presets added to database! Select from dropdown to load.", Duration = 3, Image = "clipboard-check"}) end
-            else
-                if S.Notify then S.Notify({Title = "Import Failed", Content = "Invalid JSON string format in clipboard.", Duration = 3, Image = "file-warning"}) end
-            end
-        else
-            if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Your executor does not support getclipboard.", Duration = 3, Image = "alert-octagon"}) end
-        end
-    end
-})
-
-PresetsTab:CreateInput({
-    Name                     = "Manual JSON Database Import",
-    PlaceholderText          = "Paste raw JSON data here...",
-    RemoveTextAfterFocusLost = true,
-    Callback                 = function(text)
-        if text and text ~= "" then
-            local success, decoded = pcall(function() return HttpService:JSONDecode(text) end)
-            if success and type(decoded) == "table" then
-                for k, v in pairs(decoded) do S.SavedPresets[k] = v end
-                if S.SavePresetsToFile then S.SavePresetsToFile() end
-                if PresetDropdownRef and PresetDropdownRef.Refresh then
-                    pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
-                end
-                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Profiles imported! Select them from the dropdown above to load.", Duration = 3, Image = "file-check"}) end
-            else
-                if S.Notify then S.Notify({Title = "Import Failed", Content = "Syntax Error: Invalid JSON structure.", Duration = 3, Image = "file-x"}) end
-            end
-        end
-    end
-})
-
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                       7. THEMING TAB                         // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
-
-local CustomizationTab = Window:CreateTab("Theming", "brush")
-
--- Local helper: resolve preset color or keep nil if not using preset
-local function applyPreset(useFlag, ddFlag, updater, field)
-    if not useFlag then return end
-    pcall(function()
-        local f = Rayfield.Flags and Rayfield.Flags[ddFlag]
-        if not f then return end
-        local sel = type(f.CurrentOption) == "table" and f.CurrentOption[1] or f.CurrentOption
-        local rgb = ColorPresetMap[sel]
-        if rgb then
-            if updater then updater(rgb) end
-            if field then S[field] = rgb end
-        end
-    end)
-end
-
--- ─── Section: General Base Colors ───────────────────────────────────────────
-CustomizationTab:CreateSection("General Base Colors - Default Highlight & Name Tags")
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Default Highlight & Tags", CurrentValue = false, Flag = "HighlightPresetToggle", Callback = function(v)
-    applyPreset(v, "HighlightColorDd", nil, "HighlightColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Default Highlight & Tags", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "HighlightColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["HighlightPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.HighlightColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Default Highlight & Tag Color", Color = S.HighlightColor or Color3.fromRGB(255,255,255), Flag = "HighlightColorPicker", Callback = function(Value) S.HighlightColor = Value end})
-
--- ─── Section: On-Screen Overlays (FOV Circle & Crosshair) ─────────────────
-CustomizationTab:CreateSection("On-Screen Overlays — FOV & Crosshair")
-CustomizationTab:CreateToggle({Name = "Use Preset Color — FOV Circle", CurrentValue = false, Flag = "FOVPresetToggle", Callback = function(v)
-    applyPreset(v, "FOVCircleColorDd", _G.UpdateFOVCircleColor, "FOVColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — FOV Circle", Options = ColorDropdownOptions, CurrentOption = {"Tan"}, Flag = "FOVCircleColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["FOVPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]
-    if rgb and _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(rgb) end
-    S.FOVColor = rgb
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — FOV Circle Color", Color = S.FOVColor or Color3.fromRGB(255,200,120), Flag = "FOVCircleColorPicker", Callback = function(Value)
-    S.FOVColor = Value
-    if _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(Value) end
-end})
-
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Crosshair", CurrentValue = false, Flag = "CrosshairPresetToggle", Callback = function(v)
-    applyPreset(v, "CrosshairColorDd", _G.UpdateCrosshairColor, "CrosshairColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Crosshair", Options = ColorDropdownOptions, CurrentOption = {"Coral"}, Flag = "CrosshairColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["CrosshairPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]
-    if rgb and _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(rgb) end
-    S.CrosshairColor = rgb
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Crosshair Color", Color = S.CrosshairColor or Color3.fromRGB(255,127,80), Flag = "CrosshairColorPicker", Callback = function(Value)
-    S.CrosshairColor = Value
-    if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(Value) end
-end})
-
--- ─── Section: Drawing Visuals (Box, Skeleton, Snaplines) ──────────────────
-CustomizationTab:CreateSection("Drawing Visuals — Box, Skeleton, Snaplines")
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Box ESP", CurrentValue = false, Flag = "BoxPresetToggle", Callback = function(v)
-    applyPreset(v, "BoxColorDd", nil, "BoxColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Box ESP", Options = ColorDropdownOptions, CurrentOption = {"Maroon"}, Flag = "BoxColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["BoxPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.BoxColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Box ESP Color", Color = S.BoxColor or Color3.fromRGB(200,40,40), Flag = "BoxESPColorPicker", Callback = function(Value) S.BoxColor = Value end})
-
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Skeleton ESP", CurrentValue = false, Flag = "SkelPresetToggle", Callback = function(v)
-    applyPreset(v, "SkelColorDd", nil, "SkeletonColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Skeleton ESP", Options = ColorDropdownOptions, CurrentOption = {"Maroon"}, Flag = "SkelColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["SkelPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.SkeletonColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Skeleton ESP Color", Color = S.SkeletonColor or Color3.fromRGB(200,40,40), Flag = "SkeletonESPColorPicker", Callback = function(Value) S.SkeletonColor = Value end})
-
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Snaplines & OOF Arrows", CurrentValue = false, Flag = "SnapPresetToggle", Callback = function(v)
-    applyPreset(v, "SnapColorDd", nil, "SnaplineColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Snaplines & OOF Arrows", Options = ColorDropdownOptions, CurrentOption = {"Red"}, Flag = "SnapColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["SnapPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.SnaplineColor = rgb; S.OOFArrowColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Snapline Color", Color = S.SnaplineColor or Color3.fromRGB(255,0,0), Flag = "SnaplineFineColorPicker", Callback = function(Value) S.SnaplineColor = Value end})
-CustomizationTab:CreateColorPicker({Name = "Fine — OOF Arrow Color", Color = S.OOFArrowColor or Color3.fromRGB(255,100,0), Flag = "OOFArrowColorPicker", Callback = function(Value) S.OOFArrowColor = Value end})
-
--- ─── Section: Intel / Target Category Colors ──────────────────────────────
-CustomizationTab:CreateSection("Intel Category Colors — Priority, Threat, Nemesis")
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Priority Players", CurrentValue = false, Flag = "PrioPresetToggle", Callback = function(v)
-    applyPreset(v, "PrioColorDd", nil, "PriorityHighlightColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Priority Players", Options = ColorDropdownOptions, CurrentOption = {"Yellow"}, Flag = "PrioColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["PrioPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.PriorityHighlightColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Priority Player ESP Color", Color = S.PriorityHighlightColor or Color3.fromRGB(255,200,0), Flag = "PriorityHighlightColorPicker", Callback = function(Value) S.PriorityHighlightColor = Value end})
-
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Threat Players", CurrentValue = false, Flag = "ThreatPresetToggle", Callback = function(v)
-    applyPreset(v, "ThreatColorDd", nil, "ThreatHighlightColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Threat Players", Options = ColorDropdownOptions, CurrentOption = {"Orange"}, Flag = "ThreatColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["ThreatPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.ThreatHighlightColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Threat Player ESP Color", Color = S.ThreatHighlightColor or Color3.fromRGB(255,60,0), Flag = "ThreatHighlightColorPicker", Callback = function(Value) S.ThreatHighlightColor = Value end})
-
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Nemesis Players", CurrentValue = false, Flag = "NemesisPresetToggle", Callback = function(v)
-    applyPreset(v, "NemesisColorDd", nil, "NemesisHighlightColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Nemesis Players", Options = ColorDropdownOptions, CurrentOption = {"Purple"}, Flag = "NemesisColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["NemesisPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.NemesisHighlightColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Nemesis Player ESP Color", Color = S.NemesisHighlightColor or Color3.fromRGB(150,0,255), Flag = "NemesisHighlightColorPicker", Callback = function(Value) S.NemesisHighlightColor = Value end})
-
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Blacklisted Players", CurrentValue = false, Flag = "BlacklistPresetToggle", Callback = function(v)
-    applyPreset(v, "BlacklistColorDd", nil, "BlacklistedTagColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Blacklisted Players", Options = ColorDropdownOptions, CurrentOption = {"Orange"}, Flag = "BlacklistColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["BlacklistPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.BlacklistedTagColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Blacklisted Player Tag Color", Color = S.BlacklistedTagColor or Color3.fromRGB(255,140,0), Flag = "BlacklistedTagColorPicker", Callback = function(Value) S.BlacklistedTagColor = Value end})
-
--- ─── Section: Chams (Through-Wall) ────────────────────────────────────────
-CustomizationTab:CreateSection("Through-Wall Visuals — Chams")
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Chams", CurrentValue = false, Flag = "ChamsPresetToggle", Callback = function(v)
-    applyPreset(v, "ChamsColorDd", nil, "ChamsColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Chams Color", Options = ColorDropdownOptions, CurrentOption = {"Red"}, Flag = "ChamsColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["ChamsPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.ChamsColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Chams Color", Color = S.ChamsColor or Color3.fromRGB(255,30,30), Flag = "ChamsColorPicker", Callback = function(Value) S.ChamsColor = Value end})
-CustomizationTab:CreateSlider({Name = "Chams Opacity (0–100)", Range = {0, 100}, Increment = 1, CurrentValue = S.ChamsOpacity or 10, Flag = "ChamsOpacity", Callback = function(v) S.ChamsOpacity = v end})
-
--- ─── Section: Kill Flash ──────────────────────────────────────────────────
-CustomizationTab:CreateSection("Combat Feedback — Kill Flash")
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Kill Confirmation Flash", CurrentValue = false, Flag = "KillFlashPresetToggle", Callback = function(v)
-    applyPreset(v, "KillFlashColorDd", nil, "KillFlashColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Kill Flash Color", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "KillFlashColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["KillFlashPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.KillFlashColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Kill Flash Color", Color = S.KillFlashColor or Color3.fromRGB(255,255,255), Flag = "KillFlashColorPicker", Callback = function(Value) S.KillFlashColor = Value end})
-
-
--- ─── Section: Visibility Indicator Colors ─────────────────────────────────
-CustomizationTab:CreateSection("Visibility Indicator Colors")
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Visible Target", CurrentValue = false, Flag = "VisiblePresetToggle", Callback = function(v)
-    applyPreset(v, "VisibleColorDd", nil, "VisibleColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Visible Target Color", Options = ColorDropdownOptions, CurrentOption = {"Lime"}, Flag = "VisibleColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["VisiblePresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.VisibleColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Visible Target Color", Color = S.VisibleColor or Color3.fromRGB(0,255,0), Flag = "VisibleColorPicker", Callback = function(Value) S.VisibleColor = Value end})
-
-CustomizationTab:CreateToggle({Name = "Use Preset Color — Hidden Target", CurrentValue = false, Flag = "HiddenPresetToggle", Callback = function(v)
-    applyPreset(v, "HiddenColorDd", nil, "HiddenColor")
-end})
-CustomizationTab:CreateDropdown({Name = "Preset — Hidden Target Color", Options = ColorDropdownOptions, CurrentOption = {"Red"}, Flag = "HiddenColorDd", Callback = function(v)
-    local f = Rayfield.Flags and Rayfield.Flags["HiddenPresetToggle"]
-    if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.HiddenColor = rgb end
-end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Hidden Target Color", Color = S.HiddenColor or Color3.fromRGB(255,0,0), Flag = "HiddenColorPicker", Callback = function(Value) S.HiddenColor = Value end})
-
--- ─── Section: UI Theme Editor ─────────────────────────────────────────────
-CustomizationTab:CreateSection("UI Theme Editor (Live Preview)")
-CustomizationTab:CreateParagraph({Title = "About UI Theme Editor", Content = "Adjust the Rayfield window's own theme colors live. Changes take effect immediately on the window chrome."})
-CustomizationTab:CreateColorPicker({Name = "UI — Background", Color = Color3.fromRGB(15,15,15), Flag = "UIThemeBg", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({Background = v}) end)
-end})
-CustomizationTab:CreateColorPicker({Name = "UI — Topbar", Color = Color3.fromRGB(20,20,20), Flag = "UIThemeTopbar", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({Topbar = v}) end)
-end})
-CustomizationTab:CreateColorPicker({Name = "UI — Tab Selected Accent", Color = Color3.fromRGB(180,40,40), Flag = "UIThemeAccent", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({TabBackgroundSelected = v, ToggleEnabled = v, DropdownSelected = v, SliderProgress = v}) end)
-end})
-CustomizationTab:CreateColorPicker({Name = "UI — Element Background", Color = Color3.fromRGB(25,25,25), Flag = "UIThemeElemBg", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({ElementBackground = v}) end)
-end})
-CustomizationTab:CreateColorPicker({Name = "UI — Text Color", Color = Color3.fromRGB(240,240,240), Flag = "UIThemeText", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({TextColor = v}) end)
-end})
-CustomizationTab:CreateButton({Name = "Reset UI Theme to Default", Callback = function()
-    pcall(function()
-        Rayfield:SetTheme({
-            TextColor = Color3.fromRGB(240,240,240),
-            Background = Color3.fromRGB(15,15,15),
-            Topbar = Color3.fromRGB(20,20,20),
-            TabBackgroundSelected = Color3.fromRGB(180,40,40),
-            ElementBackground = Color3.fromRGB(25,25,25),
-            ToggleEnabled = Color3.fromRGB(200,35,35),
-            SliderProgress = Color3.fromRGB(200,35,35),
-            DropdownSelected = Color3.fromRGB(180,40,40),
-        })
-    end)
-end})
-
-local MiscTab = Window:CreateTab("System", "cog")
-
-
-MiscTab:CreateSection("Performance Engine")
-PerformanceIndicator = MiscTab:CreateParagraph({
-    Title   = "Active Performance Profile",
-    Content = "Current Mode: " .. (S.PerformanceMode or "Medium") ..
-              " (Interval: " .. ((S.PerformanceIntervals or {})[S.PerformanceMode] or 3) .. " frames)"
-})
-S.PerformanceIndicator = PerformanceIndicator
-
-MiscTab:CreateDropdown({
-    Name            = "Core Frame-Skip Strategy",
-    Options         = S.PerformanceModes or {"Ultra High", "High", "Medium", "Low", "Ultra Low"},
-    CurrentOption   = {S.PerformanceMode},
-    MultipleOptions = false,
-    Flag            = "PerformanceMode",
-    Callback        = function(v)
-        S.PerformanceMode = v[1] or "Medium"
-        S.FrameCounters.HeavySystems = 0
-        S.FrameCounters.NPCs         = 0
-        S.FrameCounters.WorkspaceSweep = 0
-        S.FrameCounters.CacheCleanup = 0
-        pcall(function()
-            PerformanceIndicator:Set({
-                Title   = "Active Performance Profile",
-                Content = "Current Mode: " .. S.PerformanceMode ..
-                          " (Interval: " .. ((S.PerformanceIntervals or {})[S.PerformanceMode] or 3) .. " frames)"
-            })
-        end)
-    end
-})
-
-MiscTab:CreateSection("Security & Failsafes")
-MiscTab:CreateParagraph({
-    Title   = "Panic System & Clean Unload",
-    Content = "Panic: Instantly suspends Master Switch, releases all virtual mouse/key inputs, and hides overlays.\nKill/Unload: Destroys the Rayfield GUI completely and terminates all backend memory connections."
-})
-
-MiscTab:CreateToggle({Name = "Silence All Notifications", CurrentValue = S.DisableNotifications, Flag = "DisableNotifications", Callback = function(v)
-    S.DisableNotifications = v
-end})
-MiscTab:CreateSlider({Name = "Notification Duration (seconds)", Range = {1, 10}, Increment = 1, CurrentValue = S.NotificationDuration or 3, Flag = "NotificationDuration", Callback = function(v)
-    S.NotificationDuration = v
-end})
-MiscTab:CreateSlider({Name = "Notification Throttle (Max per 3s)", Range = {1, 10}, Increment = 1, CurrentValue = S.NotifyMaxPer3s or 5, Flag = "NotifyThrottle", Callback = function(v) S.NotifyMaxPer3s = v end})
-MiscTab:CreateToggle({Name = "Suppress Rayfield Advertising Notifications", CurrentValue = S.SuppressRayfieldAds, Flag = "SuppressRayfieldAds", Callback = function(v)
-    S.SuppressRayfieldAds = v
-end})
-
-MiscTab:CreateToggle({Name = "Anti-AFK (Prevent Kick)", CurrentValue = S.AntiAFKEnabled, Flag = "AntiAFK", Callback = function(v) S.AntiAFKEnabled = v end})
-MiscTab:CreateToggle({Name = "FPS Watcher (Auto-Tune Performance Mode)", CurrentValue = S.FPSWatcherEnabled, Flag = "FPSWatcher", Callback = function(v) S.FPSWatcherEnabled = v end})
-
-MiscTab:CreateSection("Quick Controls")
-MiscTab:CreateToggle({Name = "Rapid Aim Mode Cycle (Keybind)", CurrentValue = S.RapidModeCycleEnabled, Flag = "RapidModeCycle", Callback = function(v) S.RapidModeCycleEnabled = v end})
-MiscTab:CreateKeybind({
-    Name           = "Mode Cycle Key",
-    CurrentKeybind = S.RapidModeCycleKey or "P",
-    Flag           = "RapidModeCycleKey",
-    Callback       = function(key)
-        local validKey = SanitizeKeyName(key)
-        if validKey then S.RapidModeCycleKey = validKey end
-    end
-})
-MiscTab:CreateToggle({Name = "Debug Mode (Verbose Console Output)", CurrentValue = S.DebugMode, Flag = "DebugMode", Callback = function(v) S.DebugMode = v end})
-
-MiscTab:CreateKeybind({
-        Name           = "Global Panic Keybind",
-        CurrentKeybind = S.PanicKeybind or "Delete",
-        Flag           = "PanicKeybind",
-        Callback       = function(key)
-            local validKey = SanitizeKeyName(key)
-            if validKey then S.PanicKeybind = validKey end
-        end
-    })
-
-MiscTab:CreateButton({
-    Name     = "Execute Panic Protocol",
-    Callback = function()
-        if S.TriggerPanic then S.TriggerPanic() end
-    end
-})
-
-MiscTab:CreateButton({
-    Name     = "Factory Reset (Restore All Defaults)",
-    Callback = function()
-        -- Exhaustive reset to prevent "frankenstein" states
-        S.MasterEnabled = false;        S.TargetingEnabled = true;      S.Mode = "Legit (Camera)"
-        S.TargetPart = "Head";          S.ActivePartName = "Head"
-        S.PriorityMode = "None";        S.VitalityMode = "None";        S.TargetNearCenter = false
-        S.Smoothness = 1.5;             S.PredictionAmount = 0.16
-        S.SilentAimEnabled = false;     S.DynamicRecoilEnabled = false
-        S.RandomizeHitboxEnabled = false
-        S.TargetSwitchDelayEnabled = false; S.SwitchDelayMs = 200
-        S.GracePeriodEnabled = false;   S.GracePeriodMs = 150
-        S.AimbotRenderDistance = 1000;  S.StickyAimEnabled = false;     S.AutoADSEnabled = false
-        S.VisualMode = "Single";        S.UseHighlight = true;          S.UseNPCHighlight = true
-        S.FocusMode = false;            S.StreamProofESP = true;        S.VisibilityColorsEnabled = false
-        S.ESPRenderDistance = 1000;     S.ChamsEnabled = false;         S.ChamsOpacity = 10
-        S.BoxModeEnabled = false;       S.SkeletonModeEnabled = false
-        S.SnaplinesEnabled = false;     S.SnaplineOrigin = "Bottom"
-        S.OOFArrowsEnabled = false;     S.OOFArrowRadius = 150
-        S.UseInfoTag = true;            S.UseNPCInfoTag = true
-        S.ShowDisplayName = false;      S.ShowToolCheck = false
-        S.ShowFOV = false;              S.InvisibleFOV = false;         S.FOVSize = 100
-        S.AimReferenceMode = "Screen Center"
-        S.EnableCrosshair = false;      S.CrosshairStyle = "Plus";      S.CrosshairSize = 10
-        S.ManualCalibrationEnabled = false; S.CalibrationOffsetX = 0;   S.CalibrationOffsetY = 0
-        S.AutoClickEnabled = false;     S.TriggerbotClickMode = "Virtual"; S.ClickMethod = "Mash"
-        S.ClickInterval = 100;          S.ThirdPersonTriggerbot = false
-        S.KeyTriggerbotEnabled = false; S.KeyTriggerMode = "Single Press"
-        S.MeleeModeEnabled = false;     S.MeleeDetectionRange = 5;      S.MeleeClickInterval = 100
-        S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
-        S.BlacklistExpiredThreats = false
-        S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
-        S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
-        S.ClickToMarkEnabled = false;   S.MarkMethod = "Both"
-        S.StrictPrioritize = false;     S.WallCheck = true
-        S.NoCollisionCheck = false;     S.TransparencyCheck = false;    S.TransparencyThreshold = 0.5
-        S.DecalsCheck = false
-        S.TargetPlayers = true;         S.TargetNPCs = false;           S.TeamCheck = false
-        S.AutoEnableOnEquip = false;    S.IgnoreDead = true
-        S.CurrentTarget = nil
-        if S.SetADSState    then S.SetADSState(false) end
-        if S.ClearVisuals   then S.ClearVisuals()     end
-        if S.ClearCrosshair then S.ClearCrosshair()   end
-        if S.Notify then S.Notify({Title = "TASFF System", Content = "Factory Reset complete. All modules restored to default.", Duration = 3, Image = "list-restart"}) end
-    end
-})
-
-MiscTab:CreateButton({
-    Name     = "Terminate Script & Unload Interface",
-    Callback = function()
-        if S.UnloadScript then S.UnloadScript() end
-    end
-})
-
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
--- //                      9. UPDATE LOG TAB                       // --
--- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
-
-local UpdateLogTab = Window:CreateTab("Update Log", "history")
-UpdateLogTab:CreateSection("Version 2.1.2 (Refinement Update)")
-UpdateLogTab:CreateLabel("- FIX VoS Wallcheck Locking: Visible On Screen mode now actively drops targets when they are fully occluded, fixing the stuck [LOCKED] tag issue.")
-UpdateLogTab:CreateLabel("- FIX Missing Colors UI: Restored missing Customization options for Default Highlight & Name Tags.")
-UpdateLogTab:CreateLabel("- FIX Aimbot Snap-Back: Fixed edge case where Visible On Screen targeting cached old dead limbs and snapped back instantly.")
-UpdateLogTab:CreateLabel("- FIX Dead Target Filtering: Completely eliminated the Ignore Dead toggle - aimbot engine now permanently ignores corpses.")
-UpdateLogTab:CreateLabel("- FIX Kill Flash Rendering: Fading sequence now renders correctly because corpses are briefly preserved for the ESP renderer.")
-UpdateLogTab:CreateLabel("- FIX Threat Intelligence: Expanded kill feed parsing to detect 'creatorTag', 'Killer', and 'killer' object tags.")
-UpdateLogTab:CreateLabel("- FIX Chams Color & Opacity: Custom colors now properly apply to Chams, and the opacity scale (0-100) works seamlessly.")
-UpdateLogTab:CreateLabel("- FIX Blacklisted Tag Colors: Added missing preset toggle and dropdown options for blacklisted tags.")
-UpdateLogTab:CreateLabel("- NEW Kill Flash Fade: The kill confirmation flash now smoothly fades out instead of abruptly disappearing.")
-UpdateLogTab:CreateLabel("- NEW Kill Flash Duration: Added a slider to configure the exact duration of the kill confirmation fade.")
-UpdateLogTab:CreateLabel("- FIX Lock-On Delay: Visibility precompute loop now restarts immediately (no gap wait). Sub-frame delay.")
-UpdateLogTab:CreateLabel("- FIX Optimistic Nil Visibility: New players in FOV circle lock on instantly; background corrects within 1-2 frames.")
-UpdateLogTab:CreateLabel("- NEW Server Info: Home tab shows game name, Place ID, Job ID, and live player count (refreshes every 10s).")
-UpdateLogTab:CreateLabel("- NEW Theming Tab Redesign: All color controls split into logical sections (Overlays, Drawing, Intel, Chams, Combat).")
-UpdateLogTab:CreateLabel("- NEW Per-Section Color System: Each visual category has its own preset toggle, preset dropdown, and fine picker.")
-UpdateLogTab:CreateLabel("- NEW UI Theme Editor: Live color pickers for Rayfield window chrome (Background, Topbar, Accent, Text, Elements).")
-UpdateLogTab:CreateLabel("- NEW Notification Duration Slider: Global control for how long all TASFF notifications are displayed.")
-UpdateLogTab:CreateLabel("- NEW Suppress Rayfield Ads: Toggle to block Rayfield's periodic 'Loving this UI library?' advertising popup.")
-UpdateLogTab:CreateLabel("- NEW Session User Kill Count: Tracks how many kills you (the local player) secured; shown in session stats.")
-UpdateLogTab:CreateLabel("- NEW Priority Player Kill Count: Intel Monitor now shows ☠ N next to tracked players who scored kills.")
-UpdateLogTab:CreateLabel("- NEW DisplayName in Dropdowns: Player dropdowns show 'DisplayName (username)' format for easier identification.")
-
-UpdateLogTab:CreateSection("Version 2.1.1 (Hotfix Patch)")
-UpdateLogTab:CreateLabel("- FIXED Panic Keybind: Panic now permanently locks TASFF. Only a full re-execute restores operation.")
-UpdateLogTab:CreateLabel("- FIXED Silent Aim Camera Freeze: __index hook now only intercepts Mouse object queries, not all CFrame reads.")
-UpdateLogTab:CreateLabel("- FIXED Silent Aim Camera Freeze: __namecall hook detects and ignores PopperCam/ZoomController raycasts.")
-UpdateLogTab:CreateLabel("- FIXED Sticky Aim Snap-Back: SilentAimTargetCache and CurrentTarget cleared instantly on aimbot toggle-off.")
-UpdateLogTab:CreateLabel("- FIXED Kill Intelligence: Creator tag detection now checks 'creator', 'Creator', and 'KilledBy' (string and obj).")
-UpdateLogTab:CreateLabel("- FIXED Priority Point Tracking: Priority/Intel players now gain +15 points per kill.")
-UpdateLogTab:CreateLabel("- NEW Disconnect Notification: Tracked players who leave now trigger a notification with their Intel category.")
-UpdateLogTab:CreateLabel("- NEW Unload Notification: Termination now shows a native Roblox notification (Rayfield may be destroyed).")
-UpdateLogTab:CreateLabel("- NEW Feature 17 — Rapid Aim Mode Cycle: Configurable keybind cycles Legit → Advanced Legit → Blatant.")
-UpdateLogTab:CreateLabel("- NEW Feature 24 — Auto-Update Checker: Checks GitHub version.txt on load and notifies if newer version found.")
-UpdateLogTab:CreateLabel("- NEW Feature 27 — Debug Mode: Toggle verbose console output for targeting, threats, and mode switches.")
-UpdateLogTab:CreateLabel("- NEW Expanded Theming: 11 new color pickers covering Chams, OOF, Kill Flash, Priority, Threat, Nemesis, Blacklisted.")
-
-UpdateLogTab:CreateSection("Version 2.1.0 (Current Release)")
-UpdateLogTab:CreateLabel("- Performance Engine Rewrite: Replaced frame-skip monolith with a 4-slot rotating pipeline.")
-UpdateLogTab:CreateLabel("- Pipeline Design: Each slot (ESP scan / Aimbot scan / VoS raycasts / Maintenance) fires one per frame.")
-UpdateLogTab:CreateLabel("- Target selection and aim application now run every frame — aimbot is never delayed by performance mode.")
-UpdateLogTab:CreateLabel("- Three background task.spawn loops (NPC cache / Workspace sweep / Cache cleanup) replace frame counters.")
-UpdateLogTab:CreateLabel("- Silent Aim Fix: Mouse movement (Advanced Legit) is blocked when SA is on; camera modes still drive correctly.")
-UpdateLogTab:CreateLabel("- Advanced Legit Rewrite: Smoothstep ease + independent X/Y smoothness sliders + micro-offset humanizer.")
-UpdateLogTab:CreateLabel("- Blatant Snap Speed: Configurable 5-100 lerp speed slider (100 = instant, legacy behavior).")
-UpdateLogTab:CreateLabel("- Panic Keybind Fix: Uses enum-to-enum comparison via GetKeyCode() — no longer breaks after config restore.")
-UpdateLogTab:CreateLabel("- Intelligent Equip Filter: Keyword classifier prevents aimbot activation for non-weapon tools.")
-UpdateLogTab:CreateLabel("- Weapon-Type Gating: Triggerbot blocked for classified melee weapons; proximity melee blocked for ranged.")
-UpdateLogTab:CreateLabel("- Blacklisted Player ESP: Blacklisted players now show with [BLACKLISTED] tag in orange instead of disappearing.")
-UpdateLogTab:CreateLabel("- Hide Blacklisted ESP toggle: Optionally fully hide blacklisted players from ESP instead of tagging them.")
-UpdateLogTab:CreateLabel("- VoS Priority Parts: Configurable list of body parts checked first in Visible On Screen mode.")
-UpdateLogTab:CreateLabel("- New TASFF_Lists.lua module: Keyword tables for weapons, melee, non-weapons; game configs; feature list.")
-UpdateLogTab:CreateLabel("- Session statistics fields added: target locks, trigger fires, threats/nemeses added.")
-
-UpdateLogTab:CreateSection("Version 2.1.0")
-UpdateLogTab:CreateLabel("- Final Architecture Push: Consolidated performance, security, and rendering engines.")
-UpdateLogTab:CreateLabel("- Aimbot Engine: Moved candidate scanning entirely out of pipeline for zero-delay lock-on.")
-UpdateLogTab:CreateLabel("- Threat Neutralization: Instant target death detection added to render loop, fixing delayed threat removal.")
-UpdateLogTab:CreateLabel("- Dynamic FOV Auto-Scale: FOV constraint now scales down seamlessly across distances.")
-UpdateLogTab:CreateLabel("- Advanced Combat: Health Threshold Gating added to ignore players below specific HP ranges.")
-UpdateLogTab:CreateLabel("- Advanced Automation: Auto-Disable Aimbot on Death added to prevent post-death buggy locks.")
-UpdateLogTab:CreateLabel("- Threat Intelligence: FP Cooldowns, Prox Radius limits, Velocity direction checks, and Nemesis Decay added.")
-UpdateLogTab:CreateLabel("- Security & Metrics: Integrated Anti-AFK watcher, FPS Auto-Tuner, and Notification Throttling.")
-UpdateLogTab:CreateLabel("- Storage: Tool Registry Save/Load functionality and Game Config Quick-Load templates implemented.")
-
-UpdateLogTab:CreateSection("Version 2.0.5")
-
-UpdateLogTab:CreateLabel("- The 'Intel Update': Consolidated all player-tracking features into a new centralized Intel Tab.")
-UpdateLogTab:CreateLabel("- Visible on Screen (VoS) Rewrite: Now raycasts 20 limbs independently and ignores own body parts.")
-UpdateLogTab:CreateLabel("- Priority Behavior Overhaul: Replaced StrictPrioritize with Boost vs. Exclusive dropdown options.")
-UpdateLogTab:CreateLabel("- Live Intel Monitor: Dynamic dashboard tracking Marked, Threats, and Nemeses with a points-based heatmap.")
-UpdateLogTab:CreateLabel("- Auto-Flag Systems: Kill-Count Threat detection and automated Nemesis Strike system added.")
-UpdateLogTab:CreateLabel("- Threat Neutralization: Automatically removes Threat tags when the enemy is neutralized (dies).")
-UpdateLogTab:CreateLabel("- Spectator Mode: Bound your camera to any tracked target to monitor them remotely (fixed native conflicts).")
-UpdateLogTab:CreateLabel("- Live Kill Feed: Built-in notification feed explicitly designed to debug Intel logic and false positives.")
-UpdateLogTab:CreateLabel("- Assorted Bug Fixes: Fixed Sticky Aim gaps, Enum.KeyCode errors on mouse binds, and wallcheck conflicts.")
-
-UpdateLogTab:CreateSection("Version 2.0.0")
-UpdateLogTab:CreateLabel("- Version bump to V2.0.0 � modular refactor across 4 files (State/Core/UI/Loader)")
-UpdateLogTab:CreateLabel("- Resolved the Lua 200-local engine limit via _G.TASFF_State shared module pattern")
-UpdateLogTab:CreateLabel("- Restored the original TASFF black-and-red UI theme with complete monolith feature parity")
-UpdateLogTab:CreateLabel("- Completely decoupled ESP rendering from heavy targeting math for butter-smooth 60+ FPS visuals")
-UpdateLogTab:CreateLabel("- Multi-hop penetrative wallcheck (up to 15 hops) for advanced glass/decal penetration")
-UpdateLogTab:CreateLabel("- Patched frustum culling bug where off-screen targets were dropped, fully restoring OOF Arrows")
-UpdateLogTab:CreateLabel("- Fixed Rayfield array-unpacking bugs that previously broke Crosshairs and Visual Mode logic")
-UpdateLogTab:CreateLabel("- Added Fine Control Color Pickers for precise Dynamic Visibility (Visible/Hidden) overrides")
-UpdateLogTab:CreateLabel("- Frame-scope scalar caching in render loop for reduced overhead")
-UpdateLogTab:CreateLabel("- Combined CharacterAdded handler (threat hook + tool observer in one connection)")
-UpdateLogTab:CreateLabel("- Re-structured the rendering loop to ensure visual overlays persist accurately on dropped frames")
-UpdateLogTab:CreateLabel("- Added UTF-8 BOM stripping and HTML error detection to the module loader")
-UpdateLogTab:CreateLabel("- Corrected ConfigurationSaving folder path to match current version")
-
-UpdateLogTab:CreateSection("Version 1.5.0")
-UpdateLogTab:CreateLabel("- Completely overhauled the UI layout into professional, structured categories (HUD, Tactical Overlays, etc.)")
-UpdateLogTab:CreateLabel("- Fixed a critical metamethod inversion that broke Silent Aim for native weapons and ruined wallchecks")
-UpdateLogTab:CreateLabel("- Fixed a math bug where Distance Priority sorted by 2D screen distance instead of true 3D world distance")
-UpdateLogTab:CreateLabel("- Fixed drawing persistence glitches (Invisible FOV) by bypassing backend geometry updates when hidden")
-UpdateLogTab:CreateLabel("- Fixed missing variable serialization in the Preset Configuration Saver and Factory Reset protocols")
-UpdateLogTab:CreateLabel("- Fixed rendering invisibility issues across all ESP geometries (Drawing API transparency mappings)")
-UpdateLogTab:CreateLabel("- Added a missing Remove Tool registry function to the Weapon & Inventory Automation section")
-UpdateLogTab:CreateLabel("- Patched multiple global scope leaks and a potential fatal crash in the Skeletal Mapping routine")
-
-UpdateLogTab:CreateSection("Version 1.4.5")
-UpdateLogTab:CreateLabel("- Added Advanced Legit Mode utilizing Bezier curves for humanized camera smoothing")
-UpdateLogTab:CreateLabel("- Added Dynamic Recoil Control (DRC) to mimic natural human recoil compensation")
-UpdateLogTab:CreateLabel("- Added Virtual Flickbot (Cursor Aim) to instantly teleport the invisible mouse cursor")
-UpdateLogTab:CreateLabel("- Implemented Universal Silent Aim (Namecall Hooking) to redirect bullets silently")
-UpdateLogTab:CreateLabel("- Added Target Switch Delay to pause target acquisition after kills (prevents robotic snapping)")
-UpdateLogTab:CreateLabel("- Added Randomized Hitboxes to bypass statistical anti-cheats in Legit mode")
-UpdateLogTab:CreateLabel("- Implemented The Nemesis System for tiered death tracking and targeted retaliation")
-UpdateLogTab:CreateLabel("- Added Marking Input Modes (Mouse, Keybind, or Both) to prevent accidental priority marking")
-UpdateLogTab:CreateLabel("- Added Dynamic Visibility Colors (Green=Visible, Red=Hidden) to ESP geometries")
-UpdateLogTab:CreateLabel("- Upgraded all Info Tags to Drawing API for complete Stream-Proofing (OBS bypass)")
-UpdateLogTab:CreateLabel("- Added Off-Screen Indicators (OOF Arrows) to track targets located behind the camera")
-UpdateLogTab:CreateLabel("- Added ESP Snaplines (Tracers) with configurable origin point positioning")
-UpdateLogTab:CreateLabel("- Added Clipboard Preset Import & Export (JSON) for easy configuration sharing")
-UpdateLogTab:CreateLabel("- Added Auto-Save Configuration protocol to preserve settings upon script unload")
-
-UpdateLogTab:CreateSection("Version 1.4.0")
-UpdateLogTab:CreateLabel("- Added Threat Detector & Threat Memory subsystem with configurable timeout")
-UpdateLogTab:CreateLabel("- Implemented Strict Prioritize targeting mode")
-UpdateLogTab:CreateLabel("- Added Invisible FOV mode (maintains lock boundary without rendering circle)")
-UpdateLogTab:CreateLabel("- Added Penetrative Wallchecks (No Collision, Transparency Threshold & Decals)")
-UpdateLogTab:CreateLabel("- Implemented Auto ADS (Aim Down Sights) automatic holding")
-UpdateLogTab:CreateLabel("- Added Click-to-Mark / Keybind-to-Mark and Focus Mode ESP filtering")
-UpdateLogTab:CreateLabel("- Added Triggerbot Click Modes (Virtual vs Physical) & 3rd Person coordinate support")
-UpdateLogTab:CreateLabel("- Added Key Triggerbot with Single Press, Mash, and Hold modes")
-UpdateLogTab:CreateLabel("- Added Dedicated Advanced Settings Tab and Misc utilities (Panic, Reset, Clean Unload)")
-UpdateLogTab:CreateLabel("- Full frame-skipping Performance engine with runtime mode indicator")
-
-UpdateLogTab:CreateSection("Version 1.3.5")
-UpdateLogTab:CreateLabel("- Added Aimbot & ESP Render Distance culling sliders (100-1000 studs)")
-UpdateLogTab:CreateLabel("- Implemented Target Grace Period delay timer before locking onto targets")
-UpdateLogTab:CreateLabel("- Added Chams ESP mode featuring dynamic transparency/opacity controls")
-UpdateLogTab:CreateLabel("- Added 2D Box ESP visual overlay")
-UpdateLogTab:CreateLabel("- Added Skeleton ESP rendering with full support for R6 & R15 avatar joint structures")
-UpdateLogTab:CreateLabel("- Fixed table reference mutation corruption on cached ignore list raycasts")
-UpdateLogTab:CreateLabel("- Fixed Melee Mode execution structure to operate independently of Aimbot lock states")
-UpdateLogTab:CreateLabel("- Added a brand new Presets Tab featuring profile saving, loading, renaming, and deletion")
-
-UpdateLogTab:CreateSection("Version 1.3.0")
-UpdateLogTab:CreateLabel("- Added Target Near Center crosshair prioritization to Combat options")
-UpdateLogTab:CreateLabel("- Added Inventory Auto-Activation trigger system upon tool equipping features")
-UpdateLogTab:CreateLabel("- Added Instant Tool-Instance Blacklist registration action buttons to Settings")
-UpdateLogTab:CreateLabel("- Implemented advanced vector-rendered screen center Crosshairs (Plus, Square, Circle)")
-UpdateLogTab:CreateLabel("- Added Crosshair color mapping configurations straight to Customization presets")
-UpdateLogTab:CreateLabel("- Added character text extensions: Show Display Name and structural Tool Check tags")
-
-UpdateLogTab:CreateSection("Version 1.2.5")
-UpdateLogTab:CreateLabel("- Added full-screen targeting mechanics automatically when FOV visual elements are disabled")
-UpdateLogTab:CreateLabel("- Added complete Autoclicker Tab featuring customizable speed interval mechanics")
-UpdateLogTab:CreateLabel("- Implemented input options: Repeated rapid Mash triggers vs continuous input Hold states")
-UpdateLogTab:CreateLabel("- Added Combat Melee Mode subsystem with independent range and interval calculations")
-UpdateLogTab:CreateLabel("- Added fully separated Highlight NPCs and Show NPC Info toggle parameters")
-UpdateLogTab:CreateLabel("- Added persistent Sticky Aim mechanics with automatic target validation filters")
-UpdateLogTab:CreateLabel("- Fixed Sticky Aim wall clipping bugs by routing locks directly into visibility raycasts")
-
-UpdateLogTab:CreateSection("Version 1.2.0")
-UpdateLogTab:CreateLabel("- Added a brand new Customization Tab with color presets")
-UpdateLogTab:CreateLabel("- Fixed the respawn bug where player highlights would vanish")
-UpdateLogTab:CreateLabel("- Linked the Show Target Info text color directly to custom themes")
-UpdateLogTab:CreateLabel("- Removed the broken dynamic interface theme reloader for stability")
-UpdateLogTab:CreateLabel("- Added Visible On Screen, located in target bodypart dropdown")
-
--- // â”€â”€ Load Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
--- MUST be called last. Restores all flagged values from disk and
--- fires each element's Callback, which writes them back into S.
-
-Rayfield:LoadConfiguration()
-
-print("[TASFF UI] Interface constructed. Configuration loaded.")
+print("[TASFF State] Shared state table initialised.")

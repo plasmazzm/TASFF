@@ -160,6 +160,7 @@ _G.TASFF_State = {
     ThreatHighlightColor        = Color3.fromRGB(255, 60, 0),    -- red-orange for threat
     NemesisHighlightColor       = Color3.fromRGB(150, 0, 255),   -- purple for nemesis
     KillFlashColor              = Color3.fromRGB(255, 255, 255), -- white flash on kill
+    KillFlashDuration           = 0.8,                           -- seconds for flash to fade
     OOFArrowColor               = Color3.fromRGB(255, 100, 0),
     ChamsColor                  = Color3.fromRGB(255, 30, 30),
     BoxColor                    = Color3.fromRGB(200, 40, 40),

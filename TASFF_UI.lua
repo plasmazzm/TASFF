@@ -335,6 +335,8 @@ end})
 MainTab:CreateSlider({Name = "Maximum Acquisition Range (Studs)", Range = {100, 1000}, Increment = 25, CurrentValue = S.AimbotRenderDistance, Flag = "AimbotRenderDist", Callback = function(v)
     S.AimbotRenderDistance = v
 end})
+MainTab:CreateToggle({Name = "Enable Health Threshold Gate", CurrentValue = S.HealthThresholdEnabled, Flag = "HealthThresholdEnabled", Callback = function(v) S.HealthThresholdEnabled = v end})
+MainTab:CreateSlider({Name = "Minimum Target HP to Engage (%)", Range = {0, 100}, Increment = 1, CurrentValue = S.HealthThreshold or 0, Flag = "HealthThreshold", Callback = function(v) S.HealthThreshold = v end})
 
 MainTab:CreateSection("Smoothing & Prediction")
 MainTab:CreateSlider({Name = "Tracking Smoothness (Legit/Camera)", Range = {0.1, 5}, Increment = 0.1, CurrentValue = S.Smoothness, Flag = "SmoothSpeed", Callback = function(v)
@@ -428,6 +430,8 @@ VisualTab:CreateToggle({Name = "Render Player Tags", CurrentValue = S.UseInfoTag
 VisualTab:CreateToggle({Name = "Render NPC Tags", CurrentValue = S.UseNPCInfoTag, Flag = "UseNPCInfoTag", Callback = function(v) S.UseNPCInfoTag = v end})
 VisualTab:CreateToggle({Name = "Use Display Names (vs Usernames)", CurrentValue = S.ShowDisplayName, Flag = "ShowDisplay", Callback = function(v) S.ShowDisplayName = v end})
 VisualTab:CreateToggle({Name = "Display Equipped Weapon/Tool", CurrentValue = S.ShowToolCheck, Flag = "UseToolCheck", Callback = function(v) S.ShowToolCheck = v end})
+VisualTab:CreateToggle({Name = "Show [LOCKED] / [SILENT] on Tag", CurrentValue = S.ShowLockIndicators, Flag = "ShowLockIndicators", Callback = function(v) S.ShowLockIndicators = v end})
+VisualTab:CreateToggle({Name = "Kill Confirmation Flash (White)", CurrentValue = S.KillConfirmFlashEnabled, Flag = "KillConfirmFlash", Callback = function(v) S.KillConfirmFlashEnabled = v end})
 
 VisualTab:CreateSection("Heads-Up Display (HUD)")
 VisualTab:CreateParagraph({
@@ -440,6 +444,8 @@ VisualTab:CreateToggle({Name = "Render FOV Boundary (Circle)", CurrentValue = S.
 end})
 VisualTab:CreateToggle({Name = "Invisible FOV Constraint", CurrentValue = S.InvisibleFOV, Flag = "InvisibleFOV", Callback = function(v) S.InvisibleFOV = v end})
 VisualTab:CreateSlider({Name = "FOV Boundary Radius", Range = {30, 600}, Increment = 5, CurrentValue = S.FOVSize, Flag = "FOVSize", Callback = function(v) S.FOVSize = v end})
+VisualTab:CreateToggle({Name = "Dynamic FOV Auto-Scale by Distance", CurrentValue = S.DynamicFOVEnabled, Flag = "DynamicFOVEnabled", Callback = function(v) S.DynamicFOVEnabled = v end})
+VisualTab:CreateSlider({Name = "Dynamic FOV Max Radius", Range = {30, 1000}, Increment = 10, CurrentValue = S.DynamicFOVMax or 400, Flag = "DynamicFOVMax", Callback = function(v) S.DynamicFOVMax = v end})
 VisualTab:CreateDropdown({
     Name          = "FOV Tracking Origin",
     Options       = {"Screen Center", "Mouse Tracking"},
@@ -603,6 +609,27 @@ IntelTab:CreateButton({
     end
 })
 
+local LockHistoryLabel = IntelTab:CreateParagraph({
+    Title   = "Target Lock History",
+    Content = "No locks yet."
+})
+S.LockHistoryLabel = LockHistoryLabel
+task.spawn(function()
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        task.wait(1)
+        if S.LockHistoryLabel and S.LockHistory then
+            local lines = {}
+            for i, log in ipairs(S.LockHistory) do
+                local ago = math.floor(tick() - log.time)
+                table.insert(lines, i .. ". " .. log.name .. " (" .. ago .. "s ago)")
+            end
+            if #lines > 0 then
+                pcall(function() S.LockHistoryLabel:Set({Title="Target Lock History", Content=table.concat(lines, "\n")}) end)
+            end
+        end
+    end
+end)
+
 IntelTab:CreateSection("Priority Settings")
 IntelTab:CreateParagraph({
     Title   = "Priority Behavior Mode",
@@ -666,6 +693,8 @@ end})
 IntelTab:CreateSlider({Name = "Threat Memory Expiration (Seconds)", Range = {1, 60}, Increment = 1, CurrentValue = S.ThreatTimeout, Flag = "ThreatTimeout", Callback = function(v)
     S.ThreatTimeout = v
 end})
+IntelTab:CreateSlider({Name = "Proximity Threat Radius (Studs)", Range = {20, 200}, Increment = 10, CurrentValue = S.ThreatProximityRadius or 80, Flag = "ThreatProximityRadius", Callback = function(v) S.ThreatProximityRadius = v end})
+IntelTab:CreateSlider({Name = "False Positive Cooldown (Seconds)", Range = {0.5, 10}, Increment = 0.5, CurrentValue = S.ThreatFPCooldown or 1.5, Flag = "ThreatFPCooldown", Callback = function(v) S.ThreatFPCooldown = v end})
 IntelTab:CreateToggle({Name = "Auto-Blacklist Expired Threats", CurrentValue = S.BlacklistExpiredThreats, Flag = "BlacklistExpiredThreats", Callback = function(v)
     S.BlacklistExpiredThreats = v
 end})
@@ -797,6 +826,20 @@ SettingsTab:CreateToggle({
     Flag         = "HideBlacklistedESP",
     Callback     = function(v) S.HideBlacklistedESP = v end
 })
+SettingsTab:CreateToggle({
+    Name         = "Enable ESP Whitelist Filter",
+    CurrentValue = S.ESPWhitelistEnabled,
+    Flag         = "ESPWhitelistEnabled",
+    Callback     = function(v) S.ESPWhitelistEnabled = v end
+})
+SettingsTab:CreateDropdown({
+    Name            = "ESP Whitelist Registry (Only target & show these)",
+    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
+    CurrentOption   = {},
+    MultipleOptions = true,
+    Flag            = "ESPWhitelistDropdown",
+    Callback        = function(v) S.ESPWhitelist = v end
+})
 
 
 SettingsTab:CreateSection("Weapon & Inventory Automation")
@@ -806,6 +849,9 @@ SettingsTab:CreateParagraph({
 })
 SettingsTab:CreateToggle({Name = "Auto-Engage Aimbot on Weapon Equip", CurrentValue = S.AutoEnableOnEquip, Flag = "AutoEquipAim", Callback = function(v)
     S.AutoEnableOnEquip = v
+end})
+SettingsTab:CreateToggle({Name = "Auto-Disable Aimbot on Death", CurrentValue = S.AutoDisableOnDeath, Flag = "AutoDisableOnDeath", Callback = function(v)
+    S.AutoDisableOnDeath = v
 end})
 SettingsTab:CreateToggle({
     Name         = "Intelligent Equip Filter (Keyword Classifier)",
@@ -874,6 +920,26 @@ SettingsTab:CreateButton({
         else
             if S.Notify then S.Notify({Title = "TASFF Arsenal", Content = "Select a valid tool to remove.", Duration = 2, Image = "alert-triangle"}) end
         end
+    end
+})
+
+SettingsTab:CreateButton({
+    Name     = "Save Tool Registry to Disk",
+    Callback = function()
+        if S.SaveToolBlacklist then 
+            S.SaveToolBlacklist() 
+            if S.Notify then S.Notify({Title="TASFF Arsenal", Content="Tool registry saved permanently.", Duration=2, Image="save"}) end
+        end
+    end
+})
+
+SettingsTab:CreateButton({
+    Name     = "Clear Tool Registry",
+    Callback = function()
+        S.ToolBlacklist = {}
+        if BlacklistDropdown then pcall(function() BlacklistDropdown:Refresh({"No Registry Items Found"}, true) end) end
+        if S.SaveToolBlacklist then S.SaveToolBlacklist() end
+        if S.Notify then S.Notify({Title="TASFF Arsenal", Content="Tool registry cleared.", Duration=2, Image="trash"}) end
     end
 })
 
@@ -1027,6 +1093,34 @@ PresetsTab:CreateButton({
         else
             if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected to delete.", Duration = 2, Image = "alert-triangle"}) end
         end
+    end
+})
+
+PresetsTab:CreateSection("Built-In Game Profiles")
+PresetsTab:CreateParagraph({
+    Title   = "Quick-Load Configs",
+    Content = "Pre-configured profiles for popular games. Loading these will override your current settings."
+})
+
+PresetsTab:CreateButton({
+    Name = "Load Da Hood Config (Legit)",
+    Callback = function()
+        pcall(function() Rayfield.Flags["AimMethod"]:Set("Legit (Camera)") end)
+        pcall(function() Rayfield.Flags["TargetPart"]:Set("Head") end)
+        pcall(function() Rayfield.Flags["PredIntense"]:Set(0.12) end)
+        pcall(function() Rayfield.Flags["SmoothSpeed"]:Set(1.5) end)
+        if S.Notify then S.Notify({Title="TASFF Presets", Content="Loaded Da Hood (Legit) profile.", Duration=2, Image="check"}) end
+    end
+})
+
+PresetsTab:CreateButton({
+    Name = "Load Phantom Forces Config (Blatant)",
+    Callback = function()
+        pcall(function() Rayfield.Flags["AimMethod"]:Set("Blatant") end)
+        pcall(function() Rayfield.Flags["TargetPart"]:Set("Head") end)
+        pcall(function() Rayfield.Flags["BlatantSnapSpeed"]:Set(100) end)
+        pcall(function() Rayfield.Flags["WallCheck"]:Set(true) end)
+        if S.Notify then S.Notify({Title="TASFF Presets", Content="Loaded Phantom Forces (Blatant) profile.", Duration=2, Image="check"}) end
     end
 })
 
@@ -1322,6 +1416,10 @@ MiscTab:CreateParagraph({
 MiscTab:CreateToggle({Name = "Silence All Notifications", CurrentValue = S.DisableNotifications, Flag = "DisableNotifications", Callback = function(v)
     S.DisableNotifications = v
 end})
+MiscTab:CreateSlider({Name = "Notification Throttle (Max per 3s)", Range = {1, 10}, Increment = 1, CurrentValue = S.NotifyMaxPer3s or 5, Flag = "NotifyThrottle", Callback = function(v) S.NotifyMaxPer3s = v end})
+
+MiscTab:CreateToggle({Name = "Anti-AFK (Prevent Kick)", CurrentValue = S.AntiAFKEnabled, Flag = "AntiAFK", Callback = function(v) S.AntiAFKEnabled = v end})
+MiscTab:CreateToggle({Name = "FPS Watcher (Auto-Tune Performance Mode)", CurrentValue = S.FPSWatcherEnabled, Flag = "FPSWatcher", Callback = function(v) S.FPSWatcherEnabled = v end})
 
 MiscTab:CreateKeybind({
         Name           = "Global Panic Keybind",

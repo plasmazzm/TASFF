@@ -195,6 +195,8 @@ _G.TASFF_State = {
     RapidModeCycleKey           = "P",       -- Feature 17: cycles aim mode on press
     ScriptInitialized           = false,
     DisableNotifications        = false,
+    NotificationDuration        = 3,     -- global notification duration override (seconds)
+    SuppressRayfieldAds         = false, -- hide Rayfield periodic ad notifications
     DebugMode                   = false,     -- Feature 27: verbose console output
     PresetFileName              = "TASFF_V1.5.5_Presets.json",
     ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
@@ -206,7 +208,10 @@ _G.TASFF_State = {
     SessionTriggerFires         = 0,
     SessionThreatsAdded         = 0,
     SessionNemesesAdded         = 0,
-    SessionUserKills            = 0,
+    SessionUserKills            = 0,     -- kills where local player was confirmed killer
+
+    -- // ── Intel Kill Tracking ─────────────────────────────────── // --
+    PriorityPlayerKills         = {},    -- {[playerName] = killCount} for priority/intel players
 
     -- // ── v2.1.0 Feature Flags ─────────────────────────────────── // --
     HideBlacklistedESP          = false,     -- false = show [BLACKLISTED] tag; true = fully hide

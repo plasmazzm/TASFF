@@ -107,9 +107,9 @@ local FeatureList = {
 }
 
 S.FeatureCount = #FeatureList
-S.ToggleCount = 76     -- -1 IgnoreDead toggle
+S.ToggleCount = 77     -- +1 HighlightPresetToggle
 S.SliderCount = 31     -- (+1 KillFlashDuration, -1 duplicate ChamsOpacity)
-S.DropdownCount = 39   -- +1 BlacklistColorDd
+S.DropdownCount = 40   -- +1 HighlightColorDd
 S.KeybindCount = 5
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --

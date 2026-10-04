@@ -206,6 +206,7 @@ _G.TASFF_State = {
     SessionTriggerFires         = 0,
     SessionThreatsAdded         = 0,
     SessionNemesesAdded         = 0,
+    SessionUserKills            = 0,
 
     -- // ── v2.1.0 Feature Flags ─────────────────────────────────── // --
     HideBlacklistedESP          = false,     -- false = show [BLACKLISTED] tag; true = fully hide

@@ -78,6 +78,7 @@ local function Notify(options)
     local limit = S.NotifyMaxPer3s or 5
     if _notifyCount >= limit then return end  -- drop excess
     _notifyCount = _notifyCount + 1
+    if S.NotificationDuration then options.Duration = S.NotificationDuration end
     if Rayfield and Rayfield.Notify then
         pcall(function() Rayfield:Notify(options) end)
     end
@@ -251,6 +252,7 @@ local function TriggerPanic()
     S.MasterEnabled = false
     S.AimbotActive  = false
     S.CurrentTarget = nil
+    S.LastCustomTargetData = nil
     S.PanicLocked   = true   -- permanent lock — only cleared by re-execution
     SetADSState(false)
     if S.IsHoldingClick then
@@ -808,6 +810,7 @@ end)
 -- Runs IsVisibleWallcheck for every player + NPC one-by-one with a task.wait() between each.
 -- The render pipeline reads S.VisibilityPrecomputed[model] (a simple bool lookup — no raycasts).
 -- This completely moves all multi-hop raycast cost off the render thread.
+-- No gap wait at end — loop restarts immediately so data stays fresher with many players.
 task.spawn(function()
     task.wait(0.5)   -- slight stagger so ignore list is already built
     while getgenv().TASFF and getgenv().TASFF.Running do
@@ -837,15 +840,22 @@ task.spawn(function()
                     end
                 end
             end
+
+            -- Evict stale entries (disconnected players / despawned NPCs)
+            for model, _ in pairs(S.VisibilityPrecomputed) do
+                if not model or not model.Parent then
+                    S.VisibilityPrecomputed[model] = nil
+                end
+            end
         else
             -- Wallcheck off: treat everyone as visible so aimbot works normally
             S.VisibilityPrecomputed = {}
+            task.wait(0.2)
         end
-
-        local biv = (S.BackgroundIntervals or {})[S.PerformanceMode or "Medium"] or {}
-        task.wait(biv.NPC or 0.8)   -- full rest period after completing the sweep
+        -- No extra task.wait here — restart immediately for tight update cadence
     end
 end)
+
 
 pcall(UpdateWorkspaceIgnores)
 pcall(UpdateNPCs)
@@ -892,7 +902,7 @@ local function HookAutoDisableOnDeath(char)
     if not hum then return end
     local conn; conn = hum.Died:Connect(function()
         if S.AutoDisableOnDeath then
-            S.AimbotActive = false; S.CurrentTarget = nil
+            S.AimbotActive = false; S.CurrentTarget = nil; S.LastCustomTargetData = nil
             if S.SetADSState then S.SetADSState(false) end
             Notify({Title="TASFF",Content="Aimbot disabled — you died.",Duration=2,Image="x"})
         end
@@ -1115,16 +1125,11 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         local isTeammate = isPlayer and Player.Team and pObj.Team and pObj.Team == Player.Team
         if S.TeamCheck and isTeammate then return end
         -- v2.1.0 Render-thread wallcheck elimination:
-        -- Read from S.VisibilityPrecomputed (set by background loop ③, one yield per entity).
-        -- Falls back to live raycast ONLY on cold start (entry is nil before first sweep completes).
+        -- Read from S.VisibilityPrecomputed (set by background loop ③).
+        -- If nil (cold start / new entity), assume optimistically visible to prevent render thread hitch.
         if performWallCheck then
             local precomp = S.VisibilityPrecomputed[model]
-            if precomp == nil then
-                -- Cold start: compute live once, then background loop takes over
-                precomp = IsVisibleWallcheck(model, S.ActivePartName, customIgnoreList)
-                S.VisibilityPrecomputed[model] = precomp
-            end
-            if not precomp then return end
+            if precomp == false then return end
         end
 
         local pos = root.Position
@@ -1195,7 +1200,7 @@ local function ListenForTools(char)
     end)
     S.ToolRemovedConnection = char.ChildRemoved:Connect(function(child)
         if S.AutoEnableOnEquip and child:IsA("Tool") then
-            S.AimbotActive = false; S.CurrentTarget = nil; SetADSState(false)
+            S.AimbotActive = false; S.CurrentTarget = nil; S.LastCustomTargetData = nil; SetADSState(false)
         end
     end)
 end
@@ -1236,25 +1241,30 @@ local function HookNeutralization(p)
                 Notify({Title="TASFF Intel", Content=killerName.." killed "..p.Name, Duration=2, Image="crosshair"})
             end
 
-            if killerObj and killerObj ~= Player and killerObj ~= p then
-                -- Add to global kill count for auto-flagging
-                if S.KillCountThreatEnabled then
-                    S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
-                    if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
-                        local kData = S.IntelPlayers and S.IntelPlayers[killerName]
-                        local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
-                        if not isTracked then
-                            if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
-                            Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
+            if killerObj and killerObj ~= p then
+                if killerObj == Player then
+                    -- Local player got a kill
+                    S.SessionUserKills = (S.SessionUserKills or 0) + 1
+                else
+                    -- Add to global kill count for auto-flagging
+                    if S.KillCountThreatEnabled then
+                        S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
+                        if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
+                            local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+                            local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
+                            if not isTracked then
+                                if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
+                                Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
+                            end
                         end
                     end
-                end
-                
-                -- Issue 3 Fix: Give prioritized/intel players points for scoring a kill
-                local isPrio = table.find(S.PriorityPlayers or {}, killerName)
-                local kData = S.IntelPlayers and S.IntelPlayers[killerName]
-                if isPrio or kData then
-                    if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
+                    
+                    -- Issue 3 Fix: Give prioritized/intel players points for scoring a kill
+                    local isPrio = table.find(S.PriorityPlayers or {}, killerName)
+                    local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+                    if isPrio or kData then
+                        if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
+                    end
                 end
             end
 
@@ -1566,6 +1576,12 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 S.CurrentTarget = filtered[1]
                 if S.CurrentTarget and (not prev or prev.Instance ~= S.CurrentTarget.Instance) then
                     S.SessionTargetLocks = (S.SessionTargetLocks or 0) + 1
+                    -- Instant update for VOS caching to prevent snapping back to previous target
+                    if S.CurrentTarget.Root then
+                        S.LastCustomTargetData = {Part = S.CurrentTarget.Root, Position = S.CurrentTarget.Root.Position}
+                    else
+                        S.LastCustomTargetData = nil
+                    end
                     -- Feature 19: Lock History
                     if not S.LockHistory then S.LockHistory = {} end
                     table.insert(S.LockHistory, 1, {name=S.CurrentTarget.Name, time=tick()})

@@ -78,12 +78,38 @@ local function Notify(options)
     local limit = S.NotifyMaxPer3s or 5
     if _notifyCount >= limit then return end  -- drop excess
     _notifyCount = _notifyCount + 1
-    if S.NotificationDuration then options.Duration = S.NotificationDuration end
+    -- Apply global notification duration override
+    if S.NotificationDuration and S.NotificationDuration > 0 then
+        options = setmetatable({}, {__index = options})
+        options.Duration = S.NotificationDuration
+    end
     if Rayfield and Rayfield.Notify then
         pcall(function() Rayfield:Notify(options) end)
     end
 end
 S.Notify = Notify
+
+-- Suppress Rayfield's periodic advertising notification (the "Loving this UI library?" popup)
+-- We do this by hooking the existing Notify method after Rayfield loads.
+task.spawn(function()
+    task.wait(2)   -- give Rayfield time to fully init before we patch
+    if not Rayfield then return end
+    local origNotify = Rayfield.Notify
+    if not origNotify then return end
+    Rayfield.Notify = function(self, opts)
+        -- Block notifications that originate from Rayfield's own advertising
+        if S.SuppressRayfieldAds then
+            local t = (opts and opts.Title) or ""
+            local c = (opts and opts.Content) or ""
+            if t:find("Rayfield") or t:find("sirius") or t:find("advertisement") or
+               c:find("sirius.menu") or c:find("Loving this") or c:find("ui library") then
+                return
+            end
+        end
+        return origNotify(self, opts)
+    end
+end)
+
 
 
 local function NewDrawing(className)
@@ -252,7 +278,6 @@ local function TriggerPanic()
     S.MasterEnabled = false
     S.AimbotActive  = false
     S.CurrentTarget = nil
-    S.LastCustomTargetData = nil
     S.PanicLocked   = true   -- permanent lock — only cleared by re-execution
     SetADSState(false)
     if S.IsHoldingClick then
@@ -309,11 +334,30 @@ S.UnloadScript = UnloadScript
 local function GetPlayerNames()
     local names = {}
     for _, v in ipairs(Players:GetPlayers()) do
-        if v ~= Player then table.insert(names, v.Name) end
+        if v ~= Player then
+            -- Show DisplayName alongside username if they differ
+            local label = v.Name
+            if v.DisplayName and v.DisplayName ~= v.Name then
+                label = v.DisplayName .. " (" .. v.Name .. ")"
+            end
+            table.insert(names, label)
+        end
     end
     return names
 end
-S.GetPlayerNames = GetPlayerNames
+-- Helper: resolve a dropdown label back to the actual username
+local function ResolvePlayerName(label)
+    for _, v in ipairs(Players:GetPlayers()) do
+        if v ~= Player then
+            if v.Name == label then return v.Name end
+            local expected = v.DisplayName .. " (" .. v.Name .. ")"
+            if expected == label then return v.Name end
+        end
+    end
+    return label  -- fallback: treat as raw name
+end
+S.GetPlayerNames   = GetPlayerNames
+S.ResolvePlayerName = ResolvePlayerName
 
 local function SyncPriorityUI()
     if S.PriorityDropdownRef and S.PriorityDropdownRef.Refresh then
@@ -321,7 +365,13 @@ local function SyncPriorityUI()
     end
     if S.PriorityMonitorLabel then
         local text = ""
-        for _, name in ipairs(S.PriorityPlayers) do text = text .. "* " .. name .. "\n" end
+        for _, name in ipairs(S.PriorityPlayers) do
+            local po = Players:FindFirstChild(name)
+            local dn = po and po.DisplayName ~= name and (" (" .. po.DisplayName .. ")") or ""
+            local kills = (S.PriorityPlayerKills or {})[name]
+            local killStr = kills and kills > 0 and ("  ☠ " .. kills) or ""
+            text = text .. "★ " .. name .. dn .. killStr .. "\n"
+        end
         if text == "" then text = "No priority targets currently selected." end
         pcall(function()
             S.PriorityMonitorLabel:Set({Title = "Active Priority Targets (" .. #S.PriorityPlayers .. ")", Content = text})
@@ -370,7 +420,10 @@ local function RebuildIntelMonitor()
         local po   = Players:FindFirstChild(name)
         local displaySuffix = (po and po.DisplayName ~= name) and (" (" .. po.DisplayName .. ")") or ""
         local selected = (S.IntelSelected == name) and " [SELECTED]" or ""
-        table.insert(lines, name .. displaySuffix .. "  [" .. src .. "]  " .. pts .. " pts" .. selected)
+        -- Show recorded kill count for this intel player
+        local pkills = (S.PriorityPlayerKills or {})[name]
+        local killSuffix = pkills and pkills > 0 and ("  ☠ " .. pkills .. "k") or ""
+        table.insert(lines, name .. displaySuffix .. "  [" .. src .. "]  " .. pts .. " pts" .. killSuffix .. selected)
         if pts > mostDangerousPts then mostDangerousPts = pts; mostDangerousName = name end
     end
     local heatmap = ""
@@ -856,9 +909,9 @@ task.spawn(function()
     end
 end)
 
-
 pcall(UpdateWorkspaceIgnores)
 pcall(UpdateNPCs)
+
 
 -- // ── v2.1.0 Feature 10: ToolBlacklist Save/Load ──────────────── // --
 local BLFILE = "TASFF_ToolBlacklist.json"
@@ -902,7 +955,7 @@ local function HookAutoDisableOnDeath(char)
     if not hum then return end
     local conn; conn = hum.Died:Connect(function()
         if S.AutoDisableOnDeath then
-            S.AimbotActive = false; S.CurrentTarget = nil; S.LastCustomTargetData = nil
+            S.AimbotActive = false; S.CurrentTarget = nil
             if S.SetADSState then S.SetADSState(false) end
             Notify({Title="TASFF",Content="Aimbot disabled — you died.",Duration=2,Image="x"})
         end
@@ -1125,11 +1178,17 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         local isTeammate = isPlayer and Player.Team and pObj.Team and pObj.Team == Player.Team
         if S.TeamCheck and isTeammate then return end
         -- v2.1.0 Render-thread wallcheck elimination:
-        -- Read from S.VisibilityPrecomputed (set by background loop ③).
-        -- If nil (cold start / new entity), assume optimistically visible to prevent render thread hitch.
+        -- Read from S.VisibilityPrecomputed (set by background loop ③, one yield per entity).
+        -- Falls back to live raycast ONLY on cold start (entry is nil before first sweep completes).
         if performWallCheck then
             local precomp = S.VisibilityPrecomputed[model]
-            if precomp == false then return end
+            if precomp == nil then
+                -- Optimistic: treat unseen entries as visible so lock-on happens immediately.
+                -- The background loop ③ will compute the real value within 1-2 frames and
+                -- drop false positives (behind walls) on the next selection cycle.
+                precomp = true
+            end
+            if not precomp then return end
         end
 
         local pos = root.Position
@@ -1200,7 +1259,7 @@ local function ListenForTools(char)
     end)
     S.ToolRemovedConnection = char.ChildRemoved:Connect(function(child)
         if S.AutoEnableOnEquip and child:IsA("Tool") then
-            S.AimbotActive = false; S.CurrentTarget = nil; S.LastCustomTargetData = nil; SetADSState(false)
+            S.AimbotActive = false; S.CurrentTarget = nil; SetADSState(false)
         end
     end)
 end
@@ -1241,30 +1300,34 @@ local function HookNeutralization(p)
                 Notify({Title="TASFF Intel", Content=killerName.." killed "..p.Name, Duration=2, Image="crosshair"})
             end
 
-            if killerObj and killerObj ~= p then
-                if killerObj == Player then
-                    -- Local player got a kill
-                    S.SessionUserKills = (S.SessionUserKills or 0) + 1
-                else
-                    -- Add to global kill count for auto-flagging
-                    if S.KillCountThreatEnabled then
-                        S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
-                        if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
-                            local kData = S.IntelPlayers and S.IntelPlayers[killerName]
-                            local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
-                            if not isTracked then
-                                if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
-                                Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
-                            end
+            -- Session User Kill Count: track if WE killed this player
+            local localPlayerKilled = (killerObj == Player)
+            if localPlayerKilled then
+                S.SessionUserKills = (S.SessionUserKills or 0) + 1
+                if S.DebugMode then print("[TASFF Debug] Session kill #"..S.SessionUserKills.." on "..p.Name) end
+            end
+
+            if killerObj and killerObj ~= Player and killerObj ~= p then
+                -- Add to global kill count for auto-flagging
+                if S.KillCountThreatEnabled then
+                    S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
+                    if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
+                        local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+                        local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
+                        if not isTracked then
+                            if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
+                            Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
                         end
                     end
-                    
-                    -- Issue 3 Fix: Give prioritized/intel players points for scoring a kill
-                    local isPrio = table.find(S.PriorityPlayers or {}, killerName)
-                    local kData = S.IntelPlayers and S.IntelPlayers[killerName]
-                    if isPrio or kData then
-                        if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
-                    end
+                end
+
+                -- Track per-priority-player kill counts for Intel Monitor display
+                local isPrio = table.find(S.PriorityPlayers or {}, killerName)
+                local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+                if isPrio or kData then
+                    if not S.PriorityPlayerKills then S.PriorityPlayerKills = {} end
+                    S.PriorityPlayerKills[killerName] = (S.PriorityPlayerKills[killerName] or 0) + 1
+                    if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
                 end
             end
 
@@ -1576,12 +1639,6 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 S.CurrentTarget = filtered[1]
                 if S.CurrentTarget and (not prev or prev.Instance ~= S.CurrentTarget.Instance) then
                     S.SessionTargetLocks = (S.SessionTargetLocks or 0) + 1
-                    -- Instant update for VOS caching to prevent snapping back to previous target
-                    if S.CurrentTarget.Root then
-                        S.LastCustomTargetData = {Part = S.CurrentTarget.Root, Position = S.CurrentTarget.Root.Position}
-                    else
-                        S.LastCustomTargetData = nil
-                    end
                     -- Feature 19: Lock History
                     if not S.LockHistory then S.LockHistory = {} end
                     table.insert(S.LockHistory, 1, {name=S.CurrentTarget.Name, time=tick()})

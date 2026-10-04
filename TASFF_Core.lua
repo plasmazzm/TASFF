@@ -619,6 +619,9 @@ task.spawn(function()
                 if (S.PlayerNemesisStrikes[name] or 0) > 0 then
                     S.PlayerNemesisStrikes[name] = S.PlayerNemesisStrikes[name] - 1
                     S.PlayerNemesisStrikeTimes[name] = tick()
+                else
+                    S.PlayerNemesisStrikeTimes[name] = nil
+                    S.PlayerNemesisStrikes[name] = nil
                 end
             end
         end
@@ -1237,7 +1240,7 @@ task.defer(function()
     task.wait(0.2)
     S.CurrentTarget = nil
     S.ScriptInitialized = true
-    print("[TASFF v2.0.0] Core initialized.")
+    print("[TASFF v2.1.0] Core initialized.")
 end)
 
 -- // ══════════════════════════════════════════════════════════════ // --

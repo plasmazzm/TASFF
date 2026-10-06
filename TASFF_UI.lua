@@ -61,6 +61,120 @@ local ColorDropdownOptions = {
     "White","Blue","Brown","Pink","Gray","Maroon","Tan","Coral","Banana","Rose"
 }
 
+local ColorFields = {
+    "HighlightColor", "FOVColor", "CrosshairColor", "BoxColor", "SkeletonColor",
+    "SnaplineColor", "OOFArrowColor", "PriorityHighlightColor", "ThreatHighlightColor",
+    "NemesisHighlightColor", "BlacklistedTagColor", "KillFlashColor", "VisibleColor",
+    "HiddenColor", "ChamsColor",
+}
+local ColorFlagMap = {
+    HighlightColor = "HighlightColorPicker", FOVColor = "FOVCircleColorPicker",
+    CrosshairColor = "CrosshairColorPicker", BoxColor = "BoxESPColorPicker",
+    SkeletonColor = "SkeletonESPColorPicker", SnaplineColor = "SnaplineFineColorPicker",
+    OOFArrowColor = "OOFArrowColorPicker", PriorityHighlightColor = "PriorityHighlightColorPicker",
+    ThreatHighlightColor = "ThreatHighlightColorPicker", NemesisHighlightColor = "NemesisHighlightColorPicker",
+    BlacklistedTagColor = "BlacklistedTagColorPicker", KillFlashColor = "KillFlashColorPicker",
+    VisibleColor = "VisibleColorPicker", HiddenColor = "HiddenColorPicker", ChamsColor = "ChamsColorPicker",
+}
+local PersistedColorValues = {}
+
+local ThemeColorDefaults = {
+    Background = Color3.fromRGB(15, 15, 15),
+    Topbar = Color3.fromRGB(20, 20, 20),
+    TabBackgroundSelected = Color3.fromRGB(180, 40, 40),
+    ElementBackground = Color3.fromRGB(25, 25, 25),
+    TextColor = Color3.fromRGB(240, 240, 240),
+}
+local ThemeColors = table.clone(ThemeColorDefaults)
+
+local function DecodeColor(value)
+    if type(value) ~= "table" then return nil end
+    local r, g, b = tonumber(value[1]), tonumber(value[2]), tonumber(value[3])
+    if not r or not g or not b or r ~= r or g ~= g or b ~= b then return nil end
+    if r < 0 or r > 255 or g < 0 or g > 255 or b < 0 or b > 255 then return nil end
+    return Color3.fromRGB(math.floor(r + 0.5), math.floor(g + 0.5), math.floor(b + 0.5))
+end
+
+local function EncodeColor(color)
+    return {
+        math.floor(color.R * 255 + 0.5),
+        math.floor(color.G * 255 + 0.5),
+        math.floor(color.B * 255 + 0.5),
+    }
+end
+
+local function LoadColorSettings()
+    local capabilities = TASFFEnv.Capabilities or {}
+    if not (capabilities.FileRead and capabilities.FileWrite) then
+        warn("[TASFF UI] Color settings will not persist: executor filesystem read/write APIs are unavailable.")
+        return
+    end
+    local fileName = S.ColorSettingsFileName or "TASFF_ColorSettings.json"
+    if not isfile(fileName) then return end
+    local ok, result = pcall(function()
+        return HttpService:JSONDecode(readfile(fileName))
+    end)
+    if not ok or type(result) ~= "table" then
+        warn("[TASFF UI] Ignoring invalid color settings file: " .. tostring(result))
+        return
+    end
+    for _, field in ipairs(ColorFields) do
+        local color = DecodeColor(result[field])
+        if color then
+            S[field] = color
+            PersistedColorValues[field] = color
+        end
+    end
+    if type(result.Theme) == "table" then
+        for field in pairs(ThemeColorDefaults) do
+            local color = DecodeColor(result.Theme[field])
+            ThemeColors[field] = color or ThemeColorDefaults[field]
+            if color then PersistedColorValues["Theme." .. field] = color end
+        end
+    end
+end
+
+local function SaveColorSettings()
+    local capabilities = TASFFEnv.Capabilities or {}
+    if not (capabilities.FileRead and capabilities.FileWrite) then return false end
+    local data = {Version = 1, Theme = {}}
+    for _, field in ipairs(ColorFields) do
+        local color = S[field]
+        if typeof(color) == "Color3" then data[field] = EncodeColor(color) end
+    end
+    for field in pairs(ThemeColorDefaults) do
+        data.Theme[field] = EncodeColor(ThemeColors[field])
+    end
+    local ok, err = pcall(function()
+        writefile(S.ColorSettingsFileName or "TASFF_ColorSettings.json", HttpService:JSONEncode(data))
+    end)
+    if not ok then
+        warn("[TASFF UI] Failed to save color settings: " .. tostring(err))
+        return false
+    end
+    return true
+end
+
+local colorSaveGeneration = 0
+local function ScheduleColorSettingsSave()
+    if not ((TASFFEnv.Capabilities or {}).FileRead and (TASFFEnv.Capabilities or {}).FileWrite) then return end
+    colorSaveGeneration = colorSaveGeneration + 1
+    local generation = colorSaveGeneration
+    task.delay(0.35, function()
+        if generation == colorSaveGeneration then
+            SaveColorSettings()
+        end
+    end)
+end
+
+local function SetColor(field, color)
+    if not table.find(ColorFields, field) or typeof(color) ~= "Color3" then return end
+    S[field] = color
+    ScheduleColorSettingsSave()
+end
+
+LoadColorSettings()
+
 local function GetPresetNamesList()
     local t = {}
     for k, _ in pairs(S.SavedPresets) do table.insert(t, k) end
@@ -77,18 +191,18 @@ local Window = Rayfield:CreateWindow({
     LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
     Theme = {
-        TextColor                     = Color3.fromRGB(240, 240, 240),
-        Background                    = Color3.fromRGB(15,  15,  15),
-        Topbar                        = Color3.fromRGB(20,  20,  20),
+        TextColor                     = ThemeColors.TextColor,
+        Background                    = ThemeColors.Background,
+        Topbar                        = ThemeColors.Topbar,
         Shadow                        = Color3.fromRGB(10,  10,  10),
         NotificationBackground        = Color3.fromRGB(15,  15,  15),
         NotificationActionsBackground = Color3.fromRGB(35,  35,  35),
         TabBackground                 = Color3.fromRGB(25,  25,  25),
         TabStroke                     = Color3.fromRGB(35,  35,  35),
-        TabBackgroundSelected         = Color3.fromRGB(180, 40,  40),
-        TabTextColor                  = Color3.fromRGB(240, 240, 240),
+        TabBackgroundSelected         = ThemeColors.TabBackgroundSelected,
+        TabTextColor                  = ThemeColors.TextColor,
         SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
-        ElementBackground             = Color3.fromRGB(25,  25,  25),
+        ElementBackground             = ThemeColors.ElementBackground,
         ElementBackgroundHover        = Color3.fromRGB(35,  35,  35),
         SecondaryElementBackground    = Color3.fromRGB(20,  20,  20),
         ElementStroke                 = Color3.fromRGB(40,  40,  40),
@@ -1065,6 +1179,11 @@ PresetsTab:CreateButton({
                 TargetPlayers = S.TargetPlayers, TargetNPCs = S.TargetNPCs, TeamCheck = S.TeamCheck,
                 AutoEnableOnEquip = S.AutoEnableOnEquip, IgnoreDead = S.IgnoreDead,
             }
+            for _, field in ipairs(ColorFields) do
+                if typeof(S[field]) == "Color3" then
+                    S.SavedPresets[PresetInputName][field] = EncodeColor(S[field])
+                end
+            end
             if S.SavePresetsToFile then S.SavePresetsToFile() end
             if PresetDropdownRef and PresetDropdownRef.Refresh then
                 pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
@@ -1122,8 +1241,15 @@ PresetsTab:CreateButton({
         if selected and S.SavedPresets[selected] then
             local data = S.SavedPresets[selected]
             for key, value in pairs(data) do 
+                local color = table.find(ColorFields, key) and DecodeColor(value)
                 local flag = STO_FLAG[key]
-                if flag and Rayfield.Flags[flag] then
+                if color then
+                    SetColor(key, color)
+                    local colorFlag = ColorFlagMap[key]
+                    if colorFlag and Rayfield.Flags[colorFlag] then
+                        pcall(function() Rayfield.Flags[colorFlag]:Set(color) end)
+                    end
+                elseif flag and Rayfield.Flags[flag] then
                     pcall(function() Rayfield.Flags[flag]:Set(value) end)
                 else
                     S[key] = value
@@ -1272,7 +1398,7 @@ local function applyPreset(useFlag, ddFlag, updater, field)
         local rgb = ColorPresetMap[sel]
         if rgb then
             if updater then updater(rgb) end
-            if field then S[field] = rgb end
+            if field then SetColor(field, rgb) end
         end
     end)
 end
@@ -1285,9 +1411,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Default Highlight & Tags", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "HighlightColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["HighlightPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.HighlightColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("HighlightColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Default Highlight & Tag Color", Color = S.HighlightColor or Color3.fromRGB(255,255,255), Flag = "HighlightColorPicker", Callback = function(Value) S.HighlightColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Default Highlight & Tag Color", Color = S.HighlightColor or Color3.fromRGB(255,255,255), Flag = "HighlightColorPicker", Callback = function(Value) SetColor("HighlightColor", Value) end})
 
 -- ─── Section: On-Screen Overlays (FOV Circle & Crosshair) ─────────────────
 CustomizationTab:CreateSection("On-Screen Overlays — FOV & Crosshair")
@@ -1299,10 +1425,10 @@ CustomizationTab:CreateDropdown({Name = "Preset — FOV Circle", Options = Color
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]
     if rgb and _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(rgb) end
-    S.FOVColor = rgb
+    if rgb then SetColor("FOVColor", rgb) end
 end})
 CustomizationTab:CreateColorPicker({Name = "Fine — FOV Circle Color", Color = S.FOVColor or Color3.fromRGB(255,200,120), Flag = "FOVCircleColorPicker", Callback = function(Value)
-    S.FOVColor = Value
+    SetColor("FOVColor", Value)
     if _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(Value) end
 end})
 
@@ -1314,10 +1440,10 @@ CustomizationTab:CreateDropdown({Name = "Preset — Crosshair", Options = ColorD
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]
     if rgb and _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(rgb) end
-    S.CrosshairColor = rgb
+    if rgb then SetColor("CrosshairColor", rgb) end
 end})
 CustomizationTab:CreateColorPicker({Name = "Fine — Crosshair Color", Color = S.CrosshairColor or Color3.fromRGB(255,127,80), Flag = "CrosshairColorPicker", Callback = function(Value)
-    S.CrosshairColor = Value
+    SetColor("CrosshairColor", Value)
     if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(Value) end
 end})
 
@@ -1329,9 +1455,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Box ESP", Options = ColorDropdownOptions, CurrentOption = {"Maroon"}, Flag = "BoxColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["BoxPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.BoxColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("BoxColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Box ESP Color", Color = S.BoxColor or Color3.fromRGB(200,40,40), Flag = "BoxESPColorPicker", Callback = function(Value) S.BoxColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Box ESP Color", Color = S.BoxColor or Color3.fromRGB(200,40,40), Flag = "BoxESPColorPicker", Callback = function(Value) SetColor("BoxColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Skeleton ESP", CurrentValue = false, Flag = "SkelPresetToggle", Callback = function(v)
     applyPreset(v, "SkelColorDd", nil, "SkeletonColor")
@@ -1339,9 +1465,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Skeleton ESP", Options = ColorDropdownOptions, CurrentOption = {"Maroon"}, Flag = "SkelColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["SkelPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.SkeletonColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("SkeletonColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Skeleton ESP Color", Color = S.SkeletonColor or Color3.fromRGB(200,40,40), Flag = "SkeletonESPColorPicker", Callback = function(Value) S.SkeletonColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Skeleton ESP Color", Color = S.SkeletonColor or Color3.fromRGB(200,40,40), Flag = "SkeletonESPColorPicker", Callback = function(Value) SetColor("SkeletonColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Snaplines & OOF Arrows", CurrentValue = false, Flag = "SnapPresetToggle", Callback = function(v)
     applyPreset(v, "SnapColorDd", nil, "SnaplineColor")
@@ -1349,10 +1475,10 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Snaplines & OOF Arrows", Options = ColorDropdownOptions, CurrentOption = {"Red"}, Flag = "SnapColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["SnapPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.SnaplineColor = rgb; S.OOFArrowColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("SnaplineColor", rgb); SetColor("OOFArrowColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Snapline Color", Color = S.SnaplineColor or Color3.fromRGB(255,0,0), Flag = "SnaplineFineColorPicker", Callback = function(Value) S.SnaplineColor = Value end})
-CustomizationTab:CreateColorPicker({Name = "Fine — OOF Arrow Color", Color = S.OOFArrowColor or Color3.fromRGB(255,100,0), Flag = "OOFArrowColorPicker", Callback = function(Value) S.OOFArrowColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Snapline Color", Color = S.SnaplineColor or Color3.fromRGB(255,0,0), Flag = "SnaplineFineColorPicker", Callback = function(Value) SetColor("SnaplineColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — OOF Arrow Color", Color = S.OOFArrowColor or Color3.fromRGB(255,100,0), Flag = "OOFArrowColorPicker", Callback = function(Value) SetColor("OOFArrowColor", Value) end})
 
 -- ─── Section: Intel / Target Category Colors ──────────────────────────────
 CustomizationTab:CreateSection("Intel Category Colors — Priority, Threat, Nemesis")
@@ -1362,9 +1488,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Priority Players", Options = ColorDropdownOptions, CurrentOption = {"Yellow"}, Flag = "PrioColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["PrioPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.PriorityHighlightColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("PriorityHighlightColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Priority Player ESP Color", Color = S.PriorityHighlightColor or Color3.fromRGB(255,200,0), Flag = "PriorityHighlightColorPicker", Callback = function(Value) S.PriorityHighlightColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Priority Player ESP Color", Color = S.PriorityHighlightColor or Color3.fromRGB(255,200,0), Flag = "PriorityHighlightColorPicker", Callback = function(Value) SetColor("PriorityHighlightColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Threat Players", CurrentValue = false, Flag = "ThreatPresetToggle", Callback = function(v)
     applyPreset(v, "ThreatColorDd", nil, "ThreatHighlightColor")
@@ -1372,9 +1498,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Threat Players", Options = ColorDropdownOptions, CurrentOption = {"Orange"}, Flag = "ThreatColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["ThreatPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.ThreatHighlightColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("ThreatHighlightColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Threat Player ESP Color", Color = S.ThreatHighlightColor or Color3.fromRGB(255,60,0), Flag = "ThreatHighlightColorPicker", Callback = function(Value) S.ThreatHighlightColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Threat Player ESP Color", Color = S.ThreatHighlightColor or Color3.fromRGB(255,60,0), Flag = "ThreatHighlightColorPicker", Callback = function(Value) SetColor("ThreatHighlightColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Nemesis Players", CurrentValue = false, Flag = "NemesisPresetToggle", Callback = function(v)
     applyPreset(v, "NemesisColorDd", nil, "NemesisHighlightColor")
@@ -1382,9 +1508,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Nemesis Players", Options = ColorDropdownOptions, CurrentOption = {"Purple"}, Flag = "NemesisColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["NemesisPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.NemesisHighlightColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("NemesisHighlightColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Nemesis Player ESP Color", Color = S.NemesisHighlightColor or Color3.fromRGB(150,0,255), Flag = "NemesisHighlightColorPicker", Callback = function(Value) S.NemesisHighlightColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Nemesis Player ESP Color", Color = S.NemesisHighlightColor or Color3.fromRGB(150,0,255), Flag = "NemesisHighlightColorPicker", Callback = function(Value) SetColor("NemesisHighlightColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Blacklisted Players", CurrentValue = false, Flag = "BlacklistPresetToggle", Callback = function(v)
     applyPreset(v, "BlacklistColorDd", nil, "BlacklistedTagColor")
@@ -1392,9 +1518,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Blacklisted Players", Options = ColorDropdownOptions, CurrentOption = {"Orange"}, Flag = "BlacklistColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["BlacklistPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.BlacklistedTagColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("BlacklistedTagColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Blacklisted Player Tag Color", Color = S.BlacklistedTagColor or Color3.fromRGB(255,140,0), Flag = "BlacklistedTagColorPicker", Callback = function(Value) S.BlacklistedTagColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Blacklisted Player Tag Color", Color = S.BlacklistedTagColor or Color3.fromRGB(255,140,0), Flag = "BlacklistedTagColorPicker", Callback = function(Value) SetColor("BlacklistedTagColor", Value) end})
 
 -- ─── Section: Chams (Through-Wall) ────────────────────────────────────────
 CustomizationTab:CreateSection("Through-Wall Visuals — Chams")
@@ -1404,9 +1530,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Chams Color", Options = ColorDropdownOptions, CurrentOption = {"Red"}, Flag = "ChamsColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["ChamsPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.ChamsColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("ChamsColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Chams Color", Color = S.ChamsColor or Color3.fromRGB(255,30,30), Flag = "ChamsColorPicker", Callback = function(Value) S.ChamsColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Chams Color", Color = S.ChamsColor or Color3.fromRGB(255,30,30), Flag = "ChamsColorPicker", Callback = function(Value) SetColor("ChamsColor", Value) end})
 CustomizationTab:CreateSlider({Name = "Chams Opacity (0–100)", Range = {0, 100}, Increment = 1, CurrentValue = S.ChamsOpacity or 10, Flag = "ChamsOpacity", Callback = function(v) S.ChamsOpacity = v end})
 
 -- ─── Section: Kill Flash ──────────────────────────────────────────────────
@@ -1417,9 +1543,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Kill Flash Color", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "KillFlashColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["KillFlashPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.KillFlashColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("KillFlashColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Kill Flash Color", Color = S.KillFlashColor or Color3.fromRGB(255,255,255), Flag = "KillFlashColorPicker", Callback = function(Value) S.KillFlashColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Kill Flash Color", Color = S.KillFlashColor or Color3.fromRGB(255,255,255), Flag = "KillFlashColorPicker", Callback = function(Value) SetColor("KillFlashColor", Value) end})
 
 
 -- ─── Section: Visibility Indicator Colors ─────────────────────────────────
@@ -1430,9 +1556,9 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Visible Target Color", Options = ColorDropdownOptions, CurrentOption = {"Lime"}, Flag = "VisibleColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["VisiblePresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.VisibleColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("VisibleColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Visible Target Color", Color = S.VisibleColor or Color3.fromRGB(0,255,0), Flag = "VisibleColorPicker", Callback = function(Value) S.VisibleColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Visible Target Color", Color = S.VisibleColor or Color3.fromRGB(0,255,0), Flag = "VisibleColorPicker", Callback = function(Value) SetColor("VisibleColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Hidden Target", CurrentValue = false, Flag = "HiddenPresetToggle", Callback = function(v)
     applyPreset(v, "HiddenColorDd", nil, "HiddenColor")
@@ -1440,30 +1566,43 @@ end})
 CustomizationTab:CreateDropdown({Name = "Preset — Hidden Target Color", Options = ColorDropdownOptions, CurrentOption = {"Red"}, Flag = "HiddenColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["HiddenPresetToggle"]
     if not (f and f.CurrentValue) then return end
-    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then S.HiddenColor = rgb end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("HiddenColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Hidden Target Color", Color = S.HiddenColor or Color3.fromRGB(255,0,0), Flag = "HiddenColorPicker", Callback = function(Value) S.HiddenColor = Value end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Hidden Target Color", Color = S.HiddenColor or Color3.fromRGB(255,0,0), Flag = "HiddenColorPicker", Callback = function(Value) SetColor("HiddenColor", Value) end})
 
 -- ─── Section: UI Theme Editor ─────────────────────────────────────────────
 CustomizationTab:CreateSection("UI Theme Editor (Live Preview)")
 CustomizationTab:CreateParagraph({Title = "About UI Theme Editor", Content = "Adjust the Rayfield window's own theme colors live. Changes take effect immediately on the window chrome."})
-CustomizationTab:CreateColorPicker({Name = "UI — Background", Color = Color3.fromRGB(15,15,15), Flag = "UIThemeBg", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({Background = v}) end)
+local function ApplyThemeColor(field, value, themeKey)
+    if typeof(value) ~= "Color3" then return end
+    ThemeColors[field] = value
+    local ok, err = pcall(function() Rayfield:SetTheme({[themeKey or field] = value}) end)
+    if not ok then
+        warn("[TASFF UI] Failed to apply theme color " .. field .. ": " .. tostring(err))
+    end
+    ScheduleColorSettingsSave()
+end
+CustomizationTab:CreateColorPicker({Name = "UI — Background", Color = ThemeColors.Background, Flag = "UIThemeBg", Callback = function(v)
+    ApplyThemeColor("Background", v)
 end})
-CustomizationTab:CreateColorPicker({Name = "UI — Topbar", Color = Color3.fromRGB(20,20,20), Flag = "UIThemeTopbar", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({Topbar = v}) end)
+CustomizationTab:CreateColorPicker({Name = "UI — Topbar", Color = ThemeColors.Topbar, Flag = "UIThemeTopbar", Callback = function(v)
+    ApplyThemeColor("Topbar", v)
 end})
-CustomizationTab:CreateColorPicker({Name = "UI — Tab Selected Accent", Color = Color3.fromRGB(180,40,40), Flag = "UIThemeAccent", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({TabBackgroundSelected = v, ToggleEnabled = v, DropdownSelected = v, SliderProgress = v}) end)
+CustomizationTab:CreateColorPicker({Name = "UI — Tab Selected Accent", Color = ThemeColors.TabBackgroundSelected, Flag = "UIThemeAccent", Callback = function(v)
+    ThemeColors.TabBackgroundSelected = v
+    local ok, err = pcall(function() Rayfield:SetTheme({TabBackgroundSelected = v, ToggleEnabled = v, DropdownSelected = v, SliderProgress = v}) end)
+    if not ok then warn("[TASFF UI] Failed to apply theme accent: " .. tostring(err)) end
+    ScheduleColorSettingsSave()
 end})
-CustomizationTab:CreateColorPicker({Name = "UI — Element Background", Color = Color3.fromRGB(25,25,25), Flag = "UIThemeElemBg", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({ElementBackground = v}) end)
+CustomizationTab:CreateColorPicker({Name = "UI — Element Background", Color = ThemeColors.ElementBackground, Flag = "UIThemeElemBg", Callback = function(v)
+    ApplyThemeColor("ElementBackground", v)
 end})
-CustomizationTab:CreateColorPicker({Name = "UI — Text Color", Color = Color3.fromRGB(240,240,240), Flag = "UIThemeText", Callback = function(v)
-    pcall(function() Rayfield:SetTheme({TextColor = v}) end)
+CustomizationTab:CreateColorPicker({Name = "UI — Text Color", Color = ThemeColors.TextColor, Flag = "UIThemeText", Callback = function(v)
+    ApplyThemeColor("TextColor", v)
 end})
 CustomizationTab:CreateButton({Name = "Reset UI Theme to Default", Callback = function()
     pcall(function()
+        ThemeColors = table.clone(ThemeColorDefaults)
         Rayfield:SetTheme({
             TextColor = Color3.fromRGB(240,240,240),
             Background = Color3.fromRGB(15,15,15),
@@ -1474,7 +1613,19 @@ CustomizationTab:CreateButton({Name = "Reset UI Theme to Default", Callback = fu
             SliderProgress = Color3.fromRGB(200,35,35),
             DropdownSelected = Color3.fromRGB(180,40,40),
         })
+        local defaults = {
+            UIThemeBg = ThemeColorDefaults.Background,
+            UIThemeTopbar = ThemeColorDefaults.Topbar,
+            UIThemeAccent = ThemeColorDefaults.TabBackgroundSelected,
+            UIThemeElemBg = ThemeColorDefaults.ElementBackground,
+            UIThemeText = ThemeColorDefaults.TextColor,
+        }
+        for flag, value in pairs(defaults) do
+            local control = Rayfield.Flags and Rayfield.Flags[flag]
+            if control then control:Set(value) end
+        end
     end)
+    ScheduleColorSettingsSave()
 end})
 
 local MiscTab = Window:CreateTab("System", "cog")
@@ -1786,7 +1937,139 @@ UpdateLogTab:CreateLabel("- Added Visible On Screen, located in target bodypart 
 -- // â”€â”€ Load Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
 -- MUST be called last. Restores all flagged values from disk and
 -- fires each element's Callback, which writes them back into S.
+local ConfigDefaults = {}
+for key, value in pairs(S) do
+    if typeof(value) ~= "table" and type(value) ~= "function" then
+        ConfigDefaults[key] = value
+    end
+end
 
-Rayfield:LoadConfiguration()
+local loaded, loadError = pcall(function()
+    Rayfield:LoadConfiguration()
+end)
+if not loaded then
+    warn("[TASFF UI] Configuration loading failed; continuing with validated defaults: " .. tostring(loadError))
+end
+
+local correctedSettings = false
+local booleanSettings = {
+    "MasterEnabled", "TargetingEnabled", "AimbotActive", "StickyAimEnabled", "TeamCheck",
+    "WallCheck", "IgnoreDead", "ShowFOV", "InvisibleFOV", "TargetSwitchDelayEnabled",
+    "SilentAimEnabled", "DynamicRecoilEnabled", "RandomizeHitboxEnabled", "ThreatDetectorEnabled",
+    "NemesisEnabled", "AutoADSEnabled", "ClickToMarkEnabled", "FocusMode", "AutoClickEnabled",
+    "KeyTriggerbotEnabled", "MeleeModeEnabled", "NoCollisionCheck", "TransparencyCheck",
+    "DecalsCheck", "TargetPlayers", "TargetNPCs", "UseHighlight", "UseInfoTag",
+    "UseNPCHighlight", "UseNPCInfoTag", "TargetNearCenter", "AutoEnableOnEquip",
+    "EnableCrosshair", "ShowToolCheck", "ShowDisplayName", "VisibilityColorsEnabled",
+    "ChamsEnabled", "BoxModeEnabled", "SkeletonModeEnabled", "SnaplinesEnabled",
+    "OOFArrowsEnabled", "GracePeriodEnabled", "ThreatNeutralizationEnabled",
+    "AutoExpireOnDisconnect", "KillCountThreatEnabled", "KillFeedEnabled",
+}
+for _, key in ipairs(booleanSettings) do
+    if type(S[key]) ~= "boolean" then
+        S[key] = ConfigDefaults[key] == true
+        correctedSettings = true
+    end
+end
+
+local numericRanges = {
+    FOVSize = {10, 2000}, SwitchDelayMs = {0, 2000}, PredictionAmount = {0, 5},
+    Smoothness = {0.1, 100}, SmoothnessX = {0.1, 100}, SmoothnessY = {0.1, 100},
+    BlatantSnapSpeed = {1, 100}, TransparencyThreshold = {0, 1},
+    GracePeriodMs = {0, 2000}, AimbotRenderDistance = {1, 10000},
+    ESPRenderDistance = {1, 10000}, ChamsOpacity = {0, 100}, CrosshairSize = {1, 100},
+    OOFArrowRadius = {1, 1000}, ClickInterval = {1, 10000}, MeleeClickInterval = {1, 10000},
+    MeleeDetectionRange = {1, 1000}, CalibrationOffsetX = {-2000, 2000},
+    CalibrationOffsetY = {-2000, 2000}, DynamicFOVMax = {1, 2000},
+    HealthThreshold = {0, 100}, NotifyMaxPer3s = {1, 100},
+}
+for key, bounds in pairs(numericRanges) do
+    local value = S[key]
+    if type(value) ~= "number" or value ~= value or value == math.huge or value == -math.huge then
+        S[key] = ConfigDefaults[key]
+        correctedSettings = true
+    else
+        local bounded = math.clamp(value, bounds[1], bounds[2])
+        if bounded ~= value then correctedSettings = true end
+        S[key] = bounded
+    end
+end
+
+local enumSettings = {
+    TargetPart = {Head=true, HumanoidRootPart=true, Torso=true, ["Visible On Screen"]=true},
+    Mode = {["Legit (Camera)"]=true, ["Advanced Legit (Mouse)"]=true, Blatant=true, ["Flickbot (Click-Teleport)"]=true},
+    PriorityMode = {None=true, Closest=true, Farthest=true},
+    VitalityMode = {None=true, ["Weakest (HP)"]=true, ["Strongest (HP)"]=true},
+    VisualMode = {Single=true, Multiple=true, All=true},
+    SnaplineOrigin = {Bottom=true, Center=true},
+    CrosshairStyle = {Plus=true, Square=true, Circle=true},
+    TriggerbotClickMode = {Virtual=true, Physical=true},
+    ClickMethod = {Mash=true, Hold=true},
+    KeyTriggerMode = {["Single Press"]=true, Mash=true, Hold=true},
+    MarkMethod = {["Mouse Click Only"]=true, ["Keybind Only"]=true, Both=true},
+    AimReferenceMode = {["Screen Center"]=true, ["Mouse Tracking"]=true},
+    PriorityBehavior = {Boost=true, Exclusive=true},
+}
+for key, allowed in pairs(enumSettings) do
+    if type(S[key]) ~= "string" or not allowed[S[key]] then
+        S[key] = ConfigDefaults[key]
+        correctedSettings = true
+    end
+end
+S.ActivePartName = S.TargetPart == "Visible On Screen" and "Head" or S.TargetPart
+S.PerformanceMode = S.NormalizePerformanceMode and S.NormalizePerformanceMode(S.PerformanceMode) or "Medium"
+
+for key, default in pairs(ConfigDefaults) do
+    if typeof(default) == "Color3" and typeof(S[key]) ~= "Color3" then
+        S[key] = default
+        correctedSettings = true
+    end
+end
+for _, key in ipairs({"BlacklistedPlayers", "PriorityPlayers", "ToolBlacklist", "VOSPriorityParts"}) do
+    local current = S[key]
+    if type(current) ~= "table" then
+        S[key] = {}
+        correctedSettings = true
+    else
+        local clean, seen = {}, {}
+        for _, value in ipairs(current) do
+            if type(value) == "string" and value ~= "" and not seen[value] then
+                seen[value] = true
+                table.insert(clean, value)
+            else
+                correctedSettings = true
+            end
+        end
+        S[key] = clean
+    end
+end
+
+if correctedSettings then
+    warn("[TASFF UI] Invalid or out-of-range settings were reset or clamped to safe values.")
+end
+
+for key, color in pairs(PersistedColorValues) do
+    local field, flag
+    if key:sub(1, 6) == "Theme." then
+        field = key:sub(7)
+        flag = ({Background="UIThemeBg", Topbar="UIThemeTopbar", TabBackgroundSelected="UIThemeAccent",
+            ElementBackground="UIThemeElemBg", TextColor="UIThemeText"})[field]
+        if flag then
+            local control = Rayfield.Flags and Rayfield.Flags[flag]
+            if control then control:Set(color) end
+            ThemeColors[field] = color
+            if field == "TabBackgroundSelected" then
+                pcall(function() Rayfield:SetTheme({TabBackgroundSelected=color, ToggleEnabled=color, DropdownSelected=color, SliderProgress=color}) end)
+            else
+                pcall(function() Rayfield:SetTheme({[field]=color}) end)
+            end
+        end
+    else
+        flag = ColorFlagMap[key]
+        if flag and Rayfield.Flags and Rayfield.Flags[flag] then
+            Rayfield.Flags[flag]:Set(color)
+        end
+    end
+end
 
 print("[TASFF UI] Interface constructed. Configuration loaded.")

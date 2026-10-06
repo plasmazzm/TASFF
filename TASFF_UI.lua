@@ -6,13 +6,18 @@
 -- // ============================================================ // --
 
 local S           = _G.TASFF_State
+local TASFFEnv     = (getgenv and getgenv().TASFF) or nil
+if not TASFFEnv or not TASFFEnv.Rayfield then
+    warn("[TASFF UI] Rayfield not ready — UI skipped.")
+    return
+end
 
 local function SanitizeKeyName(k)
     if type(k) == "string" and k ~= "" then return k:gsub("Enum%.KeyCode%.", "")
     elseif typeof(k) == "EnumItem" then return k.Name end
     return nil
 end
-local Rayfield    = getgenv().TASFF and getgenv().TASFF.Rayfield
+local Rayfield    = TASFFEnv.Rayfield
 local Players     = game:GetService("Players")
 local Player      = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -424,10 +429,10 @@ MainTab:CreateToggle({Name = "Sticky Aim (Target Lock Retention)", CurrentValue 
     S.StickyAimEnabled = v
     if not v then S.CurrentTarget = nil end
 end})
-MainTab:CreateToggle({Name = "Target Switch Delay (Pause After Kill)", CurrentValue = S.TargetSwitchDelayEnabled, Flag = "TargetSwitchDelay", Callback = function(v)
+MainTab:CreateToggle({Name = "Target Switch Delay (After Target Disappears)", CurrentValue = S.TargetSwitchDelayEnabled, Flag = "TargetSwitchDelay", Callback = function(v)
     S.TargetSwitchDelayEnabled = v
 end})
-MainTab:CreateSlider({Name = "Switch Delay Duration (ms)", Range = {50, 1000}, Increment = 10, CurrentValue = S.SwitchDelayMs, Flag = "SwitchDelayMs", Callback = function(v)
+MainTab:CreateSlider({Name = "Target-Loss Delay Duration (ms)", Range = {50, 1000}, Increment = 10, CurrentValue = S.SwitchDelayMs, Flag = "SwitchDelayMs", Callback = function(v)
     S.SwitchDelayMs = v
 end})
 MainTab:CreateToggle({Name = "Target Grace Period (Anti-Jitter)", CurrentValue = S.GracePeriodEnabled, Flag = "EnableGracePeriod", Callback = function(v)

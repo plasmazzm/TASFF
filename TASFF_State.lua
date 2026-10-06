@@ -30,7 +30,7 @@ _G.TASFF_State = {
     -- // ── v1.5.0 Combat Upgrades ─────────────────────────────── // --
     TargetSwitchDelayEnabled    = false,
     SwitchDelayMs               = 200,
-    LastKillTime                = 0,
+    LastTargetLostTime          = 0,
     DynamicRecoilEnabled        = false,
     SilentAimEnabled            = false,
     RandomizeHitboxEnabled      = false,

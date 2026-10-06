@@ -17,6 +17,16 @@ local BASE_URL   = "https://raw.githubusercontent.com/plasmazzm/TASFF/refs/heads
 -- "https://raw.githubusercontent.com/tasf/TASFF/main/"
 -- Each file will be fetched as BASE_URL .. "TASFF_State.lua" etc.
 
+local function SafeHttpGet(url, label)
+    local ok, result = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if not ok or type(result) ~= "string" or result == "" then
+        error("[TASFF Loader] Unable to fetch " .. label .. " from " .. tostring(url))
+    end
+    return result
+end
+
 -- // ── Executor Compatibility Guards ────────────────────────────── // --
 -- Stub out functions that may not exist on every executor.
 -- These prevent runtime errors on executors missing certain APIs.
@@ -68,30 +78,31 @@ end
 -- If TASFF is already running (re-injection), gracefully shut down
 -- the previous instance before starting a fresh one.
 
-if getgenv().TASFF then
+local previousTASFF = getgenv() and getgenv().TASFF or nil
+if previousTASFF and type(previousTASFF) == "table" then
     warn("[TASFF] Previous instance detected — performing clean shutdown.")
-    getgenv().TASFF.Running = false
+    previousTASFF.Running = false
 
     -- Give background loops one tick to read the flag and exit
     task.wait(0.1)
 
     -- Restore metamethod hooks + remove drawings + disconnect connections
-    if getgenv().TASFF.Cleanup then
-        pcall(getgenv().TASFF.Cleanup)
+    if previousTASFF.Cleanup then
+        pcall(previousTASFF.Cleanup)
     end
 
     -- Belt-and-suspenders: also iterate connections directly
-    if getgenv().TASFF.Connections then
-        for _, conn in pairs(getgenv().TASFF.Connections) do
-            if typeof(conn) == "RBXScriptConnection" and conn.Connected then
+    if previousTASFF.Connections then
+        for _, conn in pairs(previousTASFF.Connections) do
+            if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
                 pcall(function() conn:Disconnect() end)
             end
         end
     end
 
     -- Belt-and-suspenders: also iterate drawings directly
-    if getgenv().TASFF.Drawings then
-        for _, d in ipairs(getgenv().TASFF.Drawings) do
+    if previousTASFF.Drawings then
+        for _, d in ipairs(previousTASFF.Drawings) do
             pcall(function() d:Remove() end)
         end
     end
@@ -120,7 +131,15 @@ getgenv().TASFF = {
 -- UI reads it the same way. This ensures only ONE Rayfield instance exists.
 
 print("[TASFF Loader] Loading Rayfield...")
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local rayfieldSource = SafeHttpGet("https://sirius.menu/rayfield", "Rayfield")
+local ok, rayfieldFactory = pcall(loadstring, rayfieldSource)
+if not ok or type(rayfieldFactory) ~= "function" then
+    error("[TASFF Loader] Failed to compile Rayfield bootstrap: " .. tostring(rayfieldFactory))
+end
+local ok2, Rayfield = pcall(rayfieldFactory)
+if not ok2 or type(Rayfield) ~= "table" then
+    error("[TASFF Loader] Failed to initialize Rayfield instance.")
+end
 getgenv().TASFF.Rayfield = Rayfield
 print("[TASFF Loader] Rayfield loaded.")
 
@@ -130,13 +149,7 @@ local function LoadModule(filename)
     local source
     if USE_HTTP then
         local url = BASE_URL .. filename
-        local ok, result = pcall(function()
-            return game:HttpGet(url)
-        end)
-        if not ok or not result or result == "" then
-            error("[TASFF Loader] Failed to fetch " .. filename .. ". Check BASE_URL and that the repo is Public.")
-        end
-        source = result
+        source = SafeHttpGet(url, filename)
     else
         -- Method B: load from executor filesystem
         if not isfile(filename) then

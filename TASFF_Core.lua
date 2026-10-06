@@ -1200,6 +1200,59 @@ local function GetVisualAssets(model)
 end
 S.GetVisualAssets = GetVisualAssets
 
+local SCREEN_ANCHOR_PARTS = {
+    "Head", "UpperTorso", "Torso", "LowerTorso", "HumanoidRootPart",
+    "LeftUpperArm", "Left Arm", "LeftLowerArm", "LeftHand",
+    "RightUpperArm", "Right Arm", "RightLowerArm", "RightHand",
+    "LeftUpperLeg", "Left Leg", "LeftLowerLeg", "LeftFoot",
+    "RightUpperLeg", "Right Leg", "RightLowerLeg", "RightFoot",
+}
+
+local function GetScreenAnchor(model, root, aimPosition)
+    local names, seenNames = {}, {}
+    local function addName(name)
+        if type(name) == "string" and name ~= "" and not seenNames[name] then
+            seenNames[name] = true
+            table.insert(names, name)
+        end
+    end
+    local configuredPart = S.TargetPart
+    if type(configuredPart) == "string" and configuredPart ~= "" and configuredPart ~= "Visible On Screen" then
+        addName(configuredPart)
+    end
+    for _, name in ipairs(S.VOSPriorityParts or {}) do
+        addName(name)
+    end
+    for _, name in ipairs(SCREEN_ANCHOR_PARTS) do
+        addName(name)
+    end
+
+    local bestPart, bestPosition, bestDistance = nil, nil, math.huge
+    for _, name in ipairs(names) do
+        local part = model:FindFirstChild(name)
+        if part and part:IsA("BasePart") then
+            local point, onScreen = Camera:WorldToViewportPoint(part.Position)
+            if onScreen and point.Z > 0 then
+                local screenPosition = ApplyScreenCalibration(Vector2.new(point.X, point.Y))
+                local distance = (screenPosition - aimPosition).Magnitude
+                if distance < bestDistance then
+                    bestPart, bestPosition, bestDistance = part, screenPosition, distance
+                end
+            end
+        end
+    end
+
+    if bestPart then return bestPart, bestPosition, bestDistance end
+    if root then
+        local point, onScreen = Camera:WorldToViewportPoint(root.Position)
+        if onScreen and point.Z > 0 then
+            local screenPosition = ApplyScreenCalibration(Vector2.new(point.X, point.Y))
+            return root, screenPosition, (screenPosition - aimPosition).Magnitude
+        end
+    end
+    return nil, nil, math.huge
+end
+
 local function DrawSkeleton(character, jointsTable, color)
     local limbs = SkeletonCache[character]
     if not limbs then
@@ -1285,8 +1338,14 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         local distFromCam = (pos - Camera.CFrame.Position).Magnitude
         if distFromCam > (maxDistance or S.AimbotRenderDistance) then return end
         local sPos, onScreen = Camera:WorldToViewportPoint(pos)
-        local screenPos = ApplyScreenCalibration(Vector2.new(sPos.X, sPos.Y))
-        local distFromCenter = (screenPos - screenCenter).Magnitude
+        local screenAnchor, screenPos, distFromCenter
+        if ignoreFOV then
+            screenPos = ApplyScreenCalibration(Vector2.new(sPos.X, sPos.Y))
+            distFromCenter = (screenPos - screenCenter).Magnitude
+        else
+            screenAnchor, screenPos, distFromCenter = GetScreenAnchor(model, root, screenCenter)
+            onScreen = screenAnchor ~= nil
+        end
         
         -- Feature 6: Dynamic FOV
         local currentFov = S.FOVSize
@@ -1300,8 +1359,9 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
                 Instance=model, Root=root, Name=targetName, IsPlayer=isPlayer,
                 Player=pObj,
                 IsTeammate=isTeammate, IsBlacklisted=isBlacklisted,
+                ScreenAnchor=screenAnchor,
                 DistFromCenter=distFromCenter, Distance=distFromCam,
-                Position=pos, ScreenPos=Vector2.new(sPos.X,sPos.Y),
+                Position=pos, ScreenPos=screenPos,
                 Health=hum.Health, TeamColor=isPlayer and pObj.TeamColor.Color or Color3.fromRGB(255,255,255)
             })
         end
@@ -1704,10 +1764,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end
                 -- Refresh live screen-distance + health for accurate sorting each frame
                 if c.Root and c.Root.Parent then
-                    local sp2, _ = Camera:WorldToViewportPoint(c.Root.Position)
-                    c.DistFromCenter = (Vector2.new(sp2.X, sp2.Y) - screenCenter).Magnitude
+                    local anchor, screenPosition, screenDistance = GetScreenAnchor(c.Instance, c.Root, screenCenter)
+                    c.ScreenAnchor = anchor
+                    c.DistFromCenter = screenDistance
                     c.Distance = (c.Root.Position - Camera.CFrame.Position).Magnitude
                     c.Health = hum.Health
+                    c.ScreenPos = screenPosition
+                    if not anchor then continue end
                 end
                 table.insert(filtered, c)
             end

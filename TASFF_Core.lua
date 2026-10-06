@@ -551,6 +551,39 @@ IsVisibleWallcheck = function(model, partName, customIgnoreList)
     local maxDist     = direction.Magnitude
     if maxDist <= 0.01 then return true end
     local unitDir = direction.Unit
+    local boundsOk, boundsCFrame, boundsSize = pcall(function()
+        return model:GetBoundingBox()
+    end)
+    if boundsOk and boundsCFrame and boundsSize then
+        local localOrigin = boundsCFrame:PointToObjectSpace(origin)
+        local halfSize = boundsSize * 0.5
+        local cameraInsideTarget = math.abs(localOrigin.X) <= halfSize.X
+            and math.abs(localOrigin.Y) <= halfSize.Y
+            and math.abs(localOrigin.Z) <= halfSize.Z
+        if cameraInsideTarget then
+            local localCharacter = Player and Player.Character
+            local localHead = localCharacter and localCharacter:FindFirstChild("Head")
+            local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
+            local fallbackOrigin = localHead and localHead.Position or (localRoot and localRoot.Position)
+            if fallbackOrigin then
+                local fallbackLocal = boundsCFrame:PointToObjectSpace(fallbackOrigin)
+                local fallbackInsideTarget = math.abs(fallbackLocal.X) <= halfSize.X
+                    and math.abs(fallbackLocal.Y) <= halfSize.Y
+                    and math.abs(fallbackLocal.Z) <= halfSize.Z
+                if not fallbackInsideTarget then
+                    origin = fallbackOrigin
+                else
+                    origin = boundsCFrame.Position - unitDir * (boundsSize.Magnitude * 0.5 + 0.05)
+                end
+            else
+                origin = boundsCFrame.Position - unitDir * (boundsSize.Magnitude * 0.5 + 0.05)
+            end
+            direction = destination - origin
+            maxDist = direction.Magnitude
+            if maxDist <= 0.01 then return true end
+            unitDir = direction.Unit
+        end
+    end
     local baseIgnoreList    = customIgnoreList or GetIgnoreList()
     local currentIgnoreList = baseIgnoreList
     local hasClonedList     = false
@@ -1731,13 +1764,19 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             if S.CurrentTarget.Root then
                 local d = (S.CurrentTarget.Root.Position - Camera.CFrame.Position).Magnitude
                 if d > S.AimbotRenderDistance then outOfBounds = true end
-                local sp2, os2 = Camera:WorldToViewportPoint(S.CurrentTarget.Root.Position)
+                local anchor, _, anchorDistance = GetScreenAnchor(
+                    S.CurrentTarget.Instance,
+                    S.CurrentTarget.Root,
+                    screenCenter
+                )
                 local currentFov = S.FOVSize
                 if S.DynamicFOVEnabled and d > 0 then
                     currentFov = S.FOVSize * (d / 100)
                     if S.DynamicFOVMax and currentFov > S.DynamicFOVMax then currentFov = S.DynamicFOVMax end
                 end
-                if S.ShowFOV and os2 and (Vector2.new(sp2.X, sp2.Y) - screenCenter).Magnitude > currentFov then outOfBounds = true end
+                if not anchor or (S.ShowFOV and anchorDistance > currentFov) then
+                    outOfBounds = true
+                end
             end
             if hum and hum.Health > 0 and not typeMismatch and not wallCheckFailed and not outOfBounds then
                 StickyLockActive = true

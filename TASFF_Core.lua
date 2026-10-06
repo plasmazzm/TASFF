@@ -26,9 +26,27 @@ do
         S.ActivePartName = S.ActivePartName or part
     end
 end
-local Rayfield = getgenv().TASFF and getgenv().TASFF.Rayfield or nil
+local Rayfield = (getgenv and getgenv().TASFF and getgenv().TASFF.Rayfield) or nil
 local Player  = Players.LocalPlayer
 local Camera  = workspace.CurrentCamera
+
+local function GetTASFFEnv()
+    return (getgenv and type(getgenv) == "function") and getgenv().TASFF or nil
+end
+
+local function TrackConnection(conn)
+    local env = GetTASFFEnv()
+    if not env or type(env.Connections) ~= "table" or not conn then return end
+    if typeof(conn) == "RBXScriptConnection" then
+        table.insert(env.Connections, conn)
+    end
+end
+
+local function TrackDrawing(obj)
+    local env = GetTASFFEnv()
+    if not env or type(env.Drawings) ~= "table" or not obj then return end
+    table.insert(env.Drawings, obj)
+end
 
 local HighlightCache            = S.HighlightCache
 local TagCache                  = S.TagCache
@@ -50,7 +68,7 @@ local TargetFirstSeenTimestamps = S.TargetFirstSeenTimestamps
 local VisibilityCache           = S.VisibilityCache
 local VisibilityCacheTime       = S.VisibilityCacheTime
 
-table.insert(getgenv().TASFF.Connections,
+TrackConnection(
     workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
         Camera = workspace.CurrentCamera
     end)
@@ -70,6 +88,7 @@ local _notifyCount = 0
 local _notifyWindowStart = tick()
 local function Notify(options)
     if S.DisableNotifications then return end
+    options = options or {}
     -- Feature 23: Notification Throttle
     local now = tick()
     if now - _notifyWindowStart >= 3 then
@@ -122,9 +141,7 @@ local function NewDrawing(className)
         obj.Transparency = 1
         if obj.Opacity ~= nil then obj.Opacity = 1 end
     end)
-    if getgenv().TASFF and type(getgenv().TASFF.Drawings) == "table" then
-        table.insert(getgenv().TASFF.Drawings, obj)
-    end
+    TrackDrawing(obj)
     return obj
 end
 S.NewDrawing = NewDrawing
@@ -585,6 +602,51 @@ local function IsVisibleCachedWrapper(model, partName, ignoreList)
     return result
 end
 S.IsVisibleCachedWrapper = IsVisibleCachedWrapper
+
+local function FindVisibleOnScreenPart(model, ignoreList)
+    if not model or not model.Parent then return nil end
+    if not Camera then Camera = workspace.CurrentCamera end
+    if not Camera then return nil end
+
+    local partNames = {}
+    for _, name in ipairs(S.VOSPriorityParts or {}) do
+        if type(name) == "string" and not table.find(partNames, name) then
+            table.insert(partNames, name)
+        end
+    end
+    for _, name in ipairs({
+        "Head", "Torso", "UpperTorso", "LowerTorso",
+        "Left Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand",
+        "Right Arm", "RightUpperArm", "RightLowerArm", "RightHand",
+        "Left Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+        "Right Leg", "RightUpperLeg", "RightLowerLeg", "RightFoot",
+    }) do
+        if not table.find(partNames, name) then
+            table.insert(partNames, name)
+        end
+    end
+
+    local aimPosition = GetAimPosition()
+    local bestPart, bestDistance = nil, math.huge
+    for _, name in ipairs(partNames) do
+        local part = model:FindFirstChild(name)
+        local ok, isVisible = false, false
+        if part and part:IsA("BasePart") then
+            ok, isVisible = pcall(IsVisibleWallcheck, model, name, ignoreList)
+        end
+        if ok and isVisible then
+            local point, onScreen = Camera:WorldToViewportPoint(part.Position)
+            if onScreen then
+                local distance = (ApplyScreenCalibration(Vector2.new(point.X, point.Y)) - aimPosition).Magnitude
+                if distance < bestDistance then
+                    bestPart, bestDistance = part, distance
+                end
+            end
+        end
+    end
+    return bestPart
+end
+
 local _lastFP = {}
 local function RegisterThreat(attackerName, isKill)
     if not attackerName or attackerName == Player.Name then return end
@@ -634,9 +696,6 @@ local function HookThreatHealth(char)
     humanoid.HealthChanged:Connect(function(newHealth)
         if S.ThreatDetectorEnabled and newHealth < lastHealth then
             local isKill = (newHealth <= 0)
-            if isKill and S.CurrentTarget and char == S.CurrentTarget.Instance then
-                S.LastKillTime = tick(); S.CurrentTarget = nil
-            end
             local creator = humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("creatorTag")
             if creator and creator:IsA("ObjectValue") and creator.Value and creator.Value:IsA("Player") then
                 RegisterThreat(creator.Value.Name, isKill)
@@ -879,10 +938,12 @@ task.spawn(function()
                 end
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p ~= Player and p.Character then
-                        local isVis = false
-                        for _, cp in ipairs(checkParts) do
-                            local ok, result = pcall(IsVisibleWallcheck, p.Character, cp, ignoreList)
-                            if ok and result then isVis = true; break end
+                        local isVis
+                        if S.TargetPart == "Visible On Screen" then
+                            isVis = FindVisibleOnScreenPart(p.Character, ignoreList) ~= nil
+                        else
+                            local ok, result = pcall(IsVisibleWallcheck, p.Character, checkParts[1], ignoreList)
+                            isVis = ok and result
                         end
                         S.VisibilityPrecomputed[p.Character] = isVis
                         task.wait()   -- yield for exactly 1 frame between each raycast burst
@@ -899,10 +960,12 @@ task.spawn(function()
                 local npcs = S.CachedNPCs or {}
                 for _, npc in ipairs(npcs) do
                     if npc and npc.Parent then
-                        local isVis = false
-                        for _, cp in ipairs(checkParts) do
-                            local ok, result = pcall(IsVisibleWallcheck, npc, cp, ignoreList)
-                            if ok and result then isVis = true; break end
+                        local isVis
+                        if S.TargetPart == "Visible On Screen" then
+                            isVis = FindVisibleOnScreenPart(npc, ignoreList) ~= nil
+                        else
+                            local ok, result = pcall(IsVisibleWallcheck, npc, checkParts[1], ignoreList)
+                            isVis = ok and result
                         end
                         S.VisibilityPrecomputed[npc] = isVis
                         task.wait()
@@ -1204,10 +1267,12 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         if performWallCheck then
             local precomp = S.VisibilityPrecomputed[model]
             if precomp == nil then
-                -- Optimistic: treat unseen entries as visible so lock-on happens immediately.
-                -- The background loop ③ will compute the real value within 1-2 frames and
-                -- drop false positives (behind walls) on the next selection cycle.
-                precomp = true
+                if S.TargetPart == "Visible On Screen" then
+                    precomp = FindVisibleOnScreenPart(model, customIgnoreList) ~= nil
+                else
+                    precomp = IsVisibleCachedWrapper(model, S.ActivePartName, customIgnoreList)
+                end
+                S.VisibilityPrecomputed[model] = precomp
             end
             if not precomp then return end
         end
@@ -1229,6 +1294,7 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         if ignoreFOV or (onScreen and (not S.ShowFOV or distFromCenter <= currentFov)) then
             table.insert(results, {
                 Instance=model, Root=root, Name=targetName, IsPlayer=isPlayer,
+                Player=pObj,
                 IsTeammate=isTeammate, IsBlacklisted=isBlacklisted,
                 DistFromCenter=distFromCenter, Distance=distFromCam,
                 Position=pos, ScreenPos=Vector2.new(sPos.X,sPos.Y),
@@ -1503,30 +1569,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 
             elseif slot == 1 then
                 -- Slot 1: VoS scan — raycasts on current target limbs (still expensive enough to gate)
-                local tp = S.TargetPart
-                if tp == "Visible On Screen" and S.CurrentTarget and S.CurrentTarget.Instance and S.CurrentTarget.Instance.Parent then
-                    local rigParts = {"Head","Torso","UpperTorso","LowerTorso","Left Arm","LeftUpperArm","LeftLowerArm","LeftHand","Right Arm","RightUpperArm","RightLowerArm","RightHand","Left Leg","LeftUpperLeg","LeftLowerLeg","LeftFoot","Right Leg","RightUpperLeg","RightLowerLeg","RightFoot"}
-                    local prio = S.VOSPriorityParts or {}
-                    local ordered = {}
-                    for _, pn in ipairs(prio) do table.insert(ordered, pn) end
-                    for _, pn in ipairs(rigParts) do
-                        if not table.find(prio, pn) then table.insert(ordered, pn) end
-                    end
-                    local bDist = 999999; local bPart = nil; local sc = GetAimPosition()
-                    for _, pn in ipairs(ordered) do
-                        local part = S.CurrentTarget.Instance:FindFirstChild(pn)
-                        if part and part:IsA("BasePart") then
-                            local isVis = S.IsVisibleWallcheck and S.IsVisibleWallcheck(S.CurrentTarget.Instance, pn, cachedIgnoreList) or false
-                            if isVis then
-                                local sp2, os2 = Camera:WorldToViewportPoint(part.Position)
-                                if os2 then
-                                    local sPos2 = ApplyScreenCalibration(Vector2.new(sp2.X, sp2.Y))
-                                    local d = (sPos2 - sc).Magnitude
-                                    if d < bDist then bDist = d; bPart = part end
-                                end
-                            end
-                        end
-                    end
+                if S.TargetPart == "Visible On Screen" and S.CurrentTarget and S.CurrentTarget.Instance and S.CurrentTarget.Instance.Parent then
+                    local bPart = FindVisibleOnScreenPart(S.CurrentTarget.Instance, cachedIgnoreList)
                     if bPart then
                         S.LastCustomTargetData = {Part = bPart, Position = bPart.Position}
                     else
@@ -1571,6 +1615,19 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     -- every frame so aimbot responsiveness is independent of performance mode.
     if MasterEnabled and AimbotActive and TargetingEnabled then
         local TargetPart = S.TargetPart; local WallCheck = S.WallCheck
+        local previousTarget = S.CurrentTarget
+        if previousTarget then
+            local targetModel = previousTarget.Instance
+            local targetHumanoid = targetModel and targetModel:FindFirstChildOfClass("Humanoid")
+            local targetDisappeared = not targetModel or not targetModel.Parent
+                or not targetHumanoid or targetHumanoid.Health <= 0
+                or (previousTarget.IsPlayer and previousTarget.Player and previousTarget.Player.Parent ~= Players)
+            if targetDisappeared then
+                S.LastTargetLostTime = tick()
+                S.CurrentTarget = nil
+                S.LastCustomTargetData = nil
+            end
+        end
 
         -- Range cull on current target
         if S.CurrentTarget and S.CurrentTarget.Root then
@@ -1640,7 +1697,9 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end
                 table.insert(filtered, c)
             end
-            local delayActive = S.TargetSwitchDelayEnabled and (tick() - S.LastKillTime) < (S.SwitchDelayMs / 1000)
+            local lastTargetLostTime = S.LastTargetLostTime or 0
+            local delayActive = S.TargetSwitchDelayEnabled and lastTargetLostTime > 0
+                and (now - lastTargetLostTime) < ((S.SwitchDelayMs or 0) / 1000)
             if not delayActive then
                 local PP = S.PriorityPlayers or {}; local VM = S.VitalityMode; local PM = S.PriorityMode; local TNC = S.TargetNearCenter
                 table.sort(filtered, function(a, b)
@@ -1658,6 +1717,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 -- v2.1.0: track new target lock for session stats
                 local prev = S.CurrentTarget
                 S.CurrentTarget = filtered[1]
+                if S.CurrentTarget and (not prev or prev.Instance ~= S.CurrentTarget.Instance) then
+                    if TargetPart == "Visible On Screen" then
+                        local part = FindVisibleOnScreenPart(S.CurrentTarget.Instance, cachedIgnoreList)
+                        S.LastCustomTargetData = part and {Part = part, Position = part.Position} or nil
+                        if not part then S.CurrentTarget = nil end
+                    end
+                end
                 if S.CurrentTarget and (not prev or prev.Instance ~= S.CurrentTarget.Instance) then
                     S.SessionTargetLocks = (S.SessionTargetLocks or 0) + 1
                     -- Feature 19: Lock History
@@ -1701,6 +1767,11 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local isBlacklisted=t.IsBlacklisted==true
             local inFocus=not FM or isPriority
             local isPrimary=S.CurrentTarget and t.Instance==S.CurrentTarget.Instance
+            if isPrimary and S.TargetPart == "Visible On Screen" then
+                local part = S.LastCustomTargetData and S.LastCustomTargetData.Part
+                isPrimary = part ~= nil and part.Parent ~= nil and part:IsDescendantOf(t.Instance)
+                    and IsVisibleCachedWrapper(t.Instance, part.Name, cachedIgnoreList)
+            end
             local show=inFocus and (VM=="All" or VM=="Multiple" or (VM=="Single" and isPrimary)) or isBlacklisted
 
             local dist=math.floor((myPos-t.Position).Magnitude)
@@ -1772,7 +1843,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     arrow.PointA=center+Vector2.new(math.cos(angle),math.sin(angle))*r
                     arrow.PointB=center+Vector2.new(math.cos(angle-0.2),math.sin(angle-0.2))*(r-20)
                     arrow.PointC=center+Vector2.new(math.cos(angle+0.2),math.sin(angle+0.2))*(r-20)
-                    arrow.Color=SLC or bc; arrow.Visible=true
+                    arrow.Color=S.OOFArrowColor or SLC or bc; arrow.Visible=true
                 end
             else if OOFArrowCache[t.Instance] then OOFArrowCache[t.Instance].Visible=false end end
             if onScreen then
@@ -1818,12 +1889,12 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                         PrepareDrawing(BoxCache[t.Instance])
                         BoxCache[t.Instance].Size=Vector2.new(bW,bH)
                         BoxCache[t.Instance].Position=Vector2.new(hs.X-(bW/2),hs.Y)
-                        BoxCache[t.Instance].Color=bc; BoxCache[t.Instance].Visible=true
+                        BoxCache[t.Instance].Color=S.BoxColor or bc; BoxCache[t.Instance].Visible=true
                     end
                 else if BoxCache[t.Instance] then BoxCache[t.Instance].Visible=false end end
                 if SkME then
                     local isR15=t.Instance:FindFirstChild("UpperTorso")~=nil
-                    DrawSkeleton(t.Instance, isR15 and R15Joints or R6Joints, bc)
+                    DrawSkeleton(t.Instance, isR15 and R15Joints or R6Joints, S.SkeletonColor or bc)
                 else if SkeletonCache[t.Instance] then for _,l in ipairs(SkeletonCache[t.Instance]) do if l and l.Line then l.Line.Visible=false end end end end
             else
                 if typeof(tag)=="Instance" then tag.Enabled=false else pcall(function() tag.Visible=false end) end
@@ -1850,7 +1921,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             if TP=="Visible On Screen" then
                 if S.LastCustomTargetData and S.LastCustomTargetData.Part and S.LastCustomTargetData.Part.Parent and S.LastCustomTargetData.Part:IsDescendantOf(CT.Instance) then
                     local lvPart = S.LastCustomTargetData.Part
-                    TWP = lvPart.Position + (lvPart.AssemblyLinearVelocity * PA)
+                    local screenPoint, onScreen = Camera:WorldToViewportPoint(lvPart.Position)
+                    if onScreen and IsVisibleCachedWrapper(CT.Instance, lvPart.Name, cachedIgnoreList) then
+                        TWP = lvPart.Position + (lvPart.AssemblyLinearVelocity * PA)
+                    end
                 else TWP=nil end
             else
                 local bn=TP

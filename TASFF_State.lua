@@ -153,6 +153,9 @@ _G.TASFF_State = {
     OOFArrowsEnabled            = false,
     OOFArrowRadius              = 150,
     HighlightColor              = Color3.fromRGB(255, 255, 255),
+    FOVColor                    = Color3.fromRGB(0, 255, 255),
+    CrosshairColor              = Color3.fromRGB(0, 255, 255),
+    SnaplineColor               = Color3.fromRGB(255, 50, 50),
     VisibilityColorsEnabled     = false,
     VisibleColor                = Color3.fromRGB(0, 255, 0),
     HiddenColor                 = Color3.fromRGB(255, 0, 0),
@@ -201,6 +204,7 @@ _G.TASFF_State = {
     SuppressRayfieldAds         = false, -- hide Rayfield periodic ad notifications
     DebugMode                   = false,     -- Feature 27: verbose console output
     PresetFileName              = "TASFF_V1.5.5_Presets.json",
+    ColorSettingsFileName       = "TASFF_ColorSettings.json",
     ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
     CurrentVersion              = "2.1.0",
 

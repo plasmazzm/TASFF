@@ -982,9 +982,8 @@ task.spawn(function()
         else
             -- Wallcheck off: treat everyone as visible so aimbot works normally
             S.VisibilityPrecomputed = {}
-            task.wait(0.2)
         end
-        -- No extra task.wait here — restart immediately for tight update cadence
+        task.wait(0.05)
     end
 end)
 
@@ -1145,6 +1144,11 @@ local function CleanupCaches()
     end
     for k, t in pairs(VisibilityCacheTime) do
         if now - t > 1 then VisibilityCache[k] = nil; VisibilityCacheTime[k] = nil end
+    end
+    for model in pairs(S.VisibilityPrecomputed) do
+        if not IsModelValid(model) then
+            S.VisibilityPrecomputed[model] = nil
+        end
     end
     for model, _ in pairs(TargetFirstSeenTimestamps) do
         if not IsModelValid(model) then TargetFirstSeenTimestamps[model] = nil end
@@ -1325,9 +1329,18 @@ end
 S.LoadPresetsFromFile = LoadPresetsFromFile
 
 local function SavePresetsToFile()
-    pcall(function()
-        if writefile then writefile(S.PresetFileName, HttpService:JSONEncode(S.SavedPresets)) end
+    if not writefile then
+        warn("[TASFF Core] Cannot save presets: writefile is unavailable.")
+        return false
+    end
+    local ok, err = pcall(function()
+        writefile(S.PresetFileName, HttpService:JSONEncode(S.SavedPresets))
     end)
+    if not ok then
+        warn("[TASFF Core] Failed to save presets: " .. tostring(err))
+        return false
+    end
+    return true
 end
 S.SavePresetsToFile = SavePresetsToFile
 
@@ -1621,7 +1634,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local targetHumanoid = targetModel and targetModel:FindFirstChildOfClass("Humanoid")
             local targetDisappeared = not targetModel or not targetModel.Parent
                 or not targetHumanoid or targetHumanoid.Health <= 0
-                or (previousTarget.IsPlayer and previousTarget.Player and previousTarget.Player.Parent ~= Players)
+                or (previousTarget.IsPlayer and previousTarget.Player
+                    and (previousTarget.Player.Parent ~= Players or previousTarget.Player.Character ~= targetModel))
             if targetDisappeared then
                 S.LastTargetLostTime = tick()
                 S.CurrentTarget = nil

@@ -6,6 +6,15 @@
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
+local executorCapabilities = {
+    FileRead = type(readfile) == "function" and type(isfile) == "function",
+    FileWrite = type(writefile) == "function",
+    LoadString = type(loadstring) == "function",
+    HookMetamethod = type(hookmetamethod) == "function",
+    MouseMoveRelative = type(mousemoverel) == "function",
+    MouseMoveAbsolute = type(mousemoveabs) == "function",
+}
+
 -- // ── Module Source Configuration ──────────────────────────────── // --
 -- Set your preferred loading method below.
 -- Method A (recommended): Host files on GitHub and use raw URLs.
@@ -120,10 +129,28 @@ getgenv().TASFF = {
     Running              = true,
     Connections          = {},
     Drawings             = {},
+    Capabilities         = executorCapabilities,
     Cleanup              = nil,    -- assigned by Core after hooks are set up
     ThreatMonitorRunning = false,
     Rayfield             = nil,    -- assigned below after Rayfield loads
 }
+
+local function CleanupPartialRuntime()
+    local runtime = getgenv().TASFF
+    if not runtime then return end
+    runtime.Running = false
+    if type(runtime.Cleanup) == "function" then
+        pcall(runtime.Cleanup)
+    end
+    for _, conn in ipairs(runtime.Connections or {}) do
+        if conn and typeof(conn) == "RBXScriptConnection" then
+            pcall(function() conn:Disconnect() end)
+        end
+    end
+    for _, drawing in ipairs(runtime.Drawings or {}) do
+        pcall(function() drawing:Remove() end)
+    end
+end
 
 -- // ── Load Rayfield (once) ────────────────────────────────────── // --
 -- Rayfield is loaded here and stored in getgenv().TASFF.Rayfield.
@@ -131,15 +158,27 @@ getgenv().TASFF = {
 -- UI reads it the same way. This ensures only ONE Rayfield instance exists.
 
 print("[TASFF Loader] Loading Rayfield...")
-local rayfieldSource = SafeHttpGet("https://sirius.menu/rayfield", "Rayfield")
-local ok, rayfieldFactory = pcall(loadstring, rayfieldSource)
-if not ok or type(rayfieldFactory) ~= "function" then
-    error("[TASFF Loader] Failed to compile Rayfield bootstrap: " .. tostring(rayfieldFactory))
+if not executorCapabilities.LoadString then
+    CleanupPartialRuntime()
+    error("[TASFF Loader] This executor does not provide loadstring; modules cannot be compiled.")
 end
-local ok2, Rayfield = pcall(rayfieldFactory)
-if not ok2 or type(Rayfield) ~= "table" then
-    error("[TASFF Loader] Failed to initialize Rayfield instance.")
+local rayfieldOk, RayfieldOrError = pcall(function()
+    local rayfieldSource = SafeHttpGet("https://sirius.menu/rayfield", "Rayfield")
+    local rayfieldFactory, compileError = loadstring(rayfieldSource)
+    if type(rayfieldFactory) ~= "function" then
+        error("[TASFF Loader] Failed to compile Rayfield bootstrap: " .. tostring(compileError))
+    end
+    local instance = rayfieldFactory()
+    if type(instance) ~= "table" then
+        error("[TASFF Loader] Rayfield bootstrap returned an invalid instance.")
+    end
+    return instance
+end)
+if not rayfieldOk then
+    CleanupPartialRuntime()
+    error("[TASFF Loader] Rayfield initialization failed:\n" .. tostring(RayfieldOrError))
 end
+local Rayfield = RayfieldOrError
 getgenv().TASFF.Rayfield = Rayfield
 print("[TASFF Loader] Rayfield loaded.")
 
@@ -196,10 +235,17 @@ end
 
 print("[TASFF Loader] Loading modules...")
 
-LoadModule("TASFF_State.lua")   -- _G.TASFF_State = {...}
-LoadModule("TASFF_Lists.lua")   -- classifiers, feature list, game configs
-LoadModule("TASFF_Core.lua")    -- S.FunctionSlots = ..., render loop starts
-LoadModule("TASFF_UI.lua")      -- Window created, LoadConfiguration() called
+local loadOk, loadError = pcall(function()
+    LoadModule("TASFF_State.lua")   -- _G.TASFF_State = {...}
+    LoadModule("TASFF_Lists.lua")   -- classifiers, feature list, game configs
+    LoadModule("TASFF_Core.lua")    -- S.FunctionSlots = ..., render loop starts
+    LoadModule("TASFF_UI.lua")      -- Window created, LoadConfiguration() called
+end)
+if not loadOk then
+    CleanupPartialRuntime()
+    _G.TASFF_State = nil
+    error("[TASFF Loader] Startup aborted and partial runtime was cleaned up:\n" .. tostring(loadError))
+end
 
 -- // ── Post-Init ───────────────────────────────────────────────── // --
 -- At this point:

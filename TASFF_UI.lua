@@ -620,7 +620,7 @@ VisualTab:CreateSlider({Name = "FOV Boundary Radius", Range = {30, 600}, Increme
 VisualTab:CreateToggle({Name = "Dynamic FOV Auto-Scale by Distance", CurrentValue = S.DynamicFOVEnabled, Flag = "DynamicFOVEnabled", Callback = function(v) S.DynamicFOVEnabled = v end})
 VisualTab:CreateParagraph({
     Title   = "Dynamic FOV Scaling",
-    Content = "When enabled, the FOV radius scales linearly with target distance (the configured radius is the scale at 100 studs), shrinking as a target gets closer. The circle follows the current target; Dynamic FOV Max Radius caps its size."
+    Content = "When enabled, the FOV radius scales inversely with target distance: it grows as the target gets closer and shrinks as the target moves farther away. The configured radius is the scale at 100 studs; Dynamic FOV Max Radius caps the close-range size."
 })
 VisualTab:CreateSlider({Name = "Dynamic FOV Max Radius", Range = {30, 1000}, Increment = 10, CurrentValue = S.DynamicFOVMax or 400, Flag = "DynamicFOVMax", Callback = function(v) S.DynamicFOVMax = v end})
 VisualTab:CreateDropdown({
@@ -1876,7 +1876,7 @@ UpdateLogTab:CreateSection("Version 2.1.0")
 UpdateLogTab:CreateLabel("- Final Architecture Push: Consolidated performance, security, and rendering engines.")
 UpdateLogTab:CreateLabel("- Aimbot Engine: Moved candidate scanning entirely out of pipeline for zero-delay lock-on.")
 UpdateLogTab:CreateLabel("- Threat Neutralization: Instant target death detection added to render loop, fixing delayed threat removal.")
-UpdateLogTab:CreateLabel("- Dynamic FOV Auto-Scale: FOV constraint now scales down seamlessly across distances.")
+UpdateLogTab:CreateLabel("- Dynamic FOV Auto-Scale: FOV radius grows at close range and shrinks with distance.")
 UpdateLogTab:CreateLabel("- Advanced Combat: Health Threshold Gating added to ignore players below specific HP ranges.")
 UpdateLogTab:CreateLabel("- Advanced Automation: Auto-Disable Aimbot on Death added to prevent post-death buggy locks.")
 UpdateLogTab:CreateLabel("- Threat Intelligence: FP Cooldowns, Prox Radius limits, Velocity direction checks, and Nemesis Decay added.")

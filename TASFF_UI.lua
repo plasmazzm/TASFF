@@ -1105,9 +1105,14 @@ SettingsTab:CreateButton({
 SettingsTab:CreateButton({
     Name     = "Save Tool Registry to Disk",
     Callback = function()
-        if S.SaveToolBlacklist then 
-            S.SaveToolBlacklist() 
-            if S.Notify then S.Notify({Title="TASFF Arsenal", Content="Tool registry saved permanently.", Duration=2, Image="save"}) end
+        local saved = S.SaveToolBlacklist and S.SaveToolBlacklist()
+        if S.Notify then
+            S.Notify({
+                Title = "TASFF Arsenal",
+                Content = saved and "Tool registry saved to disk." or "Tool registry is active for this session, but could not be saved to disk.",
+                Duration = 3,
+                Image = saved and "save" or "alert-triangle",
+            })
         end
     end
 })
@@ -1117,8 +1122,15 @@ SettingsTab:CreateButton({
     Callback = function()
         S.ToolBlacklist = {}
         if BlacklistDropdown then pcall(function() BlacklistDropdown:Refresh({"No Registry Items Found"}, true) end) end
-        if S.SaveToolBlacklist then S.SaveToolBlacklist() end
-        if S.Notify then S.Notify({Title="TASFF Arsenal", Content="Tool registry cleared.", Duration=2, Image="trash"}) end
+        local saved = S.SaveToolBlacklist and S.SaveToolBlacklist()
+        if S.Notify then
+            S.Notify({
+                Title = "TASFF Arsenal",
+                Content = saved and "Tool registry cleared and saved." or "Tool registry cleared for this session; disk save failed.",
+                Duration = 3,
+                Image = saved and "trash" or "alert-triangle",
+            })
+        end
     end
 })
 
@@ -1184,11 +1196,19 @@ PresetsTab:CreateButton({
                     S.SavedPresets[PresetInputName][field] = EncodeColor(S[field])
                 end
             end
-            if S.SavePresetsToFile then S.SavePresetsToFile() end
+            local saved = S.SavePresetsToFile and S.SavePresetsToFile()
             if PresetDropdownRef and PresetDropdownRef.Refresh then
                 pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
             end
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Saved profile: " .. PresetInputName, Duration = 3, Image = "folder-plus"}) end
+            if S.Notify then
+                S.Notify({
+                    Title = "TASFF Presets",
+                    Content = saved and ("Saved profile: " .. PresetInputName)
+                        or ("Profile added for this session, but could not be saved to disk: " .. PresetInputName),
+                    Duration = 4,
+                    Image = saved and "folder-plus" or "alert-triangle",
+                })
+            end
         end
     end
 })
@@ -1274,12 +1294,20 @@ PresetsTab:CreateButton({
 
         if selected and selected ~= "No Profiles Found" and S.SavedPresets[selected] then
             S.SavedPresets[selected] = nil
-            if S.SavePresetsToFile then S.SavePresetsToFile() end
+            local saved = S.SavePresetsToFile and S.SavePresetsToFile()
             if PresetDropdownRef and PresetDropdownRef.Refresh then
                 local list = GetPresetNamesList()
                 pcall(function() PresetDropdownRef:Refresh(list, true) end)
             end
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Deleted profile: " .. selected, Duration = 3, Image = "folder-minus"}) end
+            if S.Notify then
+                S.Notify({
+                    Title = "TASFF Presets",
+                    Content = saved and ("Deleted profile: " .. selected)
+                        or ("Profile deleted for this session, but the disk save failed: " .. selected),
+                    Duration = 4,
+                    Image = saved and "folder-minus" or "alert-triangle",
+                })
+            end
             SelectedPresetToManage = ""
         else
             if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected to delete.", Duration = 2, Image = "alert-triangle"}) end
@@ -1347,11 +1375,19 @@ PresetsTab:CreateButton({
             local success, decoded = pcall(function() return HttpService:JSONDecode(clipData) end)
             if success and type(decoded) == "table" then
                 for k, v in pairs(decoded) do S.SavedPresets[k] = v end
-                if S.SavePresetsToFile then S.SavePresetsToFile() end
+                local saved = S.SavePresetsToFile and S.SavePresetsToFile()
                 if PresetDropdownRef and PresetDropdownRef.Refresh then
                     pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
                 end
-                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Presets added to database! Select from dropdown to load.", Duration = 3, Image = "clipboard-check"}) end
+                if S.Notify then
+                    S.Notify({
+                        Title = "TASFF Configs",
+                        Content = saved and "Presets added to disk database! Select from dropdown to load."
+                            or "Presets added for this session, but could not be saved to disk.",
+                        Duration = 4,
+                        Image = saved and "clipboard-check" or "alert-triangle",
+                    })
+                end
             else
                 if S.Notify then S.Notify({Title = "Import Failed", Content = "Invalid JSON string format in clipboard.", Duration = 3, Image = "file-warning"}) end
             end
@@ -1370,11 +1406,19 @@ PresetsTab:CreateInput({
             local success, decoded = pcall(function() return HttpService:JSONDecode(text) end)
             if success and type(decoded) == "table" then
                 for k, v in pairs(decoded) do S.SavedPresets[k] = v end
-                if S.SavePresetsToFile then S.SavePresetsToFile() end
+                local saved = S.SavePresetsToFile and S.SavePresetsToFile()
                 if PresetDropdownRef and PresetDropdownRef.Refresh then
                     pcall(function() PresetDropdownRef:Refresh(GetPresetNamesList(), true) end)
                 end
-                if S.Notify then S.Notify({Title = "TASFF Configs", Content = "Profiles imported! Select them from the dropdown above to load.", Duration = 3, Image = "file-check"}) end
+                if S.Notify then
+                    S.Notify({
+                        Title = "TASFF Configs",
+                        Content = saved and "Profiles imported and saved! Select them from the dropdown above to load."
+                            or "Profiles imported for this session, but could not be saved to disk.",
+                        Duration = 4,
+                        Image = saved and "file-check" or "alert-triangle",
+                    })
+                end
             else
                 if S.Notify then S.Notify({Title = "Import Failed", Content = "Syntax Error: Invalid JSON structure.", Duration = 3, Image = "file-x"}) end
             end

@@ -1735,7 +1735,7 @@ local function HookNeutralization(p)
                 if S.RemoveFromIntel then S.RemoveFromIntel(p.Name, false) end
                 Notify({Title="Intel",Content="Neutralized: "..p.Name.." removed from Intel.",Duration=2,Image="check-circle"})
             end
-        end)
+        end))
     end
     -- Hook current character (if already spawned)
     if p.Character then task.spawn(hookHum, p.Character) end

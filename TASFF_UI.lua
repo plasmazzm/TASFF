@@ -618,6 +618,10 @@ end})
 VisualTab:CreateToggle({Name = "Invisible FOV Constraint", CurrentValue = S.InvisibleFOV, Flag = "InvisibleFOV", Callback = function(v) S.InvisibleFOV = v end})
 VisualTab:CreateSlider({Name = "FOV Boundary Radius", Range = {30, 600}, Increment = 5, CurrentValue = S.FOVSize, Flag = "FOVSize", Callback = function(v) S.FOVSize = v end})
 VisualTab:CreateToggle({Name = "Dynamic FOV Auto-Scale by Distance", CurrentValue = S.DynamicFOVEnabled, Flag = "DynamicFOVEnabled", Callback = function(v) S.DynamicFOVEnabled = v end})
+VisualTab:CreateParagraph({
+    Title   = "Dynamic FOV Scaling",
+    Content = "When enabled, the FOV radius scales linearly with target distance (the configured radius is the scale at 100 studs), shrinking as a target gets closer. The circle follows the current target; Dynamic FOV Max Radius caps its size."
+})
 VisualTab:CreateSlider({Name = "Dynamic FOV Max Radius", Range = {30, 1000}, Increment = 10, CurrentValue = S.DynamicFOVMax or 400, Flag = "DynamicFOVMax", Callback = function(v) S.DynamicFOVMax = v end})
 VisualTab:CreateDropdown({
     Name          = "FOV Tracking Origin",

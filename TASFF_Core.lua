@@ -436,14 +436,14 @@ S.GetAimPosition = GetAimPosition
 
 local function GetEffectiveFOV(distance)
     local baseFOV = tonumber(S.FOVSize) or 100
-    if not S.DynamicFOVEnabled or type(distance) ~= "number" or distance <= 0 then
+    if not S.DynamicFOVEnabled or type(distance) ~= "number" or distance < 0 then
         return baseFOV
     end
 
     local scaledFOV = baseFOV * (distance / 100)
     local maxFOV = tonumber(S.DynamicFOVMax)
     if maxFOV then scaledFOV = math.min(scaledFOV, maxFOV) end
-    return math.max(baseFOV, scaledFOV)
+    return math.max(1, scaledFOV)
 end
 
 local function GetMouseButtonIndex(name)
@@ -1812,14 +1812,17 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 
     local screenCenter  = GetAimPosition()
     local shouldShowFOV = S.ShowFOV and not S.InvisibleFOV
+        and MasterEnabled and AimbotActive and TargetingEnabled
     if S.FOVCircle then
         if shouldShowFOV then
             PrepareDrawing(S.FOVCircle)
             S.FOVCircle.Position = screenCenter
             pcall(function() S.FOVCircle.Point = screenCenter end)
-            local drawFov = S.CurrentTarget and S.CurrentTarget.Root
-                and GetEffectiveFOV((S.CurrentTarget.Root.Position - Camera.CFrame.Position).Magnitude)
-                or GetEffectiveFOV()
+            local targetRoot = S.CurrentTarget and S.CurrentTarget.Root
+            local drawDistance = targetRoot and targetRoot.Parent
+                and (targetRoot.Position - Camera.CFrame.Position).Magnitude
+                or nil
+            local drawFov = GetEffectiveFOV(drawDistance)
             S.FOVCircle.Radius  = drawFov
             S.FOVCircle.Color   = S.FOVColor or S.FOVCircle.Color
             S.FOVCircle.Visible = true

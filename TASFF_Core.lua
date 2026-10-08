@@ -38,6 +38,14 @@ local function TrackConnection(conn)
     local env = GetTASFFEnv()
     if not env or type(env.Connections) ~= "table" or not conn then return end
     if typeof(conn) == "RBXScriptConnection" then
+        for i = #env.Connections, 1, -1 do
+            local existing = env.Connections[i]
+            if not existing or typeof(existing) ~= "RBXScriptConnection" or not existing.Connected then
+                table.remove(env.Connections, i)
+            elseif existing == conn then
+                return
+            end
+        end
         table.insert(env.Connections, conn)
     end
 end
@@ -67,6 +75,7 @@ local CrosshairElements         = S.CrosshairElements
 local TargetFirstSeenTimestamps = S.TargetFirstSeenTimestamps
 local VisibilityCache           = S.VisibilityCache
 local VisibilityCacheTime       = S.VisibilityCacheTime
+local OverlayGui
 
 TrackConnection(
     workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
@@ -131,28 +140,190 @@ end)
 
 
 
+local function EnsureOverlayGui()
+    if OverlayGui and OverlayGui.Parent then return OverlayGui end
+    local playerGui = Player and Player:FindFirstChildOfClass("PlayerGui")
+    if not playerGui then return nil end
+    OverlayGui = Instance.new("ScreenGui")
+    OverlayGui.Name = "TASFF_Overlay"
+    OverlayGui.IgnoreGuiInset = true
+    OverlayGui.ResetOnSpawn = false
+    OverlayGui.DisplayOrder = 10000
+    OverlayGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    OverlayGui.Parent = playerGui
+    return OverlayGui
+end
+
+local function SetOverlayLine(frame, from, to, thickness, color, transparency, zIndex)
+    local delta = to - from
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.Position = UDim2.fromOffset((from.X + to.X) * 0.5, (from.Y + to.Y) * 0.5)
+    frame.Size = UDim2.fromOffset(delta.Magnitude, math.max(1, thickness))
+    frame.Rotation = math.deg(math.atan2(delta.Y, delta.X))
+    frame.BackgroundColor3 = color
+    frame.BackgroundTransparency = 1 - transparency
+    frame.ZIndex = zIndex
+end
+
+local function UpdateOverlayDrawing(object)
+    local values = object.Values
+    local frame = object.Frame
+    local visible = values.Visible == true
+    local alpha = math.clamp(tonumber(values.Transparency) or 1, 0, 1)
+    local color = typeof(values.Color) == "Color3" and values.Color or Color3.new(1, 1, 1)
+    local thickness = math.max(1, tonumber(values.Thickness) or 1)
+    local zIndex = math.clamp(math.floor(tonumber(values.ZIndex) or 60), 1, 100)
+
+    frame.Visible = visible
+    frame.ZIndex = zIndex
+    if object.Kind == "Line" then
+        if typeof(values.From) == "Vector2" and typeof(values.To) == "Vector2" then
+            SetOverlayLine(frame, values.From, values.To, thickness, color, alpha, zIndex)
+        end
+    elseif object.Kind == "Circle" then
+        local radius = math.max(0, tonumber(values.Radius) or 0)
+        local position = typeof(values.Position) == "Vector2" and values.Position or Vector2.zero
+        frame.AnchorPoint = Vector2.new(0.5, 0.5)
+        frame.Position = UDim2.fromOffset(position.X, position.Y)
+        frame.Size = UDim2.fromOffset(radius * 2, radius * 2)
+        frame.BackgroundColor3 = color
+        frame.BackgroundTransparency = values.Filled and (1 - alpha) or 1
+        frame.ZIndex = zIndex
+        object.Stroke.Color = color
+        object.Stroke.Thickness = thickness
+        object.Stroke.Transparency = 1 - alpha
+        object.Stroke.Enabled = not values.Filled
+    elseif object.Kind == "Square" then
+        local position = typeof(values.Position) == "Vector2" and values.Position or Vector2.zero
+        local size = typeof(values.Size) == "Vector2" and values.Size or Vector2.zero
+        frame.AnchorPoint = Vector2.zero
+        frame.Position = UDim2.fromOffset(position.X, position.Y)
+        frame.Size = UDim2.fromOffset(size.X, size.Y)
+        frame.BackgroundColor3 = color
+        frame.BackgroundTransparency = values.Filled and (1 - alpha) or 1
+        object.Stroke.Color = color
+        object.Stroke.Thickness = thickness
+        object.Stroke.Transparency = 1 - alpha
+        object.Stroke.Enabled = not values.Filled
+    elseif object.Kind == "Text" then
+        local position = typeof(values.Position) == "Vector2" and values.Position or Vector2.zero
+        frame.AnchorPoint = values.Center and Vector2.new(0.5, 0.5) or Vector2.zero
+        frame.Position = UDim2.fromOffset(position.X, position.Y)
+        frame.Size = UDim2.fromOffset(320, math.max(24, (tonumber(values.Size) or 16) * 3))
+        frame.BackgroundTransparency = 1
+        frame.Text = tostring(values.Text or "")
+        frame.TextSize = math.max(1, tonumber(values.Size) or 16)
+        frame.TextColor3 = color
+        frame.TextTransparency = 1 - alpha
+        frame.TextStrokeColor3 = values.OutlineColor or Color3.new(0, 0, 0)
+        frame.TextStrokeTransparency = values.Outline and (1 - alpha) or 1
+        frame.TextXAlignment = values.Center and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
+        frame.TextYAlignment = Enum.TextYAlignment.Center
+    elseif object.Kind == "Triangle" then
+        local a, b, c = values.PointA, values.PointB, values.PointC
+        if typeof(a) == "Vector2" and typeof(b) == "Vector2" and typeof(c) == "Vector2" then
+            local center = (a + b + c) / 3
+            local tip = a
+            if (b - center).Magnitude > (tip - center).Magnitude then tip = b end
+            if (c - center).Magnitude > (tip - center).Magnitude then tip = c end
+            frame.AnchorPoint = Vector2.new(0.5, 0.5)
+            frame.Position = UDim2.fromOffset(center.X, center.Y)
+            frame.Size = UDim2.fromOffset(math.max(24, (tip - center).Magnitude * 2), math.max(24, (a - b).Magnitude))
+            frame.BackgroundTransparency = 1
+            frame.Text = "▲"
+            frame.TextSize = math.max(16, (tip - center).Magnitude * 1.5)
+            frame.TextColor3 = color
+            frame.TextTransparency = 1 - alpha
+            frame.Rotation = math.deg(math.atan2(tip.Y - center.Y, tip.X - center.X)) + 90
+        end
+    end
+end
+
 local function NewDrawing(className)
-    if not (Drawing and Drawing.new) then return nil end
-    local ok, obj = pcall(Drawing.new, className)
-    if not ok or obj == nil then return nil end
-    pcall(function()
-        obj.Visible = false
-        obj.ZIndex  = 60
-        obj.Transparency = 1
-        if obj.Opacity ~= nil then obj.Opacity = 1 end
-    end)
-    TrackDrawing(obj)
-    return obj
+    local overlay = EnsureOverlayGui()
+    if not overlay then return nil end
+
+    local kind = className
+    local frame
+    if kind == "Text" or kind == "Triangle" then
+        frame = Instance.new("TextLabel")
+        frame.Font = Enum.Font.Code
+        frame.TextWrapped = true
+        frame.RichText = false
+    else
+        frame = Instance.new("Frame")
+        frame.BorderSizePixel = 0
+        frame.BackgroundTransparency = 1
+    end
+    frame.Name = "TASFF_" .. kind
+    frame.Visible = false
+    frame.Parent = overlay
+
+    local stroke
+    if kind == "Circle" or kind == "Square" then
+        if kind == "Circle" then
+            Instance.new("UICorner", frame).CornerRadius = UDim.new(1, 0)
+        end
+        stroke = Instance.new("UIStroke")
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.Parent = frame
+    end
+
+    local object = {
+        Kind = kind,
+        Frame = frame,
+        Stroke = stroke,
+        Values = {
+            Visible = false,
+            Transparency = 1,
+            ZIndex = 60,
+            Color = Color3.new(1, 1, 1),
+            Thickness = 1,
+            Filled = false,
+            Center = false,
+            Outline = false,
+            Text = "",
+            Size = 16,
+            Radius = 0,
+        },
+    }
+    setmetatable(object, {
+        __index = function(self, key)
+            if key == "Remove" then
+                return function(instance)
+                    if instance.Frame then instance.Frame:Destroy() end
+                    instance.Frame = nil
+                end
+            end
+            return self.Values[key]
+        end,
+        __newindex = function(self, key, value)
+            self.Values[key] = value
+            UpdateOverlayDrawing(self)
+        end,
+    })
+    TrackDrawing(object)
+    return object
 end
 S.NewDrawing = NewDrawing
 
+local function NewStreamProofDrawing(className)
+    if not (Drawing and type(Drawing.new) == "function") then return nil end
+    local ok, object = pcall(Drawing.new, className)
+    if not ok or not object then return nil end
+    pcall(function()
+        object.Visible = false
+        object.ZIndex = 60
+        object.Transparency = 1
+    end)
+    TrackDrawing(object)
+    return object
+end
+
 local function PrepareDrawing(obj)
     if not obj then return end
-    pcall(function()
-        obj.ZIndex = 60
-        obj.Transparency = 1
-        if obj.Opacity ~= nil then obj.Opacity = 1 end
-    end)
+    obj.ZIndex = 60
+    obj.Transparency = 1
 end
 S.PrepareDrawing = PrepareDrawing
 
@@ -251,7 +422,8 @@ S.ApplyScreenCalibration = ApplyScreenCalibration
 local function GetAimPosition()
     local position
     if S.AimReferenceMode == "Mouse Tracking" then
-        position = UserInputService:GetMouseLocation()
+        local inset = GuiService:GetGuiInset()
+        position = UserInputService:GetMouseLocation() - inset
     else
         position = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
     end
@@ -261,6 +433,18 @@ local function GetAimPosition()
     return position
 end
 S.GetAimPosition = GetAimPosition
+
+local function GetEffectiveFOV(distance)
+    local baseFOV = tonumber(S.FOVSize) or 100
+    if not S.DynamicFOVEnabled or type(distance) ~= "number" or distance <= 0 then
+        return baseFOV
+    end
+
+    local scaledFOV = baseFOV * (distance / 100)
+    local maxFOV = tonumber(S.DynamicFOVMax)
+    if maxFOV then scaledFOV = math.min(scaledFOV, maxFOV) end
+    return math.max(baseFOV, scaledFOV)
+end
 
 local function GetMouseButtonIndex(name)
     if name == "MouseButton1" then return 0 end
@@ -726,7 +910,7 @@ local function HookThreatHealth(char)
     local humanoid = char:WaitForChild("Humanoid", 3)
     if not humanoid then return end
     local lastHealth = humanoid.Health
-    humanoid.HealthChanged:Connect(function(newHealth)
+    TrackConnection(humanoid.HealthChanged:Connect(function(newHealth)
         if S.ThreatDetectorEnabled and newHealth < lastHealth then
             local isKill = (newHealth <= 0)
             local creator = humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("creatorTag")
@@ -753,7 +937,7 @@ local function HookThreatHealth(char)
             end
         end
         lastHealth = newHealth
-    end)
+    end))
 end
 
 
@@ -1027,13 +1211,28 @@ pcall(UpdateNPCs)
 -- // ── v2.1.0 Feature 10: ToolBlacklist Save/Load ──────────────── // --
 local BLFILE = "TASFF_ToolBlacklist.json"
 local function SaveToolBlacklist()
-    pcall(function()
-        local json = (HttpService and HttpService.JSONEncode) and
-            HttpService:JSONEncode(S.ToolBlacklist or {}) or "[]"
+    local env = GetTASFFEnv()
+    if not (env and env.Capabilities and env.Capabilities.FileWrite)
+        or type(writefile) ~= "function" then
+        warn("[TASFF Core] Cannot save tool blacklist: filesystem write API is unavailable.")
+        return false
+    end
+    local ok, err = pcall(function()
+        local json = HttpService:JSONEncode(S.ToolBlacklist or {})
         writefile(BLFILE, json)
     end)
+    if not ok then
+        warn("[TASFF Core] Failed to save tool blacklist: " .. tostring(err))
+        return false
+    end
+    return true
 end
 local function LoadToolBlacklist()
+    local env = GetTASFFEnv()
+    if not (env and env.Capabilities and env.Capabilities.FileRead)
+        or type(isfile) ~= "function" or type(readfile) ~= "function" then
+        return false
+    end
     pcall(function()
         if isfile and isfile(BLFILE) then
             local raw = readfile(BLFILE)
@@ -1072,10 +1271,10 @@ local function HookAutoDisableOnDeath(char)
         end
         if conn then conn:Disconnect() end
     end)
-    table.insert(getgenv().TASFF.Connections, conn)
+    TrackConnection(conn)
 end
 if Player.Character then task.defer(HookAutoDisableOnDeath, Player.Character) end
-table.insert(getgenv().TASFF.Connections, Player.CharacterAdded:Connect(function(char)
+TrackConnection(Player.CharacterAdded:Connect(function(char)
     task.wait(1)   -- wait for Humanoid to replicate
     HookAutoDisableOnDeath(char)
 end))
@@ -1202,9 +1401,10 @@ end)
 
 local function GetVisualAssets(model)
     local h = HighlightCache[model]
-    if not h or not h.Parent or not h:IsDescendantOf(game) then
+    if not h or not h.Parent or not h:IsDescendantOf(model) then
         if h and h.Parent then h:Destroy() end
-        h = Instance.new("Highlight", CoreGui)
+        h = Instance.new("Highlight")
+        h.Parent = model
         h.FillTransparency = 1
         HighlightCache[model] = h
     end
@@ -1217,12 +1417,13 @@ local function GetVisualAssets(model)
             if isInstance then tag:Destroy() else pcall(function() tag:Remove() end) end
         end
         if wantDrawing then
-            tag = NewDrawing("Text")
+            tag = NewStreamProofDrawing("Text")
             if tag then tag.Size=16; tag.Center=true; tag.Outline=true; tag.Color=S.HighlightColor or Color3.fromRGB(255,255,255)
             else wantDrawing = false end
         end
         if not wantDrawing then
-            tag = Instance.new("BillboardGui", CoreGui)
+            tag = Instance.new("BillboardGui")
+            tag.Parent = model
             tag.Size=UDim2.new(0,200,0,70); tag.AlwaysOnTop=true; tag.StudsOffset=Vector3.new(0,3,0)
             local l = Instance.new("TextLabel", tag)
             l.Size=UDim2.new(1,0,1,0); l.BackgroundTransparency=1; l.Font=Enum.Font.Code; l.TextSize=14
@@ -1313,7 +1514,7 @@ local function DrawSkeleton(character, jointsTable, color)
 end
 S.DrawSkeleton = DrawSkeleton
 
-local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList, maxDistance)
+local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList, maxDistance, isForESP)
     local results = {}
     local screenCenter = GetAimPosition()
     local function Process(model, isPlayer, pObj)
@@ -1321,15 +1522,15 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         local targetName = isPlayer and pObj.Name or model.Name
         local isBlacklisted = isPlayer and table.find(S.BlacklistedPlayers or {}, targetName) ~= nil
         -- Feature 21: ESP Whitelist
-        if isPlayer and S.ESPWhitelistEnabled and not isBlacklisted then
+        if isForESP and isPlayer and S.ESPWhitelistEnabled and not isBlacklisted then
             if not table.find(S.ESPWhitelist or {}, targetName) then return end
         end
-        -- v2.1.0: blacklisted players are filtered from aimbot but shown in ESP (with tag or hidden per setting)
+        -- Blacklisted players remain visible in ESP unless explicitly hidden, but can never be aim targets.
         if isBlacklisted then
-            if performWallCheck then return end  -- never aim at blacklisted
-            if S.HideBlacklistedESP then return end  -- option to fully hide from ESP too
+            if not isForESP or S.HideBlacklistedESP then return end
         end
-        if S.PriorityBehavior == "Exclusive" and not isBlacklisted and not table.find(S.PriorityPlayers or {}, targetName) then return end
+        if not isForESP and S.PriorityBehavior == "Exclusive" and not isBlacklisted
+            and not table.find(S.PriorityPlayers or {}, targetName) then return end
         local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso")
         if not root then return end
         local hum = model:FindFirstChildOfClass("Humanoid")
@@ -1381,11 +1582,7 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         end
         
         -- Feature 6: Dynamic FOV
-        local currentFov = S.FOVSize
-        if not ignoreFOV and S.DynamicFOVEnabled and distFromCam > 0 then
-            currentFov = S.FOVSize * (distFromCam / 100)
-            if S.DynamicFOVMax and currentFov > S.DynamicFOVMax then currentFov = S.DynamicFOVMax end
-        end
+        local currentFov = GetEffectiveFOV(distFromCam)
 
         if ignoreFOV or (onScreen and (not S.ShowFOV or distFromCenter <= currentFov)) then
             table.insert(results, {
@@ -1426,6 +1623,11 @@ local function SavePresetsToFile()
         warn("[TASFF Core] Cannot save presets: writefile is unavailable.")
         return false
     end
+    local env = GetTASFFEnv()
+    if not (env and env.Capabilities and env.Capabilities.FileWrite) then
+        warn("[TASFF Core] Cannot save presets: filesystem write API is unavailable.")
+        return false
+    end
     local ok, err = pcall(function()
         writefile(S.PresetFileName, HttpService:JSONEncode(S.SavedPresets))
     end)
@@ -1450,11 +1652,13 @@ local function ListenForTools(char)
             end
         end
     end)
+    TrackConnection(S.ToolAddedConnection)
     S.ToolRemovedConnection = char.ChildRemoved:Connect(function(child)
         if S.AutoEnableOnEquip and child:IsA("Tool") then
             S.AimbotActive = false; S.CurrentTarget = nil; SetADSState(false)
         end
     end)
+    TrackConnection(S.ToolRemovedConnection)
 end
 
 local CharacterConnection = Player.CharacterAdded:Connect(function(char)
@@ -1470,7 +1674,7 @@ local function HookNeutralization(p)
     local function hookHum(char)
         local hum = char:WaitForChild("Humanoid", 5)
         if not hum then return end
-        hum.Died:Connect(function()
+        TrackConnection(hum.Died:Connect(function()
             local killerName = "Unknown"
             local killerObj = nil
             
@@ -1537,7 +1741,7 @@ local function HookNeutralization(p)
     if p.Character then task.spawn(hookHum, p.Character) end
 
     -- Hook all future respawns
-    p.CharacterAdded:Connect(hookHum)
+    TrackConnection(p.CharacterAdded:Connect(hookHum))
 end
 table.insert(getgenv().TASFF.Connections, Players.PlayerAdded:Connect(HookNeutralization))
 for _, ep in ipairs(Players:GetPlayers()) do pcall(HookNeutralization, ep) end
@@ -1607,20 +1811,15 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 
 
     local screenCenter  = GetAimPosition()
-    local shouldShowFOV = S.ShowFOV and not S.InvisibleFOV and MasterEnabled and AimbotActive
+    local shouldShowFOV = S.ShowFOV and not S.InvisibleFOV
     if S.FOVCircle then
         if shouldShowFOV then
             PrepareDrawing(S.FOVCircle)
             S.FOVCircle.Position = screenCenter
             pcall(function() S.FOVCircle.Point = screenCenter end)
-            local drawFov = S.FOVSize
-            if S.DynamicFOVEnabled and S.CurrentTarget and S.CurrentTarget.Root then
-                local d = (S.CurrentTarget.Root.Position - Camera.CFrame.Position).Magnitude
-                if d > 0 then
-                    drawFov = S.FOVSize * (d / 100)
-                    if S.DynamicFOVMax and drawFov > S.DynamicFOVMax then drawFov = S.DynamicFOVMax end
-                end
-            end
+            local drawFov = S.CurrentTarget and S.CurrentTarget.Root
+                and GetEffectiveFOV((S.CurrentTarget.Root.Position - Camera.CFrame.Position).Magnitude)
+                or GetEffectiveFOV()
             S.FOVCircle.Radius  = drawFov
             S.FOVCircle.Color   = S.FOVColor or S.FOVCircle.Color
             S.FOVCircle.Visible = true
@@ -1629,7 +1828,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         end
     end
     ClearCrosshair()
-    if S.EnableCrosshair and MasterEnabled then
+    if S.EnableCrosshair then
         local color = S.CrosshairColor or Color3.fromRGB(0, 255, 255)
         for _, el in pairs(CrosshairElements) do PrepareDrawing(el) end
         local CE = CrosshairElements; local sz = S.CrosshairSize
@@ -1667,11 +1866,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 
             if slot == 0 then
                 -- Slot 0: Build visual list for ESP rendering
-                if MasterEnabled then
-                    S.LastVisualList = GetPotentialTargets(S.VisualMode == "All", false, cachedIgnoreList, S.ESPRenderDistance)
-                else
-                    S.LastVisualList = {}
-                end
+                S.LastVisualList = GetPotentialTargets(
+                    S.VisualMode == "All",
+                    false,
+                    cachedIgnoreList,
+                    S.ESPRenderDistance,
+                    true
+                )
 
             elseif slot == 1 then
                 -- Slot 1: VoS scan — raycasts on current target limbs (still expensive enough to gate)
@@ -1769,11 +1970,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     S.CurrentTarget.Root,
                     screenCenter
                 )
-                local currentFov = S.FOVSize
-                if S.DynamicFOVEnabled and d > 0 then
-                    currentFov = S.FOVSize * (d / 100)
-                    if S.DynamicFOVMax and currentFov > S.DynamicFOVMax then currentFov = S.DynamicFOVMax end
-                end
+                local currentFov = GetEffectiveFOV(d)
                 if not anchor or (S.ShowFOV and anchorDistance > currentFov) then
                     outOfBounds = true
                 end
@@ -1861,7 +2058,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     end
 
     ClearVisuals()
-    if MasterEnabled and S.LastVisualList then
+    if S.LastVisualList then
         local NE=S.NemesisEnabled; local FM=S.FocusMode; local VM=S.VisualMode
         local VCE=S.VisibilityColorsEnabled
         local VC=S.VisibleColor or Color3.fromRGB(0,255,0); local HC=S.HiddenColor or Color3.fromRGB(255,0,0)
@@ -1947,8 +2144,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local headPos=headPart and Camera:WorldToViewportPoint(headPart.Position+Vector3.new(0,0.5,0)) or pos
             if OOFE and not onScreen then
                 if not OOFArrowCache[t.Instance] then
-                    local ok,arrow=pcall(Drawing.new,"Triangle")
-                    if ok and arrow then arrow.Thickness=2;arrow.Filled=true;OOFArrowCache[t.Instance]=arrow end
+                    local arrow=NewDrawing("Triangle")
+                    if arrow then arrow.Thickness=2;arrow.Filled=true;OOFArrowCache[t.Instance]=arrow end
                 end
                 local arrow=OOFArrowCache[t.Instance]
                 if arrow then
@@ -2162,13 +2359,24 @@ end)
 
 table.insert(getgenv().TASFF.Connections, RenderConnection)
 
+local function GetSilentAimPart(target)
+    if S.TargetPart == "Visible On Screen" then
+        local customTarget = S.LastCustomTargetData
+        if customTarget and customTarget.Part and customTarget.Part.Parent
+            and customTarget.Part:IsDescendantOf(target) then
+            return customTarget.Part
+        end
+    end
+    return target:FindFirstChild(S.TargetPart) or target:FindFirstChild("HumanoidRootPart")
+end
+
 local oldIndex
 oldIndex = hookmetamethod(game, "__index", function(t, k)
     if k~="Hit" and k~="Target" and k~="UnitRay" then return oldIndex(t,k) end
     if checkcaller() then return oldIndex(t,k) end
     if S.SilentAimEnabled and S.MasterEnabled and S.SilentAimTargetCache and S.SilentAimTargetCache.Instance then
         if t and (t:IsA("Mouse") or t:IsA("PlayerMouse") or t:IsA("PluginMouse")) then
-            local bone=S.SilentAimTargetCache.Instance:FindFirstChild(S.TargetPart) or S.SilentAimTargetCache.Instance:FindFirstChild("HumanoidRootPart")
+            local bone=GetSilentAimPart(S.SilentAimTargetCache.Instance)
             if bone then
                 if k=="Hit" then return bone.CFrame end
                 if k=="Target" then return bone end
@@ -2187,18 +2395,26 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     if checkcaller() then return oldNamecall(self,...) end
     if S.SilentAimEnabled and S.MasterEnabled and S.SilentAimTargetCache and S.SilentAimTargetCache.Instance then
         local args={...}
-        local root=S.SilentAimTargetCache.Instance:FindFirstChild("HumanoidRootPart")
-        local bone=S.SilentAimTargetCache.Instance:FindFirstChild(S.TargetPart) or root
+        local bone=GetSilentAimPart(S.SilentAimTargetCache.Instance)
         if bone and typeof(self)=="Instance" and (self==workspace or self:IsA("Workspace")) then
-            local origin
-            if method=="Raycast" or method=="Spherecast" then origin=args[1]
-            elseif method=="Blockcast" then origin=args[1].Position
-            elseif method=="Shapecast" then origin=args[2].Position
-            else origin=args[1].Origin end
-            local ov
-            if method=="Raycast" then ov=args[2]
-            elseif method=="Blockcast" or method=="Spherecast" or method=="Shapecast" then ov=args[3]
-            else ov=args[1].Direction end
+            local origin, ov
+            if method=="Raycast" then
+                origin, ov = args[1], args[2]
+            elseif method=="Spherecast" then
+                origin, ov = args[1], args[3]
+            elseif method=="Blockcast" then
+                origin = typeof(args[1]) == "CFrame" and args[1].Position or nil
+                ov = args[3]
+            elseif method=="Shapecast" then
+                local shape = args[1]
+                origin = typeof(shape) == "Instance" and shape:IsA("BasePart") and shape.Position or nil
+                ov = args[2]
+            elseif typeof(args[1]) == "Ray" then
+                origin, ov = args[1].Origin, args[1].Direction
+            end
+            if typeof(origin) ~= "Vector3" or typeof(ov) ~= "Vector3" then
+                return oldNamecall(self,...)
+            end
             
             -- Camera freeze prevention (PopperCam raycast bypass)
             local camPos = workspace.CurrentCamera.CFrame.Position
@@ -2218,10 +2434,11 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 end
             end
 
-            local cL=(typeof(ov)=="Vector3" and ov.Magnitude) or 1000
+            local cL=ov.Magnitude
             local dir=(bone.Position-origin).Unit*cL
             if method=="Raycast" then args[2]=dir
-            elseif method=="Blockcast" or method=="Spherecast" or method=="Shapecast" then args[3]=dir
+            elseif method=="Spherecast" or method=="Blockcast" then args[3]=dir
+            elseif method=="Shapecast" then args[2]=dir
             else args[1]=Ray.new(origin,dir) end
             return oldNamecall(self,unpack(args))
         end
@@ -2237,6 +2454,7 @@ getgenv().TASFF.Cleanup = function()
         for _,conn in pairs(getgenv().TASFF.Connections) do if typeof(conn)=="RBXScriptConnection" and conn.Connected then conn:Disconnect() end end
         table.clear(getgenv().TASFF.Connections)
     end
+    if OverlayGui then OverlayGui:Destroy(); OverlayGui = nil end
     for _,child in ipairs(CoreGui:GetChildren()) do if child.Name=="TASFF_UI" or child.Name=="Rayfield" then child:Destroy() end end
 end
 

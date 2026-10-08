@@ -440,7 +440,7 @@ local function GetEffectiveFOV(distance)
         return baseFOV
     end
 
-    local scaledFOV = baseFOV * (distance / 100)
+    local scaledFOV = baseFOV * (100 / math.max(distance, 1))
     local maxFOV = tonumber(S.DynamicFOVMax)
     if maxFOV then scaledFOV = math.min(scaledFOV, maxFOV) end
     return math.max(1, scaledFOV)

@@ -82,6 +82,7 @@ local GlobalThemeOptions = {
     "Light", "Cyberpunk", "Crimson Blood", "Emerald Forest", "Solaris Gold",
     "Retro Synth", "Dracula", "Monochrome Void", "Sakura", "Toxic Slime", "Glacier",
 }
+local selectedGlobalTheme = GlobalThemeOptions[1]
 local GlobalThemePalettes = {
     Ocean = {Base="#D8F7FF", Overlay="#38DDF2", Drawing="#49B8D0", Priority="#FF5B6E", Threat="#FF965C", Nemesis="#B991FF", Blacklist="#FFB14A", Chams="#1EB9D4", Combat="#FFF1A8", Visible="#51E6A3", Hidden="#FF647C", UIBackground="#071923", UITopbar="#0D2532", UIAccent="#22D3EE", UIElement="#102D3A", UIText="#E4F7FA"},
     AmberGlow = {Base="#FFF0D6", Overlay="#FFC46B", Drawing="#E5A34A", Priority="#FF5555", Threat="#FF7A32", Nemesis="#C58BFF", Blacklist="#FFD166", Chams="#E58D2B", Combat="#FFF2A6", Visible="#8BE28B", Hidden="#FF6262", UIBackground="#1A1510", UITopbar="#292016", UIAccent="#F5A623", UIElement="#332719", UIText="#FFF1D6"},
@@ -188,6 +189,9 @@ local function LoadColorSettings()
             PersistedColorValues[field] = color
         end
     end
+    if type(result.GlobalTheme) == "string" and table.find(GlobalThemeOptions, result.GlobalTheme) then
+        selectedGlobalTheme = result.GlobalTheme
+    end
     if type(result.Theme) == "table" then
         for field in pairs(ThemeColorDefaults) do
             local color = DecodeColor(result.Theme[field])
@@ -208,6 +212,7 @@ local function SaveColorSettings()
     for field in pairs(ThemeColorDefaults) do
         data.Theme[field] = EncodeColor(ThemeColors[field])
     end
+    data.GlobalTheme = selectedGlobalTheme
     local ok, err = pcall(function()
         writefile(S.ColorSettingsFileName or "TASFF_ColorSettings.json", HttpService:JSONEncode(data))
     end)
@@ -249,7 +254,7 @@ end
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local Window = Rayfield:CreateWindow({
-    Name            = "TASFF V2.1.0",
+    Name            = "TASFF 2.1.0 " .. selectedGlobalTheme,
     Icon            = 7488932264,
     LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
@@ -307,7 +312,7 @@ HomeTab:CreateParagraph({
     Title   = "TASFF v2.1.0 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 64) .. " Toggles | " .. tostring(S.SliderCount or 27) .. " Sliders | " .. tostring(S.DropdownCount or 27) .. " Dropdowns\n"
+           .. "Controls: " .. tostring(S.ToggleCount or 64) .. " Toggles | " .. tostring(S.SliderCount or 27) .. " Sliders | " .. tostring(S.DropdownCount or 27) .. " Dropdowns | " .. tostring(S.ButtonCount or 0) .. " Buttons\n"
            .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
 })
 
@@ -628,7 +633,7 @@ local VisualTab = Window:CreateTab("Visuals", "eye")
 VisualTab:CreateSection("Global ESP Configurations")
 VisualTab:CreateParagraph({
     Title   = "Focus Mode & Visual Rendering",
-    Content = "Focus Mode isolates visual clutter by only drawing ESP on Priority Targets. Screen overlay tags are rendered through PlayerGui, while 3D chams use Roblox Highlight instances. Neither method is guaranteed to be hidden from OBS, streaming, or other capture software."
+    Content = "Focus Mode isolates visual clutter by only drawing ESP on Priority Targets. Screen overlay tags use PlayerGui and are visible to Roblox's built-in recording. 3D chams use Roblox Highlight instances and may also appear in recordings and capture software."
 })
 VisualTab:CreateDropdown({Name = "ESP Target Mode", Options = {"Single", "Multiple", "All"}, CurrentOption = {S.VisualMode}, Flag = "VisualMode", Callback = function(v)
     S.VisualMode = type(v) == "table" and v[1] or v
@@ -1499,8 +1504,15 @@ PresetsTab:CreateInput({
 
 local CustomizationTab = Window:CreateTab("Theming", "brush")
 
-local selectedGlobalTheme = GlobalThemeOptions[1]
 local GlobalThemeMonitor
+local function UpdateWindowTitle(themeName)
+    local main = Rayfield.Main
+    local topbar = main and main:FindFirstChild("Topbar")
+    local title = topbar and topbar:FindFirstChild("Title")
+    if title and title:IsA("TextLabel") then
+        title.Text = "TASFF 2.1.0 " .. themeName
+    end
+end
 local function ColorFromHex(hex)
     local value = tonumber(string.gsub(hex, "^#", ""), 16)
     if not value then error("Invalid preset color: " .. tostring(hex)) end
@@ -1547,11 +1559,19 @@ CustomizationTab:CreateDropdown({
     CurrentOption = {selectedGlobalTheme},
     Flag = "GlobalThemePreset",
     Callback = function(value)
-        selectedGlobalTheme = type(value) == "table" and value[1] or value
+        local themeName = type(value) == "table" and value[1] or value
+        if type(themeName) ~= "string" or not GlobalThemePalettes[themeName] then
+            warn("[TASFF UI] Ignoring unknown global theme selection: " .. tostring(themeName))
+            return
+        end
+        selectedGlobalTheme = themeName
         UpdateGlobalThemeMonitor(selectedGlobalTheme)
+        UpdateWindowTitle(selectedGlobalTheme)
+        ScheduleColorSettingsSave()
     end,
 })
 UpdateGlobalThemeMonitor(selectedGlobalTheme)
+UpdateWindowTitle(selectedGlobalTheme)
 CustomizationTab:CreateButton({
     Name = "Apply Chosen Preset",
     Callback = function()
@@ -1583,6 +1603,7 @@ CustomizationTab:CreateButton({
         end
         if _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(S.FOVColor) end
         if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(S.CrosshairColor) end
+        UpdateWindowTitle(selectedGlobalTheme)
         ScheduleColorSettingsSave()
         if S.Notify then
             S.Notify({
@@ -1961,6 +1982,13 @@ MiscTab:CreateButton({
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
+UpdateLogTab:CreateSection("Unreleased Customization Improvements")
+UpdateLogTab:CreateLabel("- Added 18 global color presets covering ESP, overlays, Intel categories, chams, combat feedback, visibility, and UI colors.")
+UpdateLogTab:CreateLabel("- Added a preset color monitor showing category, nearest color name, and exact hex value before applying.")
+UpdateLogTab:CreateLabel("- Applying or selecting a global preset updates the window title to include the selected theme.")
+UpdateLogTab:CreateLabel("- UI palette colors persist and are applied on the next load because Rayfield does not support live theme changes.")
+UpdateLogTab:CreateLabel("- Updated registered feature and control counts to match the current UI.")
+UpdateLogTab:CreateLabel("- Clarified that PlayerGui overlay tags and Roblox Highlight chams are visible to Roblox recording; retained the legacy StreamProofESP config flag for compatibility.")
 UpdateLogTab:CreateSection("Version 2.1.2 (Refinement Update)")
 UpdateLogTab:CreateLabel("- FIX VoS Wallcheck Locking: Visible On Screen mode now actively drops targets when they are fully occluded, fixing the stuck [LOCKED] tag issue.")
 UpdateLogTab:CreateLabel("- FIX Missing Colors UI: Restored missing Customization options for Default Highlight & Name Tags.")

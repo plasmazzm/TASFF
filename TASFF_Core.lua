@@ -307,19 +307,6 @@ local function NewDrawing(className)
 end
 S.NewDrawing = NewDrawing
 
-local function NewStreamProofDrawing(className)
-    if not (Drawing and type(Drawing.new) == "function") then return nil end
-    local ok, object = pcall(Drawing.new, className)
-    if not ok or not object then return nil end
-    pcall(function()
-        object.Visible = false
-        object.ZIndex = 60
-        object.Transparency = 1
-    end)
-    TrackDrawing(object)
-    return object
-end
-
 local function PrepareDrawing(obj)
     if not obj then return end
     obj.ZIndex = 60
@@ -1417,7 +1404,7 @@ local function GetVisualAssets(model)
             if isInstance then tag:Destroy() else pcall(function() tag:Remove() end) end
         end
         if wantDrawing then
-            tag = NewStreamProofDrawing("Text")
+            tag = NewDrawing("Text")
             if tag then tag.Size=16; tag.Center=true; tag.Outline=true; tag.Color=S.HighlightColor or Color3.fromRGB(255,255,255)
             else wantDrawing = false end
         end
@@ -1790,6 +1777,7 @@ local function UpdateSpectator()
     end
 end
 
+local visualsWereEnabled = false
 local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     if not S.ScriptInitialized then return end
     S._lastDeltaTime = deltaTime   -- v2.1.0: FPS watcher reads this
@@ -1869,13 +1857,17 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 
             if slot == 0 then
                 -- Slot 0: Build visual list for ESP rendering
-                S.LastVisualList = GetPotentialTargets(
-                    S.VisualMode == "All",
-                    false,
-                    cachedIgnoreList,
-                    S.ESPRenderDistance,
-                    true
-                )
+                if MasterEnabled then
+                    S.LastVisualList = GetPotentialTargets(
+                        S.VisualMode == "All",
+                        false,
+                        cachedIgnoreList,
+                        S.ESPRenderDistance,
+                        true
+                    )
+                else
+                    S.LastVisualList = {}
+                end
 
             elseif slot == 1 then
                 -- Slot 1: VoS scan — raycasts on current target limbs (still expensive enough to gate)
@@ -2060,8 +2052,14 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         if tick() - (S.SilentAimTargetCacheTime or 0) > 0.1 then S.SilentAimTargetCache = nil end
     end
 
-    ClearVisuals()
-    if S.LastVisualList then
+    if MasterEnabled then
+        visualsWereEnabled = true
+    elseif visualsWereEnabled then
+        ClearVisuals()
+        visualsWereEnabled = false
+    end
+
+    if MasterEnabled and S.LastVisualList then
         local NE=S.NemesisEnabled; local FM=S.FocusMode; local VM=S.VisualMode
         local VCE=S.VisibilityColorsEnabled
         local VC=S.VisibleColor or Color3.fromRGB(0,255,0); local HC=S.HiddenColor or Color3.fromRGB(255,0,0)
@@ -2136,6 +2134,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local kfc = S.KillFlashColor or Color3.fromRGB(255, 255, 255)
                 bc = bc:Lerp(kfc, fadeFactor)
             end
+            local statusESPColor = (isBlacklisted or isNemesis or isPriority or VCE) and bc or nil
 
             h.Adornee=t.Instance
             if t.IsPlayer then h.Enabled=UH else h.Enabled=UNH end
@@ -2159,7 +2158,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     arrow.PointA=center+Vector2.new(math.cos(angle),math.sin(angle))*r
                     arrow.PointB=center+Vector2.new(math.cos(angle-0.2),math.sin(angle-0.2))*(r-20)
                     arrow.PointC=center+Vector2.new(math.cos(angle+0.2),math.sin(angle+0.2))*(r-20)
-                    arrow.Color=S.OOFArrowColor or SLC or bc; arrow.Visible=true
+                    arrow.Color=statusESPColor or S.OOFArrowColor or SLC or bc; arrow.Visible=true
                 end
             else if OOFArrowCache[t.Instance] then OOFArrowCache[t.Instance].Visible=false end end
             if onScreen then
@@ -2194,7 +2193,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                         PrepareDrawing(sl)
                         local o2=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y)
                         if SO=="Center" then o2=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2) end
-                        sl.From=o2;sl.To=Vector2.new(pos.X,pos.Y);sl.Color=SLC or bc;sl.Visible=true
+                        sl.From=o2;sl.To=Vector2.new(pos.X,pos.Y);sl.Color=statusESPColor or SLC or bc;sl.Visible=true
                     end
                 else if SnaplineCache[t.Instance] then SnaplineCache[t.Instance].Visible=false end end
                 if BME then
@@ -2205,12 +2204,12 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                         PrepareDrawing(BoxCache[t.Instance])
                         BoxCache[t.Instance].Size=Vector2.new(bW,bH)
                         BoxCache[t.Instance].Position=Vector2.new(hs.X-(bW/2),hs.Y)
-                        BoxCache[t.Instance].Color=S.BoxColor or bc; BoxCache[t.Instance].Visible=true
+                        BoxCache[t.Instance].Color=statusESPColor or S.BoxColor or bc; BoxCache[t.Instance].Visible=true
                     end
                 else if BoxCache[t.Instance] then BoxCache[t.Instance].Visible=false end end
                 if SkME then
                     local isR15=t.Instance:FindFirstChild("UpperTorso")~=nil
-                    DrawSkeleton(t.Instance, isR15 and R15Joints or R6Joints, S.SkeletonColor or bc)
+                    DrawSkeleton(t.Instance, isR15 and R15Joints or R6Joints, statusESPColor or S.SkeletonColor or bc)
                 else if SkeletonCache[t.Instance] then for _,l in ipairs(SkeletonCache[t.Instance]) do if l and l.Line then l.Line.Visible=false end end end end
             else
                 if typeof(tag)=="Instance" then tag.Enabled=false else pcall(function() tag.Visible=false end) end
@@ -2220,7 +2219,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             end
             if ChE then 
                 h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
-                h.FillColor=S.ChamsColor or bc
+                h.FillColor=statusESPColor or S.ChamsColor or bc
                 h.FillTransparency=1-(math.clamp(ChO,0,100)/100)
             else 
                 h.DepthMode=Enum.HighlightDepthMode.Occluded

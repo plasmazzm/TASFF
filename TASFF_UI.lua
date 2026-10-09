@@ -564,8 +564,8 @@ local VisualTab = Window:CreateTab("Visuals", "eye")
 
 VisualTab:CreateSection("Global ESP Configurations")
 VisualTab:CreateParagraph({
-    Title   = "Focus Mode & Tag Rendering",
-    Content = "Focus Mode isolates visual clutter by only drawing ESP on Priority Targets. Overlay tags use a PlayerGui ScreenGui so they render reliably; screen overlays may appear in OBS or other capture software."
+    Title   = "Focus Mode & Visual Rendering",
+    Content = "Focus Mode isolates visual clutter by only drawing ESP on Priority Targets. Screen overlay tags are rendered through PlayerGui, while 3D chams use Roblox Highlight instances. Neither method is guaranteed to be hidden from OBS, streaming, or other capture software."
 })
 VisualTab:CreateDropdown({Name = "ESP Target Mode", Options = {"Single", "Multiple", "All"}, CurrentOption = {S.VisualMode}, Flag = "VisualMode", Callback = function(v)
     S.VisualMode = type(v) == "table" and v[1] or v
@@ -574,7 +574,7 @@ end})
 VisualTab:CreateToggle({Name = "Render Player ESP", CurrentValue = S.UseHighlight, Flag = "UseHighlight", Callback = function(v) S.UseHighlight = v end})
 VisualTab:CreateToggle({Name = "Render NPC ESP", CurrentValue = S.UseNPCHighlight, Flag = "UseNPCHighlight", Callback = function(v) S.UseNPCHighlight = v end})
 VisualTab:CreateToggle({Name = "Focus Mode (Isolate Priority Targets)", CurrentValue = S.FocusMode, Flag = "FocusMode", Callback = function(v) S.FocusMode = v end})
-VisualTab:CreateToggle({Name = "Screen Overlay Tags (reliable)", CurrentValue = S.StreamProofESP, Flag = "StreamProofESP", Callback = function(v)
+VisualTab:CreateToggle({Name = "Use Screen Overlay Tags", CurrentValue = S.StreamProofESP, Flag = "StreamProofESP", Callback = function(v)
     S.StreamProofESP = v
     if S.ClearVisuals then S.ClearVisuals() end
 end})
@@ -586,7 +586,7 @@ VisualTab:CreateSlider({Name = "Maximum ESP Distance (Studs)", Range = {100, 100
 end})
 
 VisualTab:CreateSection("Tactical Overlays (Geometries)")
-VisualTab:CreateToggle({Name = "Chams (Surface Highlights)", CurrentValue = S.ChamsEnabled, Flag = "EnableChamsMode", Callback = function(v) S.ChamsEnabled = v end})
+VisualTab:CreateToggle({Name = "3D Chams (Roblox Highlight)", CurrentValue = S.ChamsEnabled, Flag = "EnableChamsMode", Callback = function(v) S.ChamsEnabled = v end})
 
 VisualTab:CreateToggle({Name = "2D Bounding Boxes", CurrentValue = S.BoxModeEnabled, Flag = "EnableBoxMode", Callback = function(v) S.BoxModeEnabled = v end})
 VisualTab:CreateToggle({Name = "Skeletal Mapping (R6/R15)", CurrentValue = S.SkeletonModeEnabled, Flag = "EnableSkeletonMode", Callback = function(v) S.SkeletonModeEnabled = v end})

@@ -1486,6 +1486,13 @@ local function DrawSkeleton(character, jointsTable, color)
         end
         SkeletonCache[character] = limbs
     end
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not character or not character.Parent or not humanoid or humanoid.Health <= 0 then
+        for _, limb in ipairs(limbs) do
+            if limb.Line then limb.Line.Visible = false end
+        end
+        return
+    end
     for _, limb in ipairs(limbs) do
         local partA = character:FindFirstChild(limb.PartA)
         local partB = character:FindFirstChild(limb.PartB)
@@ -2059,6 +2066,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         visualsWereEnabled = false
     end
 
+    local skeletonsRenderedThisFrame = {}
     if MasterEnabled and S.LastVisualList then
         local NE=S.NemesisEnabled; local FM=S.FocusMode; local VM=S.VisualMode
         local VCE=S.VisibilityColorsEnabled
@@ -2210,6 +2218,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 if SkME then
                     local isR15=t.Instance:FindFirstChild("UpperTorso")~=nil
                     DrawSkeleton(t.Instance, isR15 and R15Joints or R6Joints, statusESPColor or S.SkeletonColor or bc)
+                    skeletonsRenderedThisFrame[t.Instance] = true
                 else if SkeletonCache[t.Instance] then for _,l in ipairs(SkeletonCache[t.Instance]) do if l and l.Line then l.Line.Visible=false end end end end
             else
                 if typeof(tag)=="Instance" then tag.Enabled=false else pcall(function() tag.Visible=false end) end
@@ -2224,6 +2233,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             else 
                 h.DepthMode=Enum.HighlightDepthMode.Occluded
                 h.FillTransparency=1 
+            end
+        end
+    end
+    for model, limbs in pairs(SkeletonCache) do
+        if not skeletonsRenderedThisFrame[model] then
+            for _, limb in ipairs(limbs) do
+                if limb.Line then limb.Line.Visible = false end
             end
         end
     end

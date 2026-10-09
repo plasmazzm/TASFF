@@ -76,6 +76,69 @@ local ColorFlagMap = {
     BlacklistedTagColor = "BlacklistedTagColorPicker", KillFlashColor = "KillFlashColorPicker",
     VisibleColor = "VisibleColorPicker", HiddenColor = "HiddenColorPicker", ChamsColor = "ChamsColorPicker",
 }
+
+local GlobalThemeOptions = {
+    "Ocean", "AmberGlow", "Amethyst", "Green", "Bloom", "DarkBlue", "Serenity",
+    "Light", "Cyberpunk", "Crimson Blood", "Emerald Forest", "Solaris Gold",
+    "Retro Synth", "Dracula", "Monochrome Void", "Sakura", "Toxic Slime", "Glacier",
+}
+local GlobalThemePalettes = {
+    Ocean = {Base="#D8F7FF", Overlay="#38DDF2", Drawing="#49B8D0", Priority="#FF5B6E", Threat="#FF965C", Nemesis="#B991FF", Blacklist="#FFB14A", Chams="#1EB9D4", Combat="#FFF1A8", Visible="#51E6A3", Hidden="#FF647C", UIBackground="#071923", UITopbar="#0D2532", UIAccent="#22D3EE", UIElement="#102D3A", UIText="#E4F7FA"},
+    AmberGlow = {Base="#FFF0D6", Overlay="#FFC46B", Drawing="#E5A34A", Priority="#FF5555", Threat="#FF7A32", Nemesis="#C58BFF", Blacklist="#FFD166", Chams="#E58D2B", Combat="#FFF2A6", Visible="#8BE28B", Hidden="#FF6262", UIBackground="#1A1510", UITopbar="#292016", UIAccent="#F5A623", UIElement="#332719", UIText="#FFF1D6"},
+    Amethyst = {Base="#F3E8FF", Overlay="#C4A1FF", Drawing="#A67DE8", Priority="#FF667D", Threat="#FF9D66", Nemesis="#E0A8FF", Blacklist="#FFC36E", Chams="#8B5CF6", Combat="#FFE6A6", Visible="#75E6B0", Hidden="#FF6685", UIBackground="#160F20", UITopbar="#21152F", UIAccent="#A855F7", UIElement="#2A1D3B", UIText="#F2E9FF"},
+    Green = {Base="#E4FFE7", Overlay="#5CFF77", Drawing="#30D957", Priority="#FF5570", Threat="#FF9A45", Nemesis="#C58BFF", Blacklist="#FFD44D", Chams="#24C94B", Combat="#FFF06A", Visible="#7CFF5B", Hidden="#FF5460", UIBackground="#07140B", UITopbar="#0D2113", UIAccent="#39E75F", UIElement="#142B1A", UIText="#E7FFE9"},
+    Bloom = {Base="#FFF1F7", Overlay="#FF91C8", Drawing="#EC91BE", Priority="#E85D75", Threat="#F49A59", Nemesis="#A987DC", Blacklist="#EAAE64", Chams="#D884B5", Combat="#FFE3A6", Visible="#7CCFA3", Hidden="#E66C80", UIBackground="#241923", UITopbar="#32212F", UIAccent="#E88BB9", UIElement="#3B2A38", UIText="#FFF0F6"},
+    DarkBlue = {Base="#E2EDFF", Overlay="#5EA6FF", Drawing="#5487D6", Priority="#FF526A", Threat="#FF965C", Nemesis="#B48CFF", Blacklist="#FFC05C", Chams="#3978D6", Combat="#FFE99A", Visible="#59D7AA", Hidden="#FF617A", UIBackground="#08111F", UITopbar="#101D31", UIAccent="#438DFF", UIElement="#162640", UIText="#EAF2FF"},
+    Serenity = {Base="#F0F1F6", Overlay="#AAB8D8", Drawing="#8796B5", Priority="#E87583", Threat="#E99A69", Nemesis="#A28BD0", Blacklist="#D6AD72", Chams="#778BAA", Combat="#F0DFA8", Visible="#81C6A7", Hidden="#E87C8C", UIBackground="#171A21", UITopbar="#222731", UIAccent="#8799C0", UIElement="#2B303B", UIText="#EEF0F6"},
+    Light = {Base="#20242A", Overlay="#2878D0", Drawing="#51677D", Priority="#C93449", Threat="#D46A28", Nemesis="#7848B8", Blacklist="#B46A16", Chams="#347AB8", Combat="#C18A16", Visible="#178A52", Hidden="#C93449", UIBackground="#F4F5F7", UITopbar="#E5E8ED", UIAccent="#3478C8", UIElement="#FFFFFF", UIText="#20242A"},
+    Cyberpunk = {Base="#F8F4FF", Overlay="#00F5FF", Drawing="#00BFCB", Priority="#FF2A8A", Threat="#FF7A18", Nemesis="#C357FF", Blacklist="#FFD400", Chams="#00D9E8", Combat="#FFE600", Visible="#39FF88", Hidden="#FF2A64", UIBackground="#05030A", UITopbar="#100817", UIAccent="#FF2EAA", UIElement="#160D20", UIText="#F8F4FF"},
+    ["Crimson Blood"] = {Base="#F6E9EC", Overlay="#F05265", Drawing="#C9374B", Priority="#FF304A", Threat="#FF7A43", Nemesis="#B887D1", Blacklist="#E5A044", Chams="#A8112C", Combat="#FFD2A1", Visible="#63C994", Hidden="#FF3D55", UIBackground="#100609", UITopbar="#1D0A10", UIAccent="#C91E3A", UIElement="#2A1018", UIText="#F6E9EC"},
+    ["Emerald Forest"] = {Base="#E8F5E9", Overlay="#63D99A", Drawing="#42B77A", Priority="#FF6675", Threat="#FF9A4D", Nemesis="#B992D6", Blacklist="#E9C46A", Chams="#178A55", Combat="#FFE08A", Visible="#75E6A1", Hidden="#F05B67", UIBackground="#07140F", UITopbar="#10231A", UIAccent="#29A96B", UIElement="#193326", UIText="#E9F6EE"},
+    ["Solaris Gold"] = {Base="#FFF5D6", Overlay="#FFD45C", Drawing="#C7A64B", Priority="#FF5965", Threat="#FF8A3D", Nemesis="#BA91D7", Blacklist="#FFE27A", Chams="#C49A36", Combat="#FFF078", Visible="#80D6A1", Hidden="#FF5B61", UIBackground="#100E08", UITopbar="#1D190D", UIAccent="#D5A932", UIElement="#2A2415", UIText="#FFF4D5"},
+    ["Retro Synth"] = {Base="#FFF0E4", Overlay="#FF9A56", Drawing="#E47A4C", Priority="#FF4D75", Threat="#FFB04A", Nemesis="#C174E8", Blacklist="#F3D05B", Chams="#D95B77", Combat="#FFE28A", Visible="#62D7A2", Hidden="#FF5870", UIBackground="#160D20", UITopbar="#251332", UIAccent="#FF784F", UIElement="#321C3C", UIText="#FFF0E4"},
+    Dracula = {Base="#F8F8F2", Overlay="#BD93F9", Drawing="#A67AE8", Priority="#FF5C7A", Threat="#FF9E64", Nemesis="#D6A7FF", Blacklist="#F1C56B", Chams="#9C6ADE", Combat="#F1FA8C", Visible="#50FA7B", Hidden="#FF5555", UIBackground="#191622", UITopbar="#242133", UIAccent="#BD93F9", UIElement="#302C40", UIText="#F8F8F2"},
+    ["Monochrome Void"] = {Base="#FFFFFF", Overlay="#FFFFFF", Drawing="#D0D0D0", Priority="#FFFFFF", Threat="#C4C4C4", Nemesis="#EEEEEE", Blacklist="#AAAAAA", Chams="#BDBDBD", Combat="#FFFFFF", Visible="#F2F2F2", Hidden="#888888", UIBackground="#000000", UITopbar="#080808", UIAccent="#FFFFFF", UIElement="#151515", UIText="#FFFFFF"},
+    Sakura = {Base="#FFF0F5", Overlay="#F5A3C7", Drawing="#D77FA8", Priority="#FF547D", Threat="#FF976D", Nemesis="#B58AE0", Blacklist="#E9B45C", Chams="#C96F99", Combat="#FFE2A8", Visible="#71D5A2", Hidden="#F05472", UIBackground="#191419", UITopbar="#261D25", UIAccent="#E98DB4", UIElement="#30262F", UIText="#FFF0F5"},
+    ["Toxic Slime"] = {Base="#F1FFD6", Overlay="#B6FF00", Drawing="#83D600", Priority="#FF3D67", Threat="#FF8F20", Nemesis="#C57AFF", Blacklist="#F4ED00", Chams="#66C900", Combat="#F4FF37", Visible="#62FF57", Hidden="#FF3355", UIBackground="#0A1005", UITopbar="#141F08", UIAccent="#A6E600", UIElement="#1E2B0D", UIText="#F2FFD9"},
+    Glacier = {Base="#F2FAFF", Overlay="#B8E8FF", Drawing="#86C4E0", Priority="#F06A7C", Threat="#EFA16D", Nemesis="#A995D7", Blacklist="#E1BD78", Chams="#6AAFCB", Combat="#FFF0B0", Visible="#69D6B0", Hidden="#F06A7C", UIBackground="#11191F", UITopbar="#1C2931", UIAccent="#9ADCF5", UIElement="#263640", UIText="#F1FAFF"},
+}
+local GlobalThemeColorNames = {
+    {"White", Color3.fromRGB(255,255,255)}, {"Soft White", Color3.fromRGB(235,240,245)},
+    {"Black", Color3.fromRGB(8,8,8)}, {"Gray", Color3.fromRGB(128,128,128)},
+    {"Silver", Color3.fromRGB(200,205,215)}, {"Slate", Color3.fromRGB(105,120,140)},
+    {"Red", Color3.fromRGB(220,45,65)}, {"Crimson", Color3.fromRGB(160,20,45)},
+    {"Orange", Color3.fromRGB(240,125,45)}, {"Amber", Color3.fromRGB(230,165,45)},
+    {"Gold", Color3.fromRGB(210,175,65)}, {"Yellow", Color3.fromRGB(240,225,70)},
+    {"Green", Color3.fromRGB(45,175,90)}, {"Emerald", Color3.fromRGB(35,145,100)},
+    {"Lime", Color3.fromRGB(155,220,45)}, {"Cyan", Color3.fromRGB(45,200,220)},
+    {"Ice Blue", Color3.fromRGB(145,215,245)}, {"Blue", Color3.fromRGB(55,125,220)},
+    {"Navy", Color3.fromRGB(25,45,90)}, {"Teal", Color3.fromRGB(40,145,150)},
+    {"Purple", Color3.fromRGB(130,75,190)}, {"Violet", Color3.fromRGB(155,80,220)},
+    {"Lavender", Color3.fromRGB(185,155,225)}, {"Pink", Color3.fromRGB(230,135,180)},
+    {"Hot Pink", Color3.fromRGB(245,55,150)},
+}
+local GlobalThemeColorFields = {
+    {title="Default Highlight & Tags", field="HighlightColor", role="Base"},
+    {title="FOV Circle", field="FOVColor", role="Overlay"},
+    {title="Crosshair", field="CrosshairColor", role="Overlay"},
+    {title="Box ESP", field="BoxColor", role="Drawing"},
+    {title="Skeleton ESP", field="SkeletonColor", role="Drawing"},
+    {title="Snaplines", field="SnaplineColor", role="Drawing"},
+    {title="Off-Screen Arrows", field="OOFArrowColor", role="Drawing"},
+    {title="Priority Players", field="PriorityHighlightColor", role="Priority"},
+    {title="Threat Players", field="ThreatHighlightColor", role="Threat"},
+    {title="Nemesis Players", field="NemesisHighlightColor", role="Nemesis"},
+    {title="Blacklisted Players", field="BlacklistedTagColor", role="Blacklist"},
+    {title="Chams", field="ChamsColor", role="Chams"},
+    {title="Kill Flash", field="KillFlashColor", role="Combat"},
+    {title="Visible Target", field="VisibleColor", role="Visible"},
+    {title="Hidden Target", field="HiddenColor", role="Hidden"},
+    {title="UI Background", themeField="Background", role="UIBackground"},
+    {title="UI Topbar", themeField="Topbar", role="UITopbar"},
+    {title="UI Selected Accent", themeField="TabBackgroundSelected", role="UIAccent"},
+    {title="UI Element Background", themeField="ElementBackground", role="UIElement"},
+    {title="UI Text", themeField="TextColor", role="UIText"},
+}
 local PersistedColorValues = {}
 
 local ThemeColorDefaults = {
@@ -198,7 +261,7 @@ local Window = Rayfield:CreateWindow({
         NotificationBackground        = Color3.fromRGB(15,  15,  15),
         NotificationActionsBackground = Color3.fromRGB(35,  35,  35),
         TabBackground                 = Color3.fromRGB(25,  25,  25),
-        TabStroke                     = Color3.fromRGB(35,  35,  35),
+        TabStroke                     = ThemeColors.ElementBackground,
         TabBackgroundSelected         = ThemeColors.TabBackgroundSelected,
         TabTextColor                  = ThemeColors.TextColor,
         SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
@@ -207,20 +270,20 @@ local Window = Rayfield:CreateWindow({
         SecondaryElementBackground    = Color3.fromRGB(20,  20,  20),
         ElementStroke                 = Color3.fromRGB(40,  40,  40),
         SecondaryElementStroke        = Color3.fromRGB(35,  35,  35),
-        SliderBackground              = Color3.fromRGB(100, 20,  20),
-        SliderProgress                = Color3.fromRGB(200, 35,  35),
-        SliderStroke                  = Color3.fromRGB(255, 50,  50),
-        ToggleBackground              = Color3.fromRGB(25,  25,  25),
-        ToggleEnabled                 = Color3.fromRGB(200, 35,  35),
+        SliderBackground              = ThemeColors.ElementBackground,
+        SliderProgress                = ThemeColors.TabBackgroundSelected,
+        SliderStroke                  = ThemeColors.TabBackgroundSelected,
+        ToggleBackground              = ThemeColors.ElementBackground,
+        ToggleEnabled                 = ThemeColors.TabBackgroundSelected,
         ToggleDisabled                = Color3.fromRGB(60,  60,  60),
-        ToggleEnabledStroke           = Color3.fromRGB(255, 50,  50),
+        ToggleEnabledStroke           = ThemeColors.TabBackgroundSelected,
         ToggleDisabledStroke          = Color3.fromRGB(80,  80,  80),
-        ToggleEnabledOuterStroke      = Color3.fromRGB(100, 20,  20),
+        ToggleEnabledOuterStroke      = ThemeColors.TabBackgroundSelected,
         ToggleDisabledOuterStroke     = Color3.fromRGB(45,  45,  45),
-        DropdownSelected              = Color3.fromRGB(180, 40,  40),
+        DropdownSelected              = ThemeColors.TabBackgroundSelected,
         DropdownUnselected            = Color3.fromRGB(25,  25,  25),
         InputBackground               = Color3.fromRGB(20,  20,  20),
-        InputStroke                   = Color3.fromRGB(80,  20,  20),
+        InputStroke                   = ThemeColors.TabBackgroundSelected,
         PlaceholderColor              = Color3.fromRGB(150, 150, 150),
     },
     ConfigurationSaving = {
@@ -1436,6 +1499,102 @@ PresetsTab:CreateInput({
 
 local CustomizationTab = Window:CreateTab("Theming", "brush")
 
+local selectedGlobalTheme = GlobalThemeOptions[1]
+local GlobalThemeMonitor
+local function ColorFromHex(hex)
+    local value = tonumber(string.gsub(hex, "^#", ""), 16)
+    if not value then error("Invalid preset color: " .. tostring(hex)) end
+    return Color3.fromRGB(bit32.band(bit32.rshift(value, 16), 255), bit32.band(bit32.rshift(value, 8), 255), bit32.band(value, 255))
+end
+local function GetGlobalThemeColorName(color)
+    local bestName, bestDistance, r, g, b = nil, math.huge, color.R, color.G, color.B
+    for _, item in ipairs(GlobalThemeColorNames) do
+        local swatch = item[2]
+        local dr, dg, db = r - swatch.R, g - swatch.G, b - swatch.B
+        local distance = dr * dr + dg * dg + db * db
+        if distance < bestDistance then
+            bestName, bestDistance = item[1], distance
+        end
+    end
+    return bestName
+end
+local function FormatGlobalThemeColor(color)
+    local r = math.floor(color.R * 255 + 0.5)
+    local g = math.floor(color.G * 255 + 0.5)
+    local b = math.floor(color.B * 255 + 0.5)
+    return string.format("%s | #%02X%02X%02X", GetGlobalThemeColorName(color), r, g, b)
+end
+local function UpdateGlobalThemeMonitor(themeName)
+    local palette = GlobalThemePalettes[themeName]
+    if not palette then return end
+    local lines = {}
+    for _, entry in ipairs(GlobalThemeColorFields) do
+        local color = ColorFromHex(palette[entry.role])
+        table.insert(lines, entry.title .. " | " .. FormatGlobalThemeColor(color))
+    end
+    GlobalThemeMonitor:Set({
+        Title = "Preset Preview — " .. themeName,
+        Content = table.concat(lines, "\n"),
+    })
+end
+GlobalThemeMonitor = CustomizationTab:CreateParagraph({
+    Title = "Preset Preview — " .. selectedGlobalTheme,
+    Content = "Select a theme to preview its visual and interface colors.",
+})
+CustomizationTab:CreateDropdown({
+    Name = "Preset global UI themes",
+    Options = GlobalThemeOptions,
+    CurrentOption = {selectedGlobalTheme},
+    Flag = "GlobalThemePreset",
+    Callback = function(value)
+        selectedGlobalTheme = type(value) == "table" and value[1] or value
+        UpdateGlobalThemeMonitor(selectedGlobalTheme)
+    end,
+})
+UpdateGlobalThemeMonitor(selectedGlobalTheme)
+CustomizationTab:CreateButton({
+    Name = "Apply Chosen Preset",
+    Callback = function()
+        local palette = GlobalThemePalettes[selectedGlobalTheme]
+        if not palette then
+            warn("[TASFF UI] Cannot apply unknown global theme: " .. tostring(selectedGlobalTheme))
+            return
+        end
+        local themeFlagMap = {
+            Background = "UIThemeBg",
+            Topbar = "UIThemeTopbar",
+            TabBackgroundSelected = "UIThemeAccent",
+            ElementBackground = "UIThemeElemBg",
+            TextColor = "UIThemeText",
+        }
+        for _, entry in ipairs(GlobalThemeColorFields) do
+            local color = ColorFromHex(palette[entry.role])
+            if entry.field then
+                S[entry.field] = color
+                local flag = ColorFlagMap[entry.field]
+                local control = flag and Rayfield.Flags and Rayfield.Flags[flag]
+                if control then control:Set(color) end
+            elseif entry.themeField then
+                ThemeColors[entry.themeField] = color
+                local flag = themeFlagMap[entry.themeField]
+                local control = Rayfield.Flags and Rayfield.Flags[flag]
+                if control then control:Set(color) end
+            end
+        end
+        if _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(S.FOVColor) end
+        if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(S.CrosshairColor) end
+        ScheduleColorSettingsSave()
+        if S.Notify then
+            S.Notify({
+                Title = "Global Theme Applied",
+                Content = selectedGlobalTheme .. " visuals applied. UI colors take effect the next time the interface loads.",
+                Duration = 4,
+                Image = "palette",
+            })
+        end
+    end,
+})
+
 -- Local helper: resolve preset color or keep nil if not using preset
 local function applyPreset(useFlag, ddFlag, updater, field)
     if not useFlag then return end
@@ -1619,15 +1778,11 @@ end})
 CustomizationTab:CreateColorPicker({Name = "Fine — Hidden Target Color", Color = S.HiddenColor or Color3.fromRGB(255,0,0), Flag = "HiddenColorPicker", Callback = function(Value) SetColor("HiddenColor", Value) end})
 
 -- ─── Section: UI Theme Editor ─────────────────────────────────────────────
-CustomizationTab:CreateSection("UI Theme Editor (Live Preview)")
-CustomizationTab:CreateParagraph({Title = "About UI Theme Editor", Content = "Adjust the Rayfield window's own theme colors live. Changes take effect immediately on the window chrome."})
-local function ApplyThemeColor(field, value, themeKey)
+CustomizationTab:CreateSection("UI Theme Editor (Next Load)")
+CustomizationTab:CreateParagraph({Title = "About UI Theme Editor", Content = "Theme colors are saved immediately and applied when the UI is next loaded. Rayfield does not expose a live theme update method."})
+local function ApplyThemeColor(field, value)
     if typeof(value) ~= "Color3" then return end
     ThemeColors[field] = value
-    local ok, err = pcall(function() Rayfield:SetTheme({[themeKey or field] = value}) end)
-    if not ok then
-        warn("[TASFF UI] Failed to apply theme color " .. field .. ": " .. tostring(err))
-    end
     ScheduleColorSettingsSave()
 end
 CustomizationTab:CreateColorPicker({Name = "UI — Background", Color = ThemeColors.Background, Flag = "UIThemeBg", Callback = function(v)
@@ -1638,8 +1793,6 @@ CustomizationTab:CreateColorPicker({Name = "UI — Topbar", Color = ThemeColors.
 end})
 CustomizationTab:CreateColorPicker({Name = "UI — Tab Selected Accent", Color = ThemeColors.TabBackgroundSelected, Flag = "UIThemeAccent", Callback = function(v)
     ThemeColors.TabBackgroundSelected = v
-    local ok, err = pcall(function() Rayfield:SetTheme({TabBackgroundSelected = v, ToggleEnabled = v, DropdownSelected = v, SliderProgress = v}) end)
-    if not ok then warn("[TASFF UI] Failed to apply theme accent: " .. tostring(err)) end
     ScheduleColorSettingsSave()
 end})
 CustomizationTab:CreateColorPicker({Name = "UI — Element Background", Color = ThemeColors.ElementBackground, Flag = "UIThemeElemBg", Callback = function(v)
@@ -1651,16 +1804,6 @@ end})
 CustomizationTab:CreateButton({Name = "Reset UI Theme to Default", Callback = function()
     pcall(function()
         ThemeColors = table.clone(ThemeColorDefaults)
-        Rayfield:SetTheme({
-            TextColor = Color3.fromRGB(240,240,240),
-            Background = Color3.fromRGB(15,15,15),
-            Topbar = Color3.fromRGB(20,20,20),
-            TabBackgroundSelected = Color3.fromRGB(180,40,40),
-            ElementBackground = Color3.fromRGB(25,25,25),
-            ToggleEnabled = Color3.fromRGB(200,35,35),
-            SliderProgress = Color3.fromRGB(200,35,35),
-            DropdownSelected = Color3.fromRGB(180,40,40),
-        })
         local defaults = {
             UIThemeBg = ThemeColorDefaults.Background,
             UIThemeTopbar = ThemeColorDefaults.Topbar,
@@ -2106,11 +2249,6 @@ for key, color in pairs(PersistedColorValues) do
             local control = Rayfield.Flags and Rayfield.Flags[flag]
             if control then control:Set(color) end
             ThemeColors[field] = color
-            if field == "TabBackgroundSelected" then
-                pcall(function() Rayfield:SetTheme({TabBackgroundSelected=color, ToggleEnabled=color, DropdownSelected=color, SliderProgress=color}) end)
-            else
-                pcall(function() Rayfield:SetTheme({[field]=color}) end)
-            end
         end
     else
         flag = ColorFlagMap[key]

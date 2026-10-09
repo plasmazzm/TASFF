@@ -75,10 +75,10 @@ local FeatureList = {
     "Mouse Triggerbot", "Key Triggerbot", "Proximity Auto-Melee",
     "Weapon-Type Gating",
     -- Visuals
-    "Player ESP", "NPC ESP", "Chams", "Stream-Proof Chams",
+    "Player ESP", "NPC ESP", "3D Chams",
     "2D Box ESP", "Skeleton ESP", "Snaplines", "OOF Arrows",
     "Crosshair", "FOV Circle", "Dynamic Visibility Colors",
-    "Stream-Proof Tags", "Kill Confirmation Flash",
+    "Screen Overlay Tags", "Kill Confirmation Flash",
     "Aim Lock Indicator", "Distance-Based ESP Fade",
     "Team-Colored ESP", "Blacklist ESP Tag",
     -- Intel
@@ -103,13 +103,16 @@ local FeatureList = {
     "Session User Kill Count", "Priority Player Kill Tracking",
     "DisplayName in Dropdowns", "Server Info Panel",
     "Notification Duration Control", "Suppress Rayfield Ads",
-    "UI Theme Editor (Live)", "Per-Section Theming Controls",
+    "UI Theme Editor (Persisted)", "Per-Section Theming Controls",
+    "18 Global UI Theme Presets", "Theme-Aware Window Title",
 }
 
 S.FeatureCount = #FeatureList
-S.ToggleCount = 77     -- +1 HighlightPresetToggle
-S.SliderCount = 31     -- (+1 KillFlashDuration, -1 duplicate ChamsOpacity)
-S.DropdownCount = 40   -- +1 HighlightColorDd
+-- Control totals reflect the Create* declarations in TASFF_UI.lua.
+S.ToggleCount = 79
+S.SliderCount = 29
+S.DropdownCount = 36
+S.ButtonCount = 21
 S.KeybindCount = 5
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --

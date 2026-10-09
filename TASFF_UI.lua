@@ -564,8 +564,8 @@ local VisualTab = Window:CreateTab("Visuals", "eye")
 
 VisualTab:CreateSection("Global ESP Configurations")
 VisualTab:CreateParagraph({
-    Title   = "Focus Mode & Stream-Proofing",
-    Content = "Focus Mode isolates visual clutter by only drawing ESP on Priority Targets. Stream-Proof Rendering forces tags to bypass capture software like OBS."
+    Title   = "Focus Mode & Tag Rendering",
+    Content = "Focus Mode isolates visual clutter by only drawing ESP on Priority Targets. Overlay tags use a PlayerGui ScreenGui so they render reliably; screen overlays may appear in OBS or other capture software."
 })
 VisualTab:CreateDropdown({Name = "ESP Target Mode", Options = {"Single", "Multiple", "All"}, CurrentOption = {S.VisualMode}, Flag = "VisualMode", Callback = function(v)
     S.VisualMode = type(v) == "table" and v[1] or v
@@ -574,7 +574,7 @@ end})
 VisualTab:CreateToggle({Name = "Render Player ESP", CurrentValue = S.UseHighlight, Flag = "UseHighlight", Callback = function(v) S.UseHighlight = v end})
 VisualTab:CreateToggle({Name = "Render NPC ESP", CurrentValue = S.UseNPCHighlight, Flag = "UseNPCHighlight", Callback = function(v) S.UseNPCHighlight = v end})
 VisualTab:CreateToggle({Name = "Focus Mode (Isolate Priority Targets)", CurrentValue = S.FocusMode, Flag = "FocusMode", Callback = function(v) S.FocusMode = v end})
-VisualTab:CreateToggle({Name = "Stream-Proof Rendering (Tags)", CurrentValue = S.StreamProofESP, Flag = "StreamProofESP", Callback = function(v)
+VisualTab:CreateToggle({Name = "Screen Overlay Tags (reliable)", CurrentValue = S.StreamProofESP, Flag = "StreamProofESP", Callback = function(v)
     S.StreamProofESP = v
     if S.ClearVisuals then S.ClearVisuals() end
 end})
@@ -1930,7 +1930,7 @@ UpdateLogTab:CreateLabel("- Added Randomized Hitboxes to bypass statistical anti
 UpdateLogTab:CreateLabel("- Implemented The Nemesis System for tiered death tracking and targeted retaliation")
 UpdateLogTab:CreateLabel("- Added Marking Input Modes (Mouse, Keybind, or Both) to prevent accidental priority marking")
 UpdateLogTab:CreateLabel("- Added Dynamic Visibility Colors (Green=Visible, Red=Hidden) to ESP geometries")
-UpdateLogTab:CreateLabel("- Upgraded all Info Tags to Drawing API for complete Stream-Proofing (OBS bypass)")
+UpdateLogTab:CreateLabel("- Info tag overlay rendering uses ScreenGui for reliable client visibility.")
 UpdateLogTab:CreateLabel("- Added Off-Screen Indicators (OOF Arrows) to track targets located behind the camera")
 UpdateLogTab:CreateLabel("- Added ESP Snaplines (Tracers) with configurable origin point positioning")
 UpdateLogTab:CreateLabel("- Added Clipboard Preset Import & Export (JSON) for easy configuration sharing")

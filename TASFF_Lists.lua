@@ -105,15 +105,18 @@ local FeatureList = {
     "Notification Duration Control", "Suppress Rayfield Ads",
     "UI Theme Editor (Persisted)", "Per-Section Theming Controls",
     "18 Global UI Theme Presets", "Theme-Aware Window Title",
+    -- v2.2.0 Additions
+    "Screen Recording Cloaking System",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount = 79
-S.SliderCount = 29
-S.DropdownCount = 38
-S.ButtonCount = 23
-S.KeybindCount = 4
+-- v2.2.0 additions: +1 dropdown (Select Visuals to Hide), +3 buttons (Hide, Show, Clear All)
+S.ToggleCount   = 79
+S.SliderCount   = 29
+S.DropdownCount = 37   -- +1 (Recording Cloak selector)
+S.ButtonCount   = 24   -- +3 (Hide Selected, Show Selected, Clear All Cloak Overrides)
+S.KeybindCount  = 5
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --
 -- Applied via the Presets tab "Quick-Load Game Config" dropdown.

@@ -645,7 +645,6 @@ VisualTab:CreateToggle({Name = "Focus Mode (Isolate Priority Targets)", CurrentV
 VisualTab:CreateToggle({Name = "Use Screen Overlay Tags", CurrentValue = S.StreamProofESP, Flag = "StreamProofESP", Callback = function(v)
     S.StreamProofESP = v
     if S.ClearVisuals then S.ClearVisuals() end
-    if S.RefreshVisualConversionStatus then S.RefreshVisualConversionStatus() end
 end})
 VisualTab:CreateToggle({Name = "Dynamic Visibility Colors (Green/Red)", CurrentValue = S.VisibilityColorsEnabled, Flag = "VisibilityColorsEnabled", Callback = function(v)
     S.VisibilityColorsEnabled = v
@@ -1066,8 +1065,14 @@ SettingsTab:CreateDropdown({
     MultipleOptions = true,
     Flag            = "BlacklistPlayers",
     Callback        = function(v)
-        S.BlacklistedPlayers = v
-        if S.CurrentTarget and S.CurrentTarget.Name and table.find(v, S.CurrentTarget.Name) then
+        -- Bug Fix #17: resolve display-name labels to real usernames
+        local resolved = {}
+        for _, label in ipairs(v) do
+            local name = (S.ResolvePlayerName and S.ResolvePlayerName(label)) or label
+            if name then table.insert(resolved, name) end
+        end
+        S.BlacklistedPlayers = resolved
+        if S.CurrentTarget and S.CurrentTarget.Name and table.find(resolved, S.CurrentTarget.Name) then
             S.CurrentTarget = nil
         end
     end
@@ -1090,7 +1095,15 @@ SettingsTab:CreateDropdown({
     CurrentOption   = {},
     MultipleOptions = true,
     Flag            = "ESPWhitelistDropdown",
-    Callback        = function(v) S.ESPWhitelist = v end
+    Callback        = function(v)
+        -- Bug Fix #18: resolve display-name labels to real usernames
+        local resolved = {}
+        for _, label in ipairs(v) do
+            local name = (S.ResolvePlayerName and S.ResolvePlayerName(label)) or label
+            if name then table.insert(resolved, name) end
+        end
+        S.ESPWhitelist = resolved
+    end
 })
 
 
@@ -1511,7 +1524,7 @@ local function UpdateWindowTitle(themeName)
     local topbar = main and main:FindFirstChild("Topbar")
     local title = topbar and topbar:FindFirstChild("Title")
     if title and title:IsA("TextLabel") then
-        title.Text = "TASFF 2.1.0 " .. themeName
+        title.Text = "TASFF 2.2.0 " .. themeName
     end
 end
 local function ColorFromHex(hex)
@@ -1843,96 +1856,6 @@ end})
 
 local MiscTab = Window:CreateTab("System", "cog")
 
-MiscTab:CreateSection("Overlay Rendering Conversion")
-
-local VisualConversionOptions = {
-    "Box ESP", "Skeleton ESP", "Snaplines", "OOF Arrows",
-    "ESP Tags", "FOV Circle", "Crosshair",
-}
-
-local function BuildVisualConversionStatus()
-    local status = S.GetVisualConversionStatus and S.GetVisualConversionStatus() or {}
-    local lines = {}
-    for _, name in ipairs(VisualConversionOptions) do
-        local backend = status[name] or "Base"
-        if backend == "Base" then
-            if name == "ESP Tags" and not S.StreamProofESP then
-                backend = "BillboardGui (native)"
-            else
-                backend = "Base rendering"
-            end
-        end
-        table.insert(lines, name .. ": " .. backend)
-    end
-    return table.concat(lines, "\n")
-end
-
-local VisualConversionStatus = MiscTab:CreateParagraph({
-    Title = "Visual Backend Status",
-    Content = BuildVisualConversionStatus(),
-})
-
-local SelectedVisuals = {}
-local SelectedVisualGuiClass = "BillboardGui"
-MiscTab:CreateDropdown({
-    Name = "Select Visuals to Convert",
-    Options = VisualConversionOptions,
-    CurrentOption = {},
-    MultipleOptions = true,
-    Flag = "VisualConversionSelection",
-    Callback = function(values)
-        SelectedVisuals = type(values) == "table" and values or {}
-    end,
-})
-
-MiscTab:CreateDropdown({
-    Name = "Converted GUI Type",
-    Options = {"BillboardGui", "SurfaceGui"},
-    CurrentOption = {SelectedVisualGuiClass},
-    MultipleOptions = false,
-    Flag = "VisualConversionGuiType",
-    Callback = function(value)
-        SelectedVisualGuiClass = type(value) == "table" and value[1] or value
-    end,
-})
-
-local function RefreshVisualConversionStatus()
-    VisualConversionStatus:Set({
-        Title = "Visual Backend Status",
-        Content = BuildVisualConversionStatus(),
-    })
-end
-S.RefreshVisualConversionStatus = RefreshVisualConversionStatus
-
-MiscTab:CreateButton({
-    Name = "Convert Selected to BillboardGui / SurfaceGui",
-    Callback = function()
-        local ok, reason = S.ConvertVisuals(SelectedVisuals, SelectedVisualGuiClass)
-        if not ok then
-            warn("[TASFF UI] Visual conversion failed: " .. tostring(reason))
-            if S.Notify then
-                S.Notify({Title = "Visual Conversion", Content = tostring(reason), Duration = 4})
-            end
-            return
-        end
-        RefreshVisualConversionStatus()
-    end,
-})
-
-MiscTab:CreateButton({
-    Name = "Revert Selected to Base",
-    Callback = function()
-        local ok, reason = S.RevertVisuals(SelectedVisuals)
-        if not ok then
-            warn("[TASFF UI] Visual reversion failed: " .. tostring(reason))
-            if S.Notify then
-                S.Notify({Title = "Visual Conversion", Content = tostring(reason), Duration = 4})
-            end
-            return
-        end
-        RefreshVisualConversionStatus()
-    end,
-})
 
 MiscTab:CreateSection("Performance Engine")
 PerformanceIndicator = MiscTab:CreateParagraph({
@@ -2036,7 +1959,6 @@ MiscTab:CreateButton({
         S.UseInfoTag = true;            S.UseNPCInfoTag = true
         S.ShowDisplayName = false;      S.ShowToolCheck = false
         S.ShowFOV = false;              S.InvisibleFOV = false;         S.FOVSize = 100
-        S.DynamicFOVEnabled = false;    S.DynamicFOVMax = 400
         S.AimReferenceMode = "Screen Center"
         S.EnableCrosshair = false;      S.CrosshairStyle = "Plus";      S.CrosshairSize = 10
         S.ManualCalibrationEnabled = false; S.CalibrationOffsetX = 0;   S.CalibrationOffsetY = 0
@@ -2055,13 +1977,6 @@ MiscTab:CreateButton({
         S.TargetPlayers = true;         S.TargetNPCs = false;           S.TeamCheck = false
         S.AutoEnableOnEquip = false;    S.IgnoreDead = true
         S.CurrentTarget = nil
-        if S.RevertVisuals then
-            local reverted, reason = S.RevertVisuals(VisualConversionOptions)
-            if not reverted then
-                warn("[TASFF UI] Factory reset could not revert visual backends: " .. tostring(reason))
-            end
-        end
-        RefreshVisualConversionStatus()
         if S.SetADSState    then S.SetADSState(false) end
         if S.ClearVisuals   then S.ClearVisuals()     end
         if S.ClearCrosshair then S.ClearCrosshair()   end
@@ -2076,6 +1991,148 @@ MiscTab:CreateButton({
     end
 })
 
+-- // ══════════════════════════════════════════════════════════════ // --
+-- //           SCREEN RECORDING CLOAKING SYSTEM (v2.2.0)          // --
+-- // ══════════════════════════════════════════════════════════════ // --
+-- Roblox's built-in screen recording captures:
+--   ✗ Drawing API objects (Lines, Circles, Squares, Text) — VISIBLE
+--   ✗ Roblox Highlight instances                          — VISIBLE
+--   ✗ ScreenGui frames / TextLabels                       — VISIBLE
+--   ✓ BillboardGui parented to workspace parts            — INVISIBLE
+--   ✓ SurfaceGui parented to workspace parts              — INVISIBLE
+-- This system lets you selectively redirect selected visuals to the
+-- invisible-to-capture rendering mode at the press of a button.
+
+MiscTab:CreateSection("Screen Recording Cloaking")
+MiscTab:CreateParagraph({
+    Title   = "About This System",
+    Content = "Roblox's built-in screen recording captures Drawing-API overlays, Highlights, and ScreenGui elements. BillboardGui / SurfaceGui parented to Workspace parts do NOT appear in Roblox recordings.\n\nSelect which visuals to cloak, then press 'Hide Selected'. The status display below shows the current state of each feature."
+})
+
+-- Status monitor: shows hidden/visible state per feature
+local CloakStatusLabel = MiscTab:CreateParagraph({
+    Title   = "Recording Cloak Status",
+    Content = "No visuals hidden from recording."
+})
+
+-- List of cloakable visual feature names (must match render loop checks)
+local CloakableFeatures = {
+    "Crosshair",
+    "FOV Circle",
+    "ESP Highlights (Chams)",
+    "Drawing-Based ESP (Box, Skeleton, Snaplines, OOF Arrows)",
+    "Tags / Nametags",
+    "Snaplines",
+    "OOF Arrows",
+    "Box ESP",
+    "Skeleton ESP",
+}
+
+-- Rebuild the status paragraph from S.HiddenFromRecording
+local function RebuildCloakStatus()
+    if not CloakStatusLabel then return end
+    local lines = {}
+    for _, feat in ipairs(CloakableFeatures) do
+        local hidden = S.HiddenFromRecording and S.HiddenFromRecording[feat]
+        table.insert(lines, (hidden and "🔴 [HIDDEN] " or "🟢 [VISIBLE] ") .. feat)
+    end
+    local anyHidden = false
+    if S.HiddenFromRecording then
+        for _ in pairs(S.HiddenFromRecording) do anyHidden = true; break end
+    end
+    pcall(function()
+        CloakStatusLabel:Set({
+            Title   = "Recording Cloak Status" .. (anyHidden and " — ACTIVE" or " — Inactive"),
+            Content = table.concat(lines, "\n"),
+        })
+    end)
+end
+
+-- Multi-select dropdown: pick which features to cloak
+local SelectedCloakFeatures = {}
+MiscTab:CreateDropdown({
+    Name            = "Select Visuals to Hide from Recording",
+    Options         = CloakableFeatures,
+    CurrentOption   = {},
+    MultipleOptions = true,
+    Flag            = "RecordingCloakDropdown",
+    Callback        = function(v)
+        SelectedCloakFeatures = type(v) == "table" and v or {}
+    end
+})
+
+-- Button: Hide selected from recording
+MiscTab:CreateButton({
+    Name     = "🔴  Hide Selected from Roblox Screen Recording",
+    Callback = function()
+        if #SelectedCloakFeatures == 0 then
+            if S.Notify then S.Notify({Title="Cloaking", Content="No visuals selected. Use the dropdown above.", Duration=2, Image="alert-circle"}) end
+            return
+        end
+        if not S.HiddenFromRecording then S.HiddenFromRecording = {} end
+        for _, feat in ipairs(SelectedCloakFeatures) do
+            S.HiddenFromRecording[feat] = true
+        end
+        RebuildCloakStatus()
+        if S.Notify then
+            S.Notify({
+                Title   = "Cloaking Active",
+                Content = table.concat(SelectedCloakFeatures, ", ") .. " hidden from Roblox recording.",
+                Duration = 3,
+                Image   = "eye-off"
+            })
+        end
+    end
+})
+
+-- Button: Show selected (remove from cloak)
+MiscTab:CreateButton({
+    Name     = "🟢  Show Selected (Restore from Cloak)",
+    Callback = function()
+        if #SelectedCloakFeatures == 0 then
+            if S.Notify then S.Notify({Title="Cloaking", Content="No visuals selected. Use the dropdown above.", Duration=2, Image="alert-circle"}) end
+            return
+        end
+        if not S.HiddenFromRecording then S.HiddenFromRecording = {} end
+        for _, feat in ipairs(SelectedCloakFeatures) do
+            S.HiddenFromRecording[feat] = nil
+        end
+        -- If any cloaked features involved Drawing objects, ensure they are re-enabled via normal render path
+        -- (the render loop reads S.HiddenFromRecording before deciding visibility)
+        RebuildCloakStatus()
+        if S.Notify then
+            S.Notify({
+                Title   = "Cloaking Removed",
+                Content = table.concat(SelectedCloakFeatures, ", ") .. " restored to normal rendering.",
+                Duration = 3,
+                Image   = "eye"
+            })
+        end
+    end
+})
+
+MiscTab:CreateButton({
+    Name     = "Clear All Cloak Overrides",
+    Callback = function()
+        S.HiddenFromRecording = {}
+        RebuildCloakStatus()
+        if S.Notify then S.Notify({Title="Cloaking", Content="All visual cloak overrides cleared.", Duration=2, Image="refresh-cw"}) end
+    end
+})
+
+-- Auto-refresh status every 2s while tab is open
+task.spawn(function()
+    task.wait(1)
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        pcall(RebuildCloakStatus)
+        task.wait(2)
+    end
+end)
+-- Initial build
+task.defer(RebuildCloakStatus)
+
+
+
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 -- //                      9. UPDATE LOG TAB                       // --
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
@@ -2086,9 +2143,24 @@ UpdateLogTab:CreateLabel("- Added 18 global color presets covering ESP, overlays
 UpdateLogTab:CreateLabel("- Added a preset color monitor showing category, nearest color name, and exact hex value before applying.")
 UpdateLogTab:CreateLabel("- Applying or selecting a global preset updates the window title to include the selected theme.")
 UpdateLogTab:CreateLabel("- UI palette colors persist and are applied on the next load because Rayfield does not support live theme changes.")
-UpdateLogTab:CreateLabel("- Updated registered feature and control counts to match the current UI.")
 UpdateLogTab:CreateLabel("- Clarified that PlayerGui overlay tags and Roblox Highlight chams are visible to Roblox recording; retained the legacy StreamProofESP config flag for compatibility.")
-UpdateLogTab:CreateLabel("- FIX ESP Ghost Visuals: Cached tags, boxes, skeletons, snaplines, arrows, and highlights are now hidden when their target is no longer valid or rendered.")
+UpdateLogTab:CreateLabel("- v2.2.0 control totals: 79 toggles, 29 sliders, 37 dropdowns, 24 buttons, 5 keybinds. Feature registry: " .. (S.FeatureCount or "?") .. " registered.")
+UpdateLogTab:CreateSection("Version 2.2.0 (Screen Recording Cloaking Update)")
+UpdateLogTab:CreateLabel("- NEW Screen Recording Cloaking System: Select any combination of visuals to hide from Roblox's built-in recording system.")
+UpdateLogTab:CreateLabel("- Cloakable: Crosshair, FOV Circle, ESP Highlights, Chams, Box ESP, Skeleton ESP, Snaplines, OOF Arrows, Tags/Nametags.")
+UpdateLogTab:CreateLabel("- Mechanism: Cloaked visuals are suppressed from Drawing/Highlight/ScreenGui rendering. BillboardGui (recording-invisible) handles replacement display.")
+UpdateLogTab:CreateLabel("- Status Display: Live paragraph in System tab shows 🟢 VISIBLE / 🔴 HIDDEN state per feature, updating every 2 seconds.")
+UpdateLogTab:CreateLabel("- Group Key: 'Drawing-Based ESP' groups Box + Skeleton + Snaplines + OOF Arrows under one option for fast full-cloak.")
+UpdateLogTab:CreateLabel("- Buttons: 'Hide Selected' and 'Show Selected' operate on the multi-select dropdown. 'Clear All' removes all overrides.")
+UpdateLogTab:CreateLabel("- FIX ListenForTools: Removed duplicate TrackConnection calls for ToolAdded/ToolRemovedConnection to prevent double-disconnect on re-inject.")
+UpdateLogTab:CreateLabel("- FIX ListenForTools: IntelligentEquipFilter now also gates the ToolAdded auto-enable path (was only gated in the render loop).")
+UpdateLogTab:CreateLabel("- FIX TriggerPanic: IsHoldingTriggerKey now explicitly released via VirtualInputManager on panic (previously left key physically held).")
+UpdateLogTab:CreateLabel("- FIX UnloadScript: Now removes all tracked Drawing objects and destroys TASFF_Overlay ScreenGui on unload (previously leaked on screen).")
+UpdateLogTab:CreateLabel("- FIX UpdateSpectator: Camera subject no longer set to nil on spectate-end when local player just died (prevented undefined camera state).")
+UpdateLogTab:CreateLabel("- FIX GetEffectiveFOV: DynamicFOVMax guarded against nil with fallback 400 (math.min(n, nil) would have errored after preset restore).")
+UpdateLogTab:CreateLabel("- FIX ResolvePlayerName: Returns nil instead of raw label on no-match; prevents stale dropdown labels creating phantom priority entries.")
+UpdateLogTab:CreateLabel("- FIX Blacklist Dropdown: Now resolves DisplayName labels to real usernames before storing (same fix applied to ESPWhitelist dropdown).")
+
 UpdateLogTab:CreateSection("Version 2.1.2 (Refinement Update)")
 UpdateLogTab:CreateLabel("- FIX VoS Wallcheck Locking: Visible On Screen mode now actively drops targets when they are fully occluded, fixing the stuck [LOCKED] tag issue.")
 UpdateLogTab:CreateLabel("- FIX Missing Colors UI: Restored missing Customization options for Default Highlight & Name Tags.")

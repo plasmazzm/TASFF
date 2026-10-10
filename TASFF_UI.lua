@@ -645,6 +645,7 @@ VisualTab:CreateToggle({Name = "Focus Mode (Isolate Priority Targets)", CurrentV
 VisualTab:CreateToggle({Name = "Use Screen Overlay Tags", CurrentValue = S.StreamProofESP, Flag = "StreamProofESP", Callback = function(v)
     S.StreamProofESP = v
     if S.ClearVisuals then S.ClearVisuals() end
+    if S.RefreshVisualConversionStatus then S.RefreshVisualConversionStatus() end
 end})
 VisualTab:CreateToggle({Name = "Dynamic Visibility Colors (Green/Red)", CurrentValue = S.VisibilityColorsEnabled, Flag = "VisibilityColorsEnabled", Callback = function(v)
     S.VisibilityColorsEnabled = v
@@ -1842,6 +1843,96 @@ end})
 
 local MiscTab = Window:CreateTab("System", "cog")
 
+MiscTab:CreateSection("Overlay Rendering Conversion")
+
+local VisualConversionOptions = {
+    "Box ESP", "Skeleton ESP", "Snaplines", "OOF Arrows",
+    "ESP Tags", "FOV Circle", "Crosshair",
+}
+
+local function BuildVisualConversionStatus()
+    local status = S.GetVisualConversionStatus and S.GetVisualConversionStatus() or {}
+    local lines = {}
+    for _, name in ipairs(VisualConversionOptions) do
+        local backend = status[name] or "Base"
+        if backend == "Base" then
+            if name == "ESP Tags" and not S.StreamProofESP then
+                backend = "BillboardGui (native)"
+            else
+                backend = "Base rendering"
+            end
+        end
+        table.insert(lines, name .. ": " .. backend)
+    end
+    return table.concat(lines, "\n")
+end
+
+local VisualConversionStatus = MiscTab:CreateParagraph({
+    Title = "Visual Backend Status",
+    Content = BuildVisualConversionStatus(),
+})
+
+local SelectedVisuals = {}
+local SelectedVisualGuiClass = "BillboardGui"
+MiscTab:CreateDropdown({
+    Name = "Select Visuals to Convert",
+    Options = VisualConversionOptions,
+    CurrentOption = {},
+    MultipleOptions = true,
+    Flag = "VisualConversionSelection",
+    Callback = function(values)
+        SelectedVisuals = type(values) == "table" and values or {}
+    end,
+})
+
+MiscTab:CreateDropdown({
+    Name = "Converted GUI Type",
+    Options = {"BillboardGui", "SurfaceGui"},
+    CurrentOption = {SelectedVisualGuiClass},
+    MultipleOptions = false,
+    Flag = "VisualConversionGuiType",
+    Callback = function(value)
+        SelectedVisualGuiClass = type(value) == "table" and value[1] or value
+    end,
+})
+
+local function RefreshVisualConversionStatus()
+    VisualConversionStatus:Set({
+        Title = "Visual Backend Status",
+        Content = BuildVisualConversionStatus(),
+    })
+end
+S.RefreshVisualConversionStatus = RefreshVisualConversionStatus
+
+MiscTab:CreateButton({
+    Name = "Convert Selected to BillboardGui / SurfaceGui",
+    Callback = function()
+        local ok, reason = S.ConvertVisuals(SelectedVisuals, SelectedVisualGuiClass)
+        if not ok then
+            warn("[TASFF UI] Visual conversion failed: " .. tostring(reason))
+            if S.Notify then
+                S.Notify({Title = "Visual Conversion", Content = tostring(reason), Duration = 4})
+            end
+            return
+        end
+        RefreshVisualConversionStatus()
+    end,
+})
+
+MiscTab:CreateButton({
+    Name = "Revert Selected to Base",
+    Callback = function()
+        local ok, reason = S.RevertVisuals(SelectedVisuals)
+        if not ok then
+            warn("[TASFF UI] Visual reversion failed: " .. tostring(reason))
+            if S.Notify then
+                S.Notify({Title = "Visual Conversion", Content = tostring(reason), Duration = 4})
+            end
+            return
+        end
+        RefreshVisualConversionStatus()
+    end,
+})
 
 MiscTab:CreateSection("Performance Engine")
 PerformanceIndicator = MiscTab:CreateParagraph({
@@ -1945,6 +2036,7 @@ MiscTab:CreateButton({
         S.UseInfoTag = true;            S.UseNPCInfoTag = true
         S.ShowDisplayName = false;      S.ShowToolCheck = false
         S.ShowFOV = false;              S.InvisibleFOV = false;         S.FOVSize = 100
+        S.DynamicFOVEnabled = false;    S.DynamicFOVMax = 400
         S.AimReferenceMode = "Screen Center"
         S.EnableCrosshair = false;      S.CrosshairStyle = "Plus";      S.CrosshairSize = 10
         S.ManualCalibrationEnabled = false; S.CalibrationOffsetX = 0;   S.CalibrationOffsetY = 0
@@ -1963,6 +2055,13 @@ MiscTab:CreateButton({
         S.TargetPlayers = true;         S.TargetNPCs = false;           S.TeamCheck = false
         S.AutoEnableOnEquip = false;    S.IgnoreDead = true
         S.CurrentTarget = nil
+        if S.RevertVisuals then
+            local reverted, reason = S.RevertVisuals(VisualConversionOptions)
+            if not reverted then
+                warn("[TASFF UI] Factory reset could not revert visual backends: " .. tostring(reason))
+            end
+        end
+        RefreshVisualConversionStatus()
         if S.SetADSState    then S.SetADSState(false) end
         if S.ClearVisuals   then S.ClearVisuals()     end
         if S.ClearCrosshair then S.ClearCrosshair()   end
@@ -1989,6 +2088,7 @@ UpdateLogTab:CreateLabel("- Applying or selecting a global preset updates the wi
 UpdateLogTab:CreateLabel("- UI palette colors persist and are applied on the next load because Rayfield does not support live theme changes.")
 UpdateLogTab:CreateLabel("- Updated registered feature and control counts to match the current UI.")
 UpdateLogTab:CreateLabel("- Clarified that PlayerGui overlay tags and Roblox Highlight chams are visible to Roblox recording; retained the legacy StreamProofESP config flag for compatibility.")
+UpdateLogTab:CreateLabel("- FIX ESP Ghost Visuals: Cached tags, boxes, skeletons, snaplines, arrows, and highlights are now hidden when their target is no longer valid or rendered.")
 UpdateLogTab:CreateSection("Version 2.1.2 (Refinement Update)")
 UpdateLogTab:CreateLabel("- FIX VoS Wallcheck Locking: Visible On Screen mode now actively drops targets when they are fully occluded, fixing the stuck [LOCKED] tag issue.")
 UpdateLogTab:CreateLabel("- FIX Missing Colors UI: Restored missing Customization options for Default Highlight & Name Tags.")

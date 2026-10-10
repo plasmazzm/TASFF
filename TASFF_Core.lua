@@ -154,6 +154,124 @@ local function EnsureOverlayGui()
     return OverlayGui
 end
 
+local function EnsureVisualGuiCanvas(guiClass)
+    local existing = S.VisualGuiCanvases[guiClass]
+    if existing and existing.Parent and existing.Root and existing.Root.Parent then
+        return existing
+    end
+
+    local playerGui = Player and Player:FindFirstChildOfClass("PlayerGui")
+    if not playerGui then return nil end
+
+    local panel = S.VisualGuiPanelPart
+    if not panel or not panel.Parent then
+        panel = Instance.new("Part")
+        panel.Name = "TASFF_VisualGuiPanel"
+        panel.Anchored = true
+        panel.CanCollide = false
+        panel.CanTouch = false
+        panel.CanQuery = false
+        panel.CastShadow = false
+        panel.Transparency = 1
+        panel.Size = Vector3.new(1, 1, 0.05)
+        panel.Archivable = false
+        panel.Parent = workspace
+        S.VisualGuiPanelPart = panel
+    end
+
+    local canvas = Instance.new(guiClass)
+    canvas.Name = "TASFF_" .. guiClass .. "_Canvas"
+    canvas.Adornee = panel
+    canvas.AlwaysOnTop = true
+    canvas.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    if guiClass == "BillboardGui" then
+        canvas.LightInfluence = 0
+    else
+        canvas.Face = Enum.NormalId.Back
+        canvas.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
+        canvas.LightInfluence = 0
+    end
+    canvas.Parent = playerGui
+
+    local root = Instance.new("Frame")
+    root.Name = "CanvasRoot"
+    root.BackgroundTransparency = 1
+    root.BorderSizePixel = 0
+    root.Position = UDim2.fromOffset(0, 0)
+    root.Size = UDim2.new(1, 0, 1, 0)
+    root.ClipsDescendants = false
+    root.Parent = canvas
+
+    local record = {Gui = canvas, Root = root, Parent = playerGui}
+    S.VisualGuiCanvases[guiClass] = record
+    return record
+end
+
+local function GetVisualDrawingParent(category)
+    local guiClass = S.VisualConversion[category]
+    if guiClass then
+        local canvas = EnsureVisualGuiCanvas(guiClass)
+        if canvas then return canvas.Root end
+    end
+    return EnsureOverlayGui()
+end
+
+local function ReparentVisualDrawings(category)
+    local parent = GetVisualDrawingParent(category)
+    if not parent then return false end
+    for _, drawing in ipairs(S.VisualDrawings[category] or {}) do
+        if drawing.Frame and drawing.Frame.Parent ~= parent then
+            drawing.Frame.Parent = parent
+        end
+    end
+    return true
+end
+
+local VisualConversionCategories = {
+    "Box ESP", "Skeleton ESP", "Snaplines", "OOF Arrows",
+    "ESP Tags", "FOV Circle", "Crosshair",
+}
+
+local function PruneVisualGuiCanvases()
+    local active = {}
+    for _, guiClass in pairs(S.VisualConversion) do
+        active[guiClass] = true
+    end
+    for guiClass, canvas in pairs(S.VisualGuiCanvases) do
+        if not active[guiClass] then
+            if canvas.Gui and canvas.Gui.Parent then canvas.Gui:Destroy() end
+            S.VisualGuiCanvases[guiClass] = nil
+        end
+    end
+    if next(active) == nil and S.VisualGuiPanelPart then
+        if S.VisualGuiPanelPart.Parent then S.VisualGuiPanelPart:Destroy() end
+        S.VisualGuiPanelPart = nil
+    end
+end
+
+local function UpdateVisualGuiCanvases()
+    local camera = workspace.CurrentCamera
+    local panel = S.VisualGuiPanelPart
+    if not camera or not panel or not panel.Parent then return end
+
+    local viewport = camera.ViewportSize
+    if viewport.X <= 0 or viewport.Y <= 0 then return end
+    local distance = 8
+    panel.CFrame = camera.CFrame * CFrame.new(0, 0, -distance)
+    local panelHeight = 2 * distance * math.tan(math.rad(camera.FieldOfView * 0.5))
+    panel.Size = Vector3.new(panelHeight * viewport.X / viewport.Y, panelHeight, 0.05)
+
+    for guiClass, canvas in pairs(S.VisualGuiCanvases) do
+        if canvas.Gui and canvas.Gui.Parent then
+            if guiClass == "BillboardGui" then
+                canvas.Gui.Size = UDim2.fromOffset(viewport.X, viewport.Y)
+            else
+                canvas.Gui.CanvasSize = viewport
+            end
+        end
+    end
+end
+
 local function SetOverlayLine(frame, from, to, thickness, color, transparency, zIndex)
     local delta = to - from
     frame.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -239,8 +357,8 @@ local function UpdateOverlayDrawing(object)
     end
 end
 
-local function NewDrawing(className)
-    local overlay = EnsureOverlayGui()
+local function NewDrawing(className, category)
+    local overlay = GetVisualDrawingParent(category)
     if not overlay then return nil end
 
     local kind = className
@@ -271,6 +389,7 @@ local function NewDrawing(className)
 
     local object = {
         Kind = kind,
+        Category = category,
         Frame = frame,
         Stroke = stroke,
         Values = {
@@ -293,6 +412,14 @@ local function NewDrawing(className)
                 return function(instance)
                     if instance.Frame then instance.Frame:Destroy() end
                     instance.Frame = nil
+                    local categoryDrawings = instance.Category and S.VisualDrawings[instance.Category]
+                    if categoryDrawings then
+                        for index = #categoryDrawings, 1, -1 do
+                            if categoryDrawings[index] == instance then
+                                table.remove(categoryDrawings, index)
+                            end
+                        end
+                    end
                 end
             end
             return self.Values[key]
@@ -303,9 +430,81 @@ local function NewDrawing(className)
         end,
     })
     TrackDrawing(object)
+    if category then
+        S.VisualDrawings[category] = S.VisualDrawings[category] or {}
+        table.insert(S.VisualDrawings[category], object)
+    end
     return object
 end
 S.NewDrawing = NewDrawing
+
+local function ConvertVisuals(categories, guiClass)
+    if guiClass ~= "BillboardGui" and guiClass ~= "SurfaceGui" then
+        return false, "Choose BillboardGui or SurfaceGui."
+    end
+    if type(categories) ~= "table" or #categories == 0 then
+        return false, "Select at least one visual."
+    end
+
+    for _, category in ipairs(categories) do
+        if not table.find(VisualConversionCategories, category) then
+            return false, "The selection contains an unsupported visual."
+        end
+    end
+
+    local changed = {}
+    for _, category in ipairs(categories) do
+        local previousGuiClass = S.VisualConversion[category]
+        S.VisualConversion[category] = guiClass
+        if not ReparentVisualDrawings(category) then
+            for _, rollbackCategory in ipairs(changed) do
+                S.VisualConversion[rollbackCategory.Category] = rollbackCategory.GuiClass
+                ReparentVisualDrawings(rollbackCategory.Category)
+            end
+            S.VisualConversion[category] = previousGuiClass
+            ReparentVisualDrawings(category)
+            PruneVisualGuiCanvases()
+            return false, "PlayerGui is not available; conversion was not applied."
+        end
+        table.insert(changed, {Category = category, GuiClass = previousGuiClass})
+    end
+    PruneVisualGuiCanvases()
+    return true
+end
+S.ConvertVisuals = ConvertVisuals
+
+local function RevertVisuals(categories)
+    if type(categories) ~= "table" or #categories == 0 then
+        return false, "Select at least one visual."
+    end
+
+    for _, category in ipairs(categories) do
+        if not table.find(VisualConversionCategories, category) then
+            return false, "The selection contains an unsupported visual."
+        end
+    end
+    if not EnsureOverlayGui() then
+        return false, "PlayerGui is not available; no visuals were reverted."
+    end
+
+    for _, category in ipairs(categories) do
+        S.VisualConversion[category] = nil
+        if not ReparentVisualDrawings(category) then
+            return false, "PlayerGui is not available; some visuals could not be reverted."
+        end
+    end
+    PruneVisualGuiCanvases()
+    return true
+end
+S.RevertVisuals = RevertVisuals
+
+S.GetVisualConversionStatus = function()
+    local status = {}
+    for _, category in ipairs(VisualConversionCategories) do
+        status[category] = S.VisualConversion[category] or "Base"
+    end
+    return status
+end
 
 local function PrepareDrawing(obj)
     if not obj then return end
@@ -340,6 +539,34 @@ local function ClearVisuals()
 end
 S.ClearVisuals = ClearVisuals
 
+local function HideVisualsForModel(model)
+    if not model then return end
+    local highlight = HighlightCache[model]
+    if highlight and typeof(highlight) == "Instance" then
+        highlight.Enabled = false
+    end
+    local tag = TagCache[model]
+    if tag then
+        if typeof(tag) == "Instance" then
+            tag.Enabled = false
+        else
+            tag.Visible = false
+        end
+    end
+    local box = BoxCache[model]
+    if box then box.Visible = false end
+    local snapline = SnaplineCache[model]
+    if snapline then snapline.Visible = false end
+    local arrow = OOFArrowCache[model]
+    if arrow then arrow.Visible = false end
+    local limbs = SkeletonCache[model]
+    if limbs then
+        for _, limb in ipairs(limbs) do
+            if limb.Line then limb.Line.Visible = false end
+        end
+    end
+end
+
 local function ClearCrosshair()
     for _, element in pairs(CrosshairElements) do
         if element then element.Visible = false end
@@ -348,25 +575,25 @@ end
 S.ClearCrosshair = ClearCrosshair
 
 local function InitializeCrosshair()
-    CrosshairElements.Dot = NewDrawing("Circle")
+    CrosshairElements.Dot = NewDrawing("Circle", "Crosshair")
     if CrosshairElements.Dot then
         CrosshairElements.Dot.Filled    = true
         CrosshairElements.Dot.Thickness = 1
         CrosshairElements.Dot.Radius    = 2
     end
-    CrosshairElements.Top    = NewDrawing("Line")
-    CrosshairElements.Bottom = NewDrawing("Line")
-    CrosshairElements.Left   = NewDrawing("Line")
-    CrosshairElements.Right  = NewDrawing("Line")
+    CrosshairElements.Top    = NewDrawing("Line", "Crosshair")
+    CrosshairElements.Bottom = NewDrawing("Line", "Crosshair")
+    CrosshairElements.Left   = NewDrawing("Line", "Crosshair")
+    CrosshairElements.Right  = NewDrawing("Line", "Crosshair")
     for _, k in ipairs({"Top","Bottom","Left","Right"}) do
         if CrosshairElements[k] then CrosshairElements[k].Thickness = 2 end
     end
-    CrosshairElements.Square = NewDrawing("Square")
+    CrosshairElements.Square = NewDrawing("Square", "Crosshair")
     if CrosshairElements.Square then
         CrosshairElements.Square.Filled    = false
         CrosshairElements.Square.Thickness = 2
     end
-    CrosshairElements.Circle = NewDrawing("Circle")
+    CrosshairElements.Circle = NewDrawing("Circle", "Crosshair")
     if CrosshairElements.Circle then
         CrosshairElements.Circle.Filled    = false
         CrosshairElements.Circle.Thickness = 2
@@ -378,7 +605,7 @@ local function EnsureDrawings()
         PrepareDrawing(S.FOVCircle)
         return S.FOVCircle ~= nil
     end
-    S.FOVCircle = NewDrawing("Circle")
+    S.FOVCircle = NewDrawing("Circle", "FOV Circle")
     if not S.FOVCircle then return false end
     S.FOVCircle.Thickness = 2
     S.FOVCircle.Filled    = false
@@ -1396,7 +1623,7 @@ local function GetVisualAssets(model)
         HighlightCache[model] = h
     end
     local tag = TagCache[model]
-    local wantDrawing = S.StreamProofESP
+    local wantDrawing = S.StreamProofESP or S.VisualConversion["ESP Tags"] ~= nil
     local isInstance  = typeof(tag) == "Instance"
     local isDrawing   = tag ~= nil and not isInstance
     if not tag or (wantDrawing and not isDrawing) or (not wantDrawing and not isInstance) then
@@ -1404,7 +1631,7 @@ local function GetVisualAssets(model)
             if isInstance then tag:Destroy() else pcall(function() tag:Remove() end) end
         end
         if wantDrawing then
-            tag = NewDrawing("Text")
+            tag = NewDrawing("Text", "ESP Tags")
             if tag then tag.Size=16; tag.Center=true; tag.Outline=true; tag.Color=S.HighlightColor or Color3.fromRGB(255,255,255)
             else wantDrawing = false end
         end
@@ -1479,7 +1706,7 @@ local function DrawSkeleton(character, jointsTable, color)
     if not limbs then
         limbs = {}
         for _, pair in ipairs(jointsTable) do
-            local line = NewDrawing("Line")
+            local line = NewDrawing("Line", "Skeleton ESP")
             if not line then continue end
             line.Thickness = 1; line.Visible = false
             table.insert(limbs, {Line=line, PartA=pair[1], PartB=pair[2]})
@@ -1790,6 +2017,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     S._lastDeltaTime = deltaTime   -- v2.1.0: FPS watcher reads this
     UpdateSpectator()
     EnsureDrawings()
+    UpdateVisualGuiCanvases()
     local cachedIgnoreList = GetIgnoreList()
 
     local MasterEnabled    = S.MasterEnabled and not S.PanicLocked
@@ -2066,7 +2294,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         visualsWereEnabled = false
     end
 
-    local skeletonsRenderedThisFrame = {}
+    local visualsRenderedThisFrame = {}
     if MasterEnabled and S.LastVisualList then
         local NE=S.NemesisEnabled; local FM=S.FocusMode; local VM=S.VisualMode
         local VCE=S.VisibilityColorsEnabled
@@ -2084,6 +2312,17 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         local myRoot=Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
         local myPos=myRoot and myRoot.Position or Vector3.new(0,0,0)
         for _,t in ipairs(S.LastVisualList) do
+            local model = t.Instance
+            local modelIsValid = typeof(model) == "Instance" and model.Parent ~= nil
+            if modelIsValid and t.IsPlayer then
+                modelIsValid = t.Player ~= nil and t.Player.Parent == Players and t.Player.Character == model
+            end
+            local rootPart = modelIsValid and model:FindFirstChild("HumanoidRootPart") or nil
+            local humanoid = modelIsValid and model:FindFirstChildOfClass("Humanoid") or nil
+            if not modelIsValid or not humanoid or not rootPart then
+                HideVisualsForModel(model)
+                continue
+            end
             local isPriority=table.find(PP,t.Name)~=nil
             local isNemesis=NE and NemesisMemory[t.Name]~=nil
             local isBlacklisted=t.IsBlacklisted==true
@@ -2097,19 +2336,15 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             local show=inFocus and (VM=="All" or VM=="Multiple" or (VM=="Single" and isPrimary)) or isBlacklisted
 
             local dist=math.floor((myPos-t.Position).Magnitude)
-            if not show or not t.Instance or dist>ERD then
-                local tc=TagCache[t.Instance]
-                if tc then if typeof(tc)=="Instance" then tc.Enabled=false else pcall(function() tc.Visible=false end) end end
-                if BoxCache[t.Instance] then BoxCache[t.Instance].Visible=false end
-                if SnaplineCache[t.Instance] then SnaplineCache[t.Instance].Visible=false end
-                if OOFArrowCache[t.Instance] then OOFArrowCache[t.Instance].Visible=false end
-                if SkeletonCache[t.Instance] then for _,l in pairs(SkeletonCache[t.Instance]) do if l and l.Line then l.Line.Visible=false end end end
+            if not show or dist>ERD then
+                HideVisualsForModel(model)
                 continue
             end
-            local h,tag=GetVisualAssets(t.Instance)
+            local h,tag=GetVisualAssets(model)
             if not (h and tag) then continue end
+            visualsRenderedThisFrame[model] = true
             local isVisNow=true
-            if VCE then isVisNow=IsVisibleCachedWrapper(t.Instance,"HumanoidRootPart",cachedIgnoreList) end
+            if VCE then isVisNow=IsVisibleCachedWrapper(model,"HumanoidRootPart",cachedIgnoreList) end
             
             -- Feature 15: Kill Confirm Flash
             local isRecentlyDead = false
@@ -2144,17 +2379,16 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             end
             local statusESPColor = (isBlacklisted or isNemesis or isPriority or VCE) and bc or nil
 
-            h.Adornee=t.Instance
+            h.Adornee=model
             if t.IsPlayer then h.Enabled=UH else h.Enabled=UNH end
             h.OutlineColor=bc
-            local rootPart=t.Instance:FindFirstChild("HumanoidRootPart")
-            local headPart=t.Instance:FindFirstChild("Head")
+            local headPart=model:FindFirstChild("Head")
             if not rootPart then continue end
             local pos,onScreen=Camera:WorldToViewportPoint(rootPart.Position)
             local headPos=headPart and Camera:WorldToViewportPoint(headPart.Position+Vector3.new(0,0.5,0)) or pos
             if OOFE and not onScreen then
                 if not OOFArrowCache[t.Instance] then
-                    local arrow=NewDrawing("Triangle")
+                    local arrow=NewDrawing("Triangle", "OOF Arrows")
                     if arrow then arrow.Thickness=2;arrow.Filled=true;OOFArrowCache[t.Instance]=arrow end
                 end
                 local arrow=OOFArrowCache[t.Instance]
@@ -2195,7 +2429,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     else tag.Text=fs;tag.Position=Vector2.new(hs.X,hs.Y-35);tag.Color=bc;tag.Visible=true end
                 else if typeof(tag)=="Instance" then tag.Enabled=false else pcall(function() tag.Visible=false end) end end
                 if SE then
-                    if not SnaplineCache[t.Instance] then local line=NewDrawing("Line"); if line then line.Thickness=1.5;SnaplineCache[t.Instance]=line end end
+                    if not SnaplineCache[t.Instance] then local line=NewDrawing("Line", "Snaplines"); if line then line.Thickness=1.5;SnaplineCache[t.Instance]=line end end
                     local sl=SnaplineCache[t.Instance]
                     if sl then
                         PrepareDrawing(sl)
@@ -2207,7 +2441,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 if BME then
                     local lp=Camera:WorldToViewportPoint(rootPart.Position-Vector3.new(0,3,0))
                     local bH=math.abs(headPos.Y-lp.Y); local bW=bH*0.65
-                    if not BoxCache[t.Instance] then local box=NewDrawing("Square"); if box then box.Thickness=1.5;box.Filled=false;BoxCache[t.Instance]=box end end
+                    if not BoxCache[t.Instance] then local box=NewDrawing("Square", "Box ESP"); if box then box.Thickness=1.5;box.Filled=false;BoxCache[t.Instance]=box end end
                     if BoxCache[t.Instance] then
                         PrepareDrawing(BoxCache[t.Instance])
                         BoxCache[t.Instance].Size=Vector2.new(bW,bH)
@@ -2216,10 +2450,9 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     end
                 else if BoxCache[t.Instance] then BoxCache[t.Instance].Visible=false end end
                 if SkME then
-                    local isR15=t.Instance:FindFirstChild("UpperTorso")~=nil
-                    DrawSkeleton(t.Instance, isR15 and R15Joints or R6Joints, statusESPColor or S.SkeletonColor or bc)
-                    skeletonsRenderedThisFrame[t.Instance] = true
-                else if SkeletonCache[t.Instance] then for _,l in ipairs(SkeletonCache[t.Instance]) do if l and l.Line then l.Line.Visible=false end end end end
+                    local isR15=model:FindFirstChild("UpperTorso")~=nil
+                    DrawSkeleton(model, isR15 and R15Joints or R6Joints, statusESPColor or S.SkeletonColor or bc)
+                else if SkeletonCache[model] then for _,l in ipairs(SkeletonCache[model]) do if l and l.Line then l.Line.Visible=false end end end end
             else
                 if typeof(tag)=="Instance" then tag.Enabled=false else pcall(function() tag.Visible=false end) end
                 if BoxCache[t.Instance] then BoxCache[t.Instance].Visible=false end
@@ -2236,11 +2469,16 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             end
         end
     end
-    for model, limbs in pairs(SkeletonCache) do
-        if not skeletonsRenderedThisFrame[model] then
-            for _, limb in ipairs(limbs) do
-                if limb.Line then limb.Line.Visible = false end
-            end
+    local staleVisualModels = {}
+    for model in pairs(HighlightCache) do staleVisualModels[model] = true end
+    for model in pairs(TagCache) do staleVisualModels[model] = true end
+    for model in pairs(BoxCache) do staleVisualModels[model] = true end
+    for model in pairs(SkeletonCache) do staleVisualModels[model] = true end
+    for model in pairs(SnaplineCache) do staleVisualModels[model] = true end
+    for model in pairs(OOFArrowCache) do staleVisualModels[model] = true end
+    for model in pairs(staleVisualModels) do
+        if not visualsRenderedThisFrame[model] then
+            HideVisualsForModel(model)
         end
     end
     if MasterEnabled then
@@ -2473,6 +2711,14 @@ getgenv().TASFF.Cleanup = function()
         table.clear(getgenv().TASFF.Connections)
     end
     if OverlayGui then OverlayGui:Destroy(); OverlayGui = nil end
+    for _, canvas in pairs(S.VisualGuiCanvases) do
+        if canvas.Gui and canvas.Gui.Parent then canvas.Gui:Destroy() end
+    end
+    table.clear(S.VisualGuiCanvases)
+    if S.VisualGuiPanelPart and S.VisualGuiPanelPart.Parent then
+        S.VisualGuiPanelPart:Destroy()
+    end
+    S.VisualGuiPanelPart = nil
     for _,child in ipairs(CoreGui:GetChildren()) do if child.Name=="TASFF_UI" or child.Name=="Rayfield" then child:Destroy() end end
 end
 

@@ -2006,7 +2006,13 @@ MiscTab:CreateButton({
 MiscTab:CreateSection("Screen Recording Cloaking")
 MiscTab:CreateParagraph({
     Title   = "About This System",
-    Content = "Roblox's built-in screen recording captures Drawing-API overlays, Highlights, and ScreenGui elements. BillboardGui / SurfaceGui parented to Workspace parts do NOT appear in Roblox recordings.\n\nSelect which visuals to cloak, then press 'Hide Selected'. The status display below shows the current state of each feature."
+    Content = "TASFF maintains two screen overlays:\n" ..
+              "  • TASFF_Overlay (PlayerGui) — captured by Roblox recording\n" ..
+              "  • TASFF_CoreOverlay (CoreGui) — NOT captured by Roblox recording\n\n" ..
+              "✅ Tags / Nametags — redirected to BillboardGui (recording-invisible, player-visible)\n" ..
+              "✅ FOV Circle, Crosshair, Box ESP, Skeleton ESP, Snaplines, OOF Arrows — frame reparented to TASFF_CoreOverlay. You still see them; recording doesn't.\n" ..
+              "⚠️ ESP Highlights / Chams — Roblox Highlight instances are always captured regardless of parent. Cloaking suppresses them entirely (hidden from recording AND from your screen).\n\n" ..
+              "Select visuals below, then press Hide or Show."
 })
 
 -- Status monitor: shows hidden/visible state per feature
@@ -2146,20 +2152,21 @@ UpdateLogTab:CreateLabel("- UI palette colors persist and are applied on the nex
 UpdateLogTab:CreateLabel("- Clarified that PlayerGui overlay tags and Roblox Highlight chams are visible to Roblox recording; retained the legacy StreamProofESP config flag for compatibility.")
 UpdateLogTab:CreateLabel("- v2.2.0 control totals: 79 toggles, 29 sliders, 37 dropdowns, 24 buttons, 5 keybinds. Feature registry: " .. (S.FeatureCount or "?") .. " registered.")
 UpdateLogTab:CreateSection("Version 2.2.0 (Screen Recording Cloaking Update)")
-UpdateLogTab:CreateLabel("- NEW Screen Recording Cloaking System: Select any combination of visuals to hide from Roblox's built-in recording system.")
-UpdateLogTab:CreateLabel("- Cloakable: Crosshair, FOV Circle, ESP Highlights, Chams, Box ESP, Skeleton ESP, Snaplines, OOF Arrows, Tags/Nametags.")
-UpdateLogTab:CreateLabel("- Mechanism: Cloaked visuals are suppressed from Drawing/Highlight/ScreenGui rendering. BillboardGui (recording-invisible) handles replacement display.")
-UpdateLogTab:CreateLabel("- Status Display: Live paragraph in System tab shows 🟢 VISIBLE / 🔴 HIDDEN state per feature, updating every 2 seconds.")
-UpdateLogTab:CreateLabel("- Group Key: 'Drawing-Based ESP' groups Box + Skeleton + Snaplines + OOF Arrows under one option for fast full-cloak.")
-UpdateLogTab:CreateLabel("- Buttons: 'Hide Selected' and 'Show Selected' operate on the multi-select dropdown. 'Clear All' removes all overrides.")
-UpdateLogTab:CreateLabel("- FIX ListenForTools: Removed duplicate TrackConnection calls for ToolAdded/ToolRemovedConnection to prevent double-disconnect on re-inject.")
-UpdateLogTab:CreateLabel("- FIX ListenForTools: IntelligentEquipFilter now also gates the ToolAdded auto-enable path (was only gated in the render loop).")
-UpdateLogTab:CreateLabel("- FIX TriggerPanic: IsHoldingTriggerKey now explicitly released via VirtualInputManager on panic (previously left key physically held).")
-UpdateLogTab:CreateLabel("- FIX UnloadScript: Now removes all tracked Drawing objects and destroys TASFF_Overlay ScreenGui on unload (previously leaked on screen).")
-UpdateLogTab:CreateLabel("- FIX UpdateSpectator: Camera subject no longer set to nil on spectate-end when local player just died (prevented undefined camera state).")
-UpdateLogTab:CreateLabel("- FIX GetEffectiveFOV: DynamicFOVMax guarded against nil with fallback 400 (math.min(n, nil) would have errored after preset restore).")
-UpdateLogTab:CreateLabel("- FIX ResolvePlayerName: Returns nil instead of raw label on no-match; prevents stale dropdown labels creating phantom priority entries.")
-UpdateLogTab:CreateLabel("- FIX Blacklist Dropdown: Now resolves DisplayName labels to real usernames before storing (same fix applied to ESPWhitelist dropdown).")
+UpdateLogTab:CreateLabel("- NEW Screen Recording Cloaking System: selectively hide any visual from Roblox's screen recording while keeping it visible on your own screen.")
+UpdateLogTab:CreateLabel("- RESTORED dual-overlay architecture: TASFF_Overlay (PlayerGui, captured) + TASFF_CoreOverlay (CoreGui, NOT captured). An earlier AI had collapsed both into PlayerGui.")
+UpdateLogTab:CreateLabel("- Tags / Nametags: rerouted to BillboardGui (recording-invisible, player-visible). You see the tag; recording doesn't.")
+UpdateLogTab:CreateLabel("- FOV Circle, Crosshair, Box ESP, Skeleton ESP, Snaplines, OOF Arrows: individual frames reparented to TASFF_CoreOverlay when cloaked. Fully visible to you; invisible to recording.")
+UpdateLogTab:CreateLabel("- ESP Highlights / Chams: Roblox Highlight instances are captured regardless of parent container. Cloaking suppresses them from both recording and your screen (no alternative exists).")
+UpdateLogTab:CreateLabel("- Status Display: live paragraph shows 🟢 VISIBLE / 🔴 HIDDEN per feature, updates every 2 seconds.")
+UpdateLogTab:CreateLabel("- Group key 'Drawing-Based ESP' cloaks Box + Skeleton + Snaplines + OOF Arrows in one selection.")
+UpdateLogTab:CreateLabel("- Buttons: Hide Selected, Show Selected (restore), Clear All.")
+UpdateLogTab:CreateLabel("- FIX ListenForTools: removed duplicate TrackConnection calls; IntelligentEquipFilter now also gates ToolAdded auto-enable.")
+UpdateLogTab:CreateLabel("- FIX TriggerPanic: IsHoldingTriggerKey now released via VirtualInputManager on panic.")
+UpdateLogTab:CreateLabel("- FIX UnloadScript: destroys all Drawing objects and both TASFF_Overlay / TASFF_CoreOverlay ScreenGuis on unload.")
+UpdateLogTab:CreateLabel("- FIX UpdateSpectator: camera subject guarded against nil when player dies during spectate-end.")
+UpdateLogTab:CreateLabel("- FIX GetEffectiveFOV: DynamicFOVMax nil-guarded (math.min(n, nil) error after preset restore).")
+UpdateLogTab:CreateLabel("- FIX ResolvePlayerName: returns nil on no-match; prevents phantom priority entries from stale labels.")
+UpdateLogTab:CreateLabel("- FIX Blacklist / ESPWhitelist dropdowns: DisplayName labels resolved to real usernames before storing.")
 
 UpdateLogTab:CreateSection("Version 2.1.2 (Refinement Update)")
 UpdateLogTab:CreateLabel("- FIX VoS Wallcheck Locking: Visible On Screen mode now actively drops targets when they are fully occluded, fixing the stuck [LOCKED] tag issue.")

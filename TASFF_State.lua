@@ -185,10 +185,6 @@ _G.TASFF_State = {
     -- // ── Drawing Objects ────────────────────────────────────── // --
     DrawingsReady               = false,
     FOVCircle                   = nil,
-    VisualDrawings              = {},
-    VisualConversion            = {},
-    VisualGuiCanvases            = {},
-    VisualGuiPanelPart           = nil,
     CrosshairElements           = {
         Dot    = nil,
         Top    = nil,
@@ -212,7 +208,7 @@ _G.TASFF_State = {
     PresetFileName              = "TASFF_V1.5.5_Presets.json",
     ColorSettingsFileName       = "TASFF_ColorSettings.json",
     ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
-    CurrentVersion              = "2.1.0",
+    CurrentVersion              = "2.2.0",
 
     -- // ── Session Statistics (v2.1.0) ─────────────────────────── // --
     SessionStartTime            = 0,
@@ -231,6 +227,13 @@ _G.TASFF_State = {
     WeaponTypeGating            = true,      -- gate triggerbot/melee by classified weapon type
     DashboardCategory           = "Combat",  -- home tab status panel active tab
     LockHistory                 = {},        -- circular buffer [{name,time}], max 5 entries
+
+    -- // ── Screen Recording Cloaking System (v2.2.0) ───────────────── // --
+    -- Visuals listed here are redirected from Drawing/Highlight/ScreenGui
+    -- to BillboardGui/SurfaceGui, which Roblox's recording system does not capture.
+    -- Keys match the dropdown options defined in the System tab UI.
+    HiddenFromRecording         = {},        -- set: { ["Crosshair"]=true, ["FOV Circle"]=true, ... }
+    RecordingCloakEnabled       = true,      -- master gate; false = cloak has no effect
 
     -- // ── Performance Engine (v2.1.0 Pipeline) ────────────────── // --
     PerformanceMode             = "Medium",
@@ -322,9 +325,6 @@ _G.TASFF_State = {
     NewDrawing                  = nil,
     PrepareDrawing              = nil,
     EnsureDrawings              = nil,
-    ConvertVisuals              = nil,
-    RevertVisuals               = nil,
-    GetVisualConversionStatus   = nil,
     Notify                      = nil,
     GetIgnoreList               = nil,
     GetAimPosition              = nil,

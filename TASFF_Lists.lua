@@ -111,9 +111,9 @@ S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
 S.ToggleCount = 79
 S.SliderCount = 29
-S.DropdownCount = 36
-S.ButtonCount = 21
-S.KeybindCount = 5
+S.DropdownCount = 38
+S.ButtonCount = 23
+S.KeybindCount = 4
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --
 -- Applied via the Presets tab "Quick-Load Game Config" dropdown.

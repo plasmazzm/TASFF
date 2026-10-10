@@ -140,10 +140,34 @@ end)
 
 
 
+local CoreOverlayGui = nil   -- ScreenGui in CoreGui: invisible to Roblox recording, visible to player
+
 local function EnsureOverlayGui()
-    if OverlayGui and OverlayGui.Parent then return OverlayGui end
+    if OverlayGui and OverlayGui.Parent then
+        -- Also ensure CoreOverlayGui is still alive
+        if not (CoreOverlayGui and CoreOverlayGui.Parent) then
+            local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+            if ok and cg then
+                local existing = cg:FindFirstChild("TASFF_CoreOverlay")
+                if existing then existing:Destroy() end
+                CoreOverlayGui = Instance.new("ScreenGui")
+                CoreOverlayGui.Name = "TASFF_CoreOverlay"
+                CoreOverlayGui.IgnoreGuiInset = true
+                CoreOverlayGui.ResetOnSpawn = false
+                CoreOverlayGui.DisplayOrder = 10001   -- above PlayerGui overlay
+                CoreOverlayGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+                CoreOverlayGui.Parent = cg
+            else
+                CoreOverlayGui = OverlayGui   -- fallback: no CoreGui access, cloak won't hide from recording
+            end
+        end
+        return OverlayGui
+    end
+
     local playerGui = Player and Player:FindFirstChildOfClass("PlayerGui")
     if not playerGui then return nil end
+
+    -- PlayerGui overlay — captured by Roblox recording
     OverlayGui = Instance.new("ScreenGui")
     OverlayGui.Name = "TASFF_Overlay"
     OverlayGui.IgnoreGuiInset = true
@@ -151,7 +175,35 @@ local function EnsureOverlayGui()
     OverlayGui.DisplayOrder = 10000
     OverlayGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
     OverlayGui.Parent = playerGui
+
+    -- CoreGui overlay — NOT captured by Roblox recording (original pre-PlayerGui location)
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then
+        local existing = cg:FindFirstChild("TASFF_CoreOverlay")
+        if existing then existing:Destroy() end
+        CoreOverlayGui = Instance.new("ScreenGui")
+        CoreOverlayGui.Name = "TASFF_CoreOverlay"
+        CoreOverlayGui.IgnoreGuiInset = true
+        CoreOverlayGui.ResetOnSpawn = false
+        CoreOverlayGui.DisplayOrder = 10001
+        CoreOverlayGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+        CoreOverlayGui.Parent = cg
+    else
+        CoreOverlayGui = OverlayGui   -- fallback if executor blocks CoreGui
+    end
+
     return OverlayGui
+end
+
+-- Reparents a drawing object's Frame to CoreGui overlay (cloak=true, invisible to recording)
+-- or back to PlayerGui overlay (cloak=false, visible to recording).
+-- The drawing remains fully visible to the local player either way.
+local function SetDrawingCloaked(drawingObj, cloaked)
+    if not drawingObj or not drawingObj.Frame then return end
+    local target = cloaked and CoreOverlayGui or OverlayGui
+    if target and drawingObj.Frame.Parent ~= target then
+        drawingObj.Frame.Parent = target
+    end
 end
 
 local function SetOverlayLine(frame, from, to, thickness, color, transparency, zIndex)
@@ -514,6 +566,11 @@ local function UnloadScript()
     if playerGui then
         local overlay = playerGui:FindFirstChild("TASFF_Overlay")
         if overlay then pcall(function() overlay:Destroy() end) end
+    end
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then
+        local coreOverlay = cg:FindFirstChild("TASFF_CoreOverlay")
+        if coreOverlay then pcall(function() coreOverlay:Destroy() end) end
     end
     -- Native Roblox notification — fired before Rayfield GUI is destroyed
     pcall(function()
@@ -1399,7 +1456,10 @@ task.spawn(function()
 end)
 
 
-local function GetVisualAssets(model)
+-- forcebillboard: when true, forces BillboardGui tag regardless of StreamProofESP.
+-- Used by the Recording Cloak system — BillboardGui is invisible to Roblox recording
+-- but still fully visible to the local player.
+local function GetVisualAssets(model, forcebillboard)
     local h = HighlightCache[model]
     if not h or not h.Parent or not h:IsDescendantOf(model) then
         if h and h.Parent then h:Destroy() end
@@ -1409,7 +1469,7 @@ local function GetVisualAssets(model)
         HighlightCache[model] = h
     end
     local tag = TagCache[model]
-    local wantDrawing = S.StreamProofESP
+    local wantDrawing = S.StreamProofESP and not forcebillboard   -- cloak overrides to BillboardGui
     local isInstance  = typeof(tag) == "Instance"
     local isDrawing   = tag ~= nil and not isInstance
     if not tag or (wantDrawing and not isDrawing) or (not wantDrawing and not isInstance) then
@@ -1844,8 +1904,9 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     local screenCenter  = GetAimPosition()
     local shouldShowFOV = S.ShowFOV and not S.InvisibleFOV
         and MasterEnabled and AimbotActive and TargetingEnabled
-        and not IsHiddenFromRecording("FOV Circle")   -- Cloak: suppress when hidden from recording
     if S.FOVCircle then
+        -- Cloak: reparent Frame to CoreGui (recording-invisible) or PlayerGui (recording-visible)
+        SetDrawingCloaked(S.FOVCircle, IsHiddenFromRecording("FOV Circle"))
         if shouldShowFOV then
             PrepareDrawing(S.FOVCircle)
             S.FOVCircle.Position = screenCenter
@@ -1863,9 +1924,14 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         end
     end
     ClearCrosshair()
-    if S.EnableCrosshair and not IsHiddenFromRecording("Crosshair") then   -- Cloak: suppress crosshair
+    if S.EnableCrosshair then
+        -- Cloak: reparent all crosshair frames to CoreGui or PlayerGui
+        local crosshairCloaked = IsHiddenFromRecording("Crosshair")
         local color = S.CrosshairColor or Color3.fromRGB(0, 255, 255)
-        for _, el in pairs(CrosshairElements) do PrepareDrawing(el) end
+        for _, el in pairs(CrosshairElements) do
+            SetDrawingCloaked(el, crosshairCloaked)
+            PrepareDrawing(el)
+        end
         local CE = CrosshairElements; local sz = S.CrosshairSize
         if CE.Dot then
             CE.Dot.Position = screenCenter
@@ -2143,7 +2209,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 if SkeletonCache[t.Instance] then for _,l in pairs(SkeletonCache[t.Instance]) do if l and l.Line then l.Line.Visible=false end end end
                 continue
             end
-            local h,tag=GetVisualAssets(t.Instance)
+            -- Cloak: Tags / Nametags — compute BEFORE GetVisualAssets so forcebillboard redirects
+            -- the tag type. BillboardGui is player-visible but invisible to Roblox recording.
+            local cloakTags = IsHiddenFromRecording("Tags / Nametags")
+            local h,tag=GetVisualAssets(t.Instance, cloakTags)
             if not (h and tag) then continue end
             local isVisNow=true
             if VCE then isVisNow=IsVisibleCachedWrapper(t.Instance,"HumanoidRootPart",cachedIgnoreList) end
@@ -2181,12 +2250,15 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             end
             local statusESPColor = (isBlacklisted or isNemesis or isPriority or VCE) and bc or nil
 
-            -- Cloak: gate ESP Highlights / Chams from Roblox recording
+            -- Cloak: ESP Highlights / Chams — Highlight instances are captured by Roblox recording.
+            -- No "visible to player, invisible to recording" path exists for Highlight.
+            -- Cloaking suppresses the Highlight from recording and from your screen.
             local cloakHighlight = IsHiddenFromRecording("ESP Highlights (Chams)")
-                or IsHiddenFromRecording("Drawing-Based ESP (Box, Skeleton, Snaplines, OOF Arrows)")
             h.Adornee=t.Instance
             if cloakHighlight then
-                h.Enabled = false   -- hide Highlight from recording; BillboardGui remains (invisible to recording)
+                h.Enabled = false
+                h.FillTransparency = 1
+                h.OutlineTransparency = 1
             else
                 if t.IsPlayer then h.Enabled=UH else h.Enabled=UNH end
             end
@@ -2196,16 +2268,17 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             if not rootPart then continue end
             local pos,onScreen=Camera:WorldToViewportPoint(rootPart.Position)
             local headPos=headPart and Camera:WorldToViewportPoint(headPart.Position+Vector3.new(0,0.5,0)) or pos
-            -- Cloak: OOF Arrows
+            -- Cloak: OOF Arrows — reparent to CoreGui (recording-invisible) or PlayerGui
             local cloakOOF = IsHiddenFromRecording("OOF Arrows")
                 or IsHiddenFromRecording("Drawing-Based ESP (Box, Skeleton, Snaplines, OOF Arrows)")
-            if OOFE and not onScreen and not cloakOOF then
+            if OOFE and not onScreen then
                 if not OOFArrowCache[t.Instance] then
                     local arrow=NewDrawing("Triangle")
                     if arrow then arrow.Thickness=2;arrow.Filled=true;OOFArrowCache[t.Instance]=arrow end
                 end
                 local arrow=OOFArrowCache[t.Instance]
                 if arrow then
+                    SetDrawingCloaked(arrow, cloakOOF)
                     local center=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
                     local relX,relY=pos.X-center.X,pos.Y-center.Y
                     if pos.Z<0 then relX=-relX;relY=-relY end
@@ -2218,64 +2291,68 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             else if OOFArrowCache[t.Instance] then OOFArrowCache[t.Instance].Visible=false end end
             if onScreen then
                 local hs=ApplyScreenCalibration(Vector2.new(headPos.X,headPos.Y))
-                -- Cloak: Tags / Nametags
-                local cloakTags = IsHiddenFromRecording("Tags / Nametags")
+                -- Tags: when cloakTags=true, GetVisualAssets already returned a BillboardGui
+                -- (recording-invisible). Render into it exactly as normal — you see it, recording doesn't.
                 if (t.IsPlayer and UIT) or (not t.IsPlayer and UNIT) then
-                    if cloakTags then
-                        if typeof(tag)=="Instance" then tag.Enabled=false else pcall(function() tag.Visible=false end) end
-                    else
-                        local hdr=""
-                        local at=t.Instance:FindFirstChildOfClass("Tool")
-                        if STC and at then hdr="["..at.Name:upper().."] " end
-                        if isBlacklisted then hdr=hdr.."[BLACKLISTED] "
-                        elseif isNemesis then hdr=hdr.."[NEMESIS] " elseif isPriority then hdr=hdr.."[PRIORITY] " end
-                        if t.IsTeammate then hdr=hdr.."[TEAM] " end
-                        -- Feature 16: Lock Indicators
-                        if S.ShowLockIndicators and isPrimary then
-                            if S.SilentAimEnabled then hdr=hdr.."[SILENT] " else hdr=hdr.."[LOCKED] " end
-                        end
-                        local ns=""
-                        if t.IsPlayer and SDisp then local po=Players:FindFirstChild(t.Name); if po then ns="("..po.DisplayName..") " end end
-                        local fs=string.format("%s%s%s\nHP: %d | Dist: %d",hdr,ns,t.Name,math.floor(t.Health),dist)
-                        if typeof(tag)=="Instance" and tag:IsA("BillboardGui") then
-                            local lbl=tag:FindFirstChildOfClass("TextLabel")
-                            if lbl then lbl.Text=fs;lbl.TextColor3=bc end
-                            tag.Adornee=t.Instance:FindFirstChild("Head") or rootPart; tag.Enabled=true
-                        else tag.Text=fs;tag.Position=Vector2.new(hs.X,hs.Y-35);tag.Color=bc;tag.Visible=true end
+                    local hdr=""
+                    local at=t.Instance:FindFirstChildOfClass("Tool")
+                    if STC and at then hdr="["..at.Name:upper().."] " end
+                    if isBlacklisted then hdr=hdr.."[BLACKLISTED] "
+                    elseif isNemesis then hdr=hdr.."[NEMESIS] " elseif isPriority then hdr=hdr.."[PRIORITY] " end
+                    if t.IsTeammate then hdr=hdr.."[TEAM] " end
+                    -- Feature 16: Lock Indicators
+                    if S.ShowLockIndicators and isPrimary then
+                        if S.SilentAimEnabled then hdr=hdr.."[SILENT] " else hdr=hdr.."[LOCKED] " end
                     end
+                    local ns=""
+                    if t.IsPlayer and SDisp then local po=Players:FindFirstChild(t.Name); if po then ns="("..po.DisplayName..") " end end
+                    local fs=string.format("%s%s%s\nHP: %d | Dist: %d",hdr,ns,t.Name,math.floor(t.Health),dist)
+                    if typeof(tag)=="Instance" and tag:IsA("BillboardGui") then
+                        local lbl=tag:FindFirstChildOfClass("TextLabel")
+                        if lbl then lbl.Text=fs;lbl.TextColor3=bc end
+                        tag.Adornee=t.Instance:FindFirstChild("Head") or rootPart; tag.Enabled=true
+                    else tag.Text=fs;tag.Position=Vector2.new(hs.X,hs.Y-35);tag.Color=bc;tag.Visible=true end
                 else if typeof(tag)=="Instance" then tag.Enabled=false else pcall(function() tag.Visible=false end) end end
-                -- Cloak: Snaplines
+                -- Cloak: Snaplines — reparent to CoreGui or PlayerGui
                 local cloakSnap = IsHiddenFromRecording("Snaplines")
                     or IsHiddenFromRecording("Drawing-Based ESP (Box, Skeleton, Snaplines, OOF Arrows)")
-                if SE and not cloakSnap then
+                if SE then
                     if not SnaplineCache[t.Instance] then local line=NewDrawing("Line"); if line then line.Thickness=1.5;SnaplineCache[t.Instance]=line end end
                     local sl=SnaplineCache[t.Instance]
                     if sl then
+                        SetDrawingCloaked(sl, cloakSnap)
                         PrepareDrawing(sl)
                         local o2=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y)
                         if SO=="Center" then o2=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2) end
                         sl.From=o2;sl.To=Vector2.new(pos.X,pos.Y);sl.Color=statusESPColor or SLC or bc;sl.Visible=true
                     end
                 else if SnaplineCache[t.Instance] then SnaplineCache[t.Instance].Visible=false end end
-                -- Cloak: Box ESP
+                -- Cloak: Box ESP — reparent to CoreGui or PlayerGui
                 local cloakBox = IsHiddenFromRecording("Box ESP")
                     or IsHiddenFromRecording("Drawing-Based ESP (Box, Skeleton, Snaplines, OOF Arrows)")
-                if BME and not cloakBox then
+                if BME then
                     local lp=Camera:WorldToViewportPoint(rootPart.Position-Vector3.new(0,3,0))
                     local bH=math.abs(headPos.Y-lp.Y); local bW=bH*0.65
                     if not BoxCache[t.Instance] then local box=NewDrawing("Square"); if box then box.Thickness=1.5;box.Filled=false;BoxCache[t.Instance]=box end end
                     if BoxCache[t.Instance] then
+                        SetDrawingCloaked(BoxCache[t.Instance], cloakBox)
                         PrepareDrawing(BoxCache[t.Instance])
                         BoxCache[t.Instance].Size=Vector2.new(bW,bH)
                         BoxCache[t.Instance].Position=Vector2.new(hs.X-(bW/2),hs.Y)
                         BoxCache[t.Instance].Color=statusESPColor or S.BoxColor or bc; BoxCache[t.Instance].Visible=true
                     end
                 else if BoxCache[t.Instance] then BoxCache[t.Instance].Visible=false end end
-                -- Cloak: Skeleton ESP
+                -- Cloak: Skeleton ESP — reparent each limb line to CoreGui or PlayerGui
                 local cloakSkel = IsHiddenFromRecording("Skeleton ESP")
                     or IsHiddenFromRecording("Drawing-Based ESP (Box, Skeleton, Snaplines, OOF Arrows)")
-                if SkME and not cloakSkel then
+                if SkME then
                     local isR15=t.Instance:FindFirstChild("UpperTorso")~=nil
+                    -- Route skeleton lines to correct overlay before DrawSkeleton writes to them
+                    if SkeletonCache[t.Instance] then
+                        for _,l in ipairs(SkeletonCache[t.Instance]) do
+                            if l and l.Line then SetDrawingCloaked(l.Line, cloakSkel) end
+                        end
+                    end
                     DrawSkeleton(t.Instance, isR15 and R15Joints or R6Joints, statusESPColor or S.SkeletonColor or bc)
                     skeletonsRenderedThisFrame[t.Instance] = true
                 else if SkeletonCache[t.Instance] then for _,l in ipairs(SkeletonCache[t.Instance]) do if l and l.Line then l.Line.Visible=false end end end end

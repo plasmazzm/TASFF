@@ -78,12 +78,13 @@ local ColorFlagMap = {
 }
 
 local GlobalThemeOptions = {
-    "Ocean", "AmberGlow", "Amethyst", "Green", "Bloom", "DarkBlue", "Serenity",
+    "Default", "Ocean", "AmberGlow", "Amethyst", "Green", "Bloom", "DarkBlue", "Serenity",
     "Light", "Cyberpunk", "Crimson Blood", "Emerald Forest", "Solaris Gold",
     "Retro Synth", "Dracula", "Monochrome Void", "Sakura", "Toxic Slime", "Glacier",
 }
 local selectedGlobalTheme = GlobalThemeOptions[1]
 local GlobalThemePalettes = {
+    Default = {Base="#F0F0F0", Overlay="#F0F0F0", Drawing="#C8C8C8", Priority="#FF4D4D", Threat="#FF884D", Nemesis="#B366FF", Blacklist="#FFB347", Chams="#B4B4B4", Combat="#FFFFFF", Visible="#4DFFA6", Hidden="#FF4D6D", UIBackground="#0F0F0F", UITopbar="#141414", UIAccent="#3C3C3C", UIElement="#1C1C1C", UIText="#F0F0F0"},
     Ocean = {Base="#D8F7FF", Overlay="#38DDF2", Drawing="#49B8D0", Priority="#FF5B6E", Threat="#FF965C", Nemesis="#B991FF", Blacklist="#FFB14A", Chams="#1EB9D4", Combat="#FFF1A8", Visible="#51E6A3", Hidden="#FF647C", UIBackground="#071923", UITopbar="#0D2532", UIAccent="#22D3EE", UIElement="#102D3A", UIText="#E4F7FA"},
     AmberGlow = {Base="#FFF0D6", Overlay="#FFC46B", Drawing="#E5A34A", Priority="#FF5555", Threat="#FF7A32", Nemesis="#C58BFF", Blacklist="#FFD166", Chams="#E58D2B", Combat="#FFF2A6", Visible="#8BE28B", Hidden="#FF6262", UIBackground="#1A1510", UITopbar="#292016", UIAccent="#F5A623", UIElement="#332719", UIText="#FFF1D6"},
     Amethyst = {Base="#F3E8FF", Overlay="#C4A1FF", Drawing="#A67DE8", Priority="#FF667D", Threat="#FF9D66", Nemesis="#E0A8FF", Blacklist="#FFC36E", Chams="#8B5CF6", Combat="#FFE6A6", Visible="#75E6B0", Hidden="#FF6685", UIBackground="#160F20", UITopbar="#21152F", UIAccent="#A855F7", UIElement="#2A1D3B", UIText="#F2E9FF"},
@@ -145,8 +146,8 @@ local PersistedColorValues = {}
 local ThemeColorDefaults = {
     Background = Color3.fromRGB(15, 15, 15),
     Topbar = Color3.fromRGB(20, 20, 20),
-    TabBackgroundSelected = Color3.fromRGB(180, 40, 40),
-    ElementBackground = Color3.fromRGB(25, 25, 25),
+    TabBackgroundSelected = Color3.fromRGB(60, 60, 60),
+    ElementBackground = Color3.fromRGB(28, 28, 28),
     TextColor = Color3.fromRGB(240, 240, 240),
 }
 local ThemeColors = table.clone(ThemeColorDefaults)
@@ -1524,7 +1525,7 @@ local function UpdateWindowTitle(themeName)
     local topbar = main and main:FindFirstChild("Topbar")
     local title = topbar and topbar:FindFirstChild("Title")
     if title and title:IsA("TextLabel") then
-        title.Text = "TASFF 2.2.0 " .. themeName
+        title.Text = "TASFF 2.1.0 " .. themeName
     end
 end
 local function ColorFromHex(hex)
@@ -1615,6 +1616,21 @@ CustomizationTab:CreateButton({
                 if control then control:Set(color) end
             end
         end
+        -- Turn off all individual preset override toggles so the chosen theme's colors are active without override conflicts
+        local PresetOverrideFlags = {
+            "HighlightPresetToggle", "FOVPresetToggle", "CrosshairPresetToggle",
+            "BoxPresetToggle", "SkelPresetToggle", "SnapPresetToggle",
+            "PrioPresetToggle", "ThreatPresetToggle", "NemesisPresetToggle",
+            "BlacklistPresetToggle", "ChamsPresetToggle", "KillFlashPresetToggle",
+            "VisiblePresetToggle", "HiddenPresetToggle",
+        }
+        for _, flag in ipairs(PresetOverrideFlags) do
+            local ctrl = Rayfield.Flags and Rayfield.Flags[flag]
+            if ctrl and ctrl.Set then
+                pcall(function() ctrl:Set(false) end)
+            end
+        end
+
         if _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(S.FOVColor) end
         if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(S.CrosshairColor) end
         UpdateWindowTitle(selectedGlobalTheme)
@@ -1622,7 +1638,7 @@ CustomizationTab:CreateButton({
         if S.Notify then
             S.Notify({
                 Title = "Global Theme Applied",
-                Content = selectedGlobalTheme .. " visuals applied. UI colors take effect the next time the interface loads.",
+                Content = selectedGlobalTheme .. " visuals applied. Overrides turned off. UI colors take effect next load.",
                 Duration = 4,
                 Image = "palette",
             })
@@ -1662,14 +1678,14 @@ CustomizationTab:CreateSection("On-Screen Overlays — FOV & Crosshair")
 CustomizationTab:CreateToggle({Name = "Use Preset Color — FOV Circle", CurrentValue = false, Flag = "FOVPresetToggle", Callback = function(v)
     applyPreset(v, "FOVCircleColorDd", _G.UpdateFOVCircleColor, "FOVColor")
 end})
-CustomizationTab:CreateDropdown({Name = "Preset — FOV Circle", Options = ColorDropdownOptions, CurrentOption = {"Tan"}, Flag = "FOVCircleColorDd", Callback = function(v)
+CustomizationTab:CreateDropdown({Name = "Preset — FOV Circle", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "FOVCircleColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["FOVPresetToggle"]
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]
     if rgb and _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(rgb) end
     if rgb then SetColor("FOVColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — FOV Circle Color", Color = S.FOVColor or Color3.fromRGB(255,200,120), Flag = "FOVCircleColorPicker", Callback = function(Value)
+CustomizationTab:CreateColorPicker({Name = "Fine — FOV Circle Color", Color = S.FOVColor or Color3.fromRGB(240,240,240), Flag = "FOVCircleColorPicker", Callback = function(Value)
     SetColor("FOVColor", Value)
     if _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(Value) end
 end})
@@ -1677,14 +1693,14 @@ end})
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Crosshair", CurrentValue = false, Flag = "CrosshairPresetToggle", Callback = function(v)
     applyPreset(v, "CrosshairColorDd", _G.UpdateCrosshairColor, "CrosshairColor")
 end})
-CustomizationTab:CreateDropdown({Name = "Preset — Crosshair", Options = ColorDropdownOptions, CurrentOption = {"Coral"}, Flag = "CrosshairColorDd", Callback = function(v)
+CustomizationTab:CreateDropdown({Name = "Preset — Crosshair", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "CrosshairColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["CrosshairPresetToggle"]
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]
     if rgb and _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(rgb) end
     if rgb then SetColor("CrosshairColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Crosshair Color", Color = S.CrosshairColor or Color3.fromRGB(255,127,80), Flag = "CrosshairColorPicker", Callback = function(Value)
+CustomizationTab:CreateColorPicker({Name = "Fine — Crosshair Color", Color = S.CrosshairColor or Color3.fromRGB(240,240,240), Flag = "CrosshairColorPicker", Callback = function(Value)
     SetColor("CrosshairColor", Value)
     if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(Value) end
 end})
@@ -1694,33 +1710,33 @@ CustomizationTab:CreateSection("Drawing Visuals — Box, Skeleton, Snaplines")
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Box ESP", CurrentValue = false, Flag = "BoxPresetToggle", Callback = function(v)
     applyPreset(v, "BoxColorDd", nil, "BoxColor")
 end})
-CustomizationTab:CreateDropdown({Name = "Preset — Box ESP", Options = ColorDropdownOptions, CurrentOption = {"Maroon"}, Flag = "BoxColorDd", Callback = function(v)
+CustomizationTab:CreateDropdown({Name = "Preset — Box ESP", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "BoxColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["BoxPresetToggle"]
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("BoxColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Box ESP Color", Color = S.BoxColor or Color3.fromRGB(200,40,40), Flag = "BoxESPColorPicker", Callback = function(Value) SetColor("BoxColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Box ESP Color", Color = S.BoxColor or Color3.fromRGB(200,200,200), Flag = "BoxESPColorPicker", Callback = function(Value) SetColor("BoxColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Skeleton ESP", CurrentValue = false, Flag = "SkelPresetToggle", Callback = function(v)
     applyPreset(v, "SkelColorDd", nil, "SkeletonColor")
 end})
-CustomizationTab:CreateDropdown({Name = "Preset — Skeleton ESP", Options = ColorDropdownOptions, CurrentOption = {"Maroon"}, Flag = "SkelColorDd", Callback = function(v)
+CustomizationTab:CreateDropdown({Name = "Preset — Skeleton ESP", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "SkelColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["SkelPresetToggle"]
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("SkeletonColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Skeleton ESP Color", Color = S.SkeletonColor or Color3.fromRGB(200,40,40), Flag = "SkeletonESPColorPicker", Callback = function(Value) SetColor("SkeletonColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Skeleton ESP Color", Color = S.SkeletonColor or Color3.fromRGB(200,200,200), Flag = "SkeletonESPColorPicker", Callback = function(Value) SetColor("SkeletonColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Snaplines & OOF Arrows", CurrentValue = false, Flag = "SnapPresetToggle", Callback = function(v)
     applyPreset(v, "SnapColorDd", nil, "SnaplineColor")
 end})
-CustomizationTab:CreateDropdown({Name = "Preset — Snaplines & OOF Arrows", Options = ColorDropdownOptions, CurrentOption = {"Red"}, Flag = "SnapColorDd", Callback = function(v)
+CustomizationTab:CreateDropdown({Name = "Preset — Snaplines & OOF Arrows", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "SnapColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["SnapPresetToggle"]
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("SnaplineColor", rgb); SetColor("OOFArrowColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Snapline Color", Color = S.SnaplineColor or Color3.fromRGB(255,0,0), Flag = "SnaplineFineColorPicker", Callback = function(Value) SetColor("SnaplineColor", Value) end})
-CustomizationTab:CreateColorPicker({Name = "Fine — OOF Arrow Color", Color = S.OOFArrowColor or Color3.fromRGB(255,100,0), Flag = "OOFArrowColorPicker", Callback = function(Value) SetColor("OOFArrowColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Snapline Color", Color = S.SnaplineColor or Color3.fromRGB(200,200,200), Flag = "SnaplineFineColorPicker", Callback = function(Value) SetColor("SnaplineColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — OOF Arrow Color", Color = S.OOFArrowColor or Color3.fromRGB(200,200,200), Flag = "OOFArrowColorPicker", Callback = function(Value) SetColor("OOFArrowColor", Value) end})
 
 -- ─── Section: Intel / Target Category Colors ──────────────────────────────
 CustomizationTab:CreateSection("Intel Category Colors — Priority, Threat, Nemesis")
@@ -1732,7 +1748,7 @@ CustomizationTab:CreateDropdown({Name = "Preset — Priority Players", Options =
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("PriorityHighlightColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Priority Player ESP Color", Color = S.PriorityHighlightColor or Color3.fromRGB(255,200,0), Flag = "PriorityHighlightColorPicker", Callback = function(Value) SetColor("PriorityHighlightColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Priority Player ESP Color", Color = S.PriorityHighlightColor or Color3.fromRGB(255,75,75), Flag = "PriorityHighlightColorPicker", Callback = function(Value) SetColor("PriorityHighlightColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Threat Players", CurrentValue = false, Flag = "ThreatPresetToggle", Callback = function(v)
     applyPreset(v, "ThreatColorDd", nil, "ThreatHighlightColor")
@@ -1742,7 +1758,7 @@ CustomizationTab:CreateDropdown({Name = "Preset — Threat Players", Options = C
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("ThreatHighlightColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Threat Player ESP Color", Color = S.ThreatHighlightColor or Color3.fromRGB(255,60,0), Flag = "ThreatHighlightColorPicker", Callback = function(Value) SetColor("ThreatHighlightColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Threat Player ESP Color", Color = S.ThreatHighlightColor or Color3.fromRGB(255,120,60), Flag = "ThreatHighlightColorPicker", Callback = function(Value) SetColor("ThreatHighlightColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Nemesis Players", CurrentValue = false, Flag = "NemesisPresetToggle", Callback = function(v)
     applyPreset(v, "NemesisColorDd", nil, "NemesisHighlightColor")
@@ -1752,7 +1768,7 @@ CustomizationTab:CreateDropdown({Name = "Preset — Nemesis Players", Options = 
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("NemesisHighlightColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Nemesis Player ESP Color", Color = S.NemesisHighlightColor or Color3.fromRGB(150,0,255), Flag = "NemesisHighlightColorPicker", Callback = function(Value) SetColor("NemesisHighlightColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Nemesis Player ESP Color", Color = S.NemesisHighlightColor or Color3.fromRGB(180,100,255), Flag = "NemesisHighlightColorPicker", Callback = function(Value) SetColor("NemesisHighlightColor", Value) end})
 
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Blacklisted Players", CurrentValue = false, Flag = "BlacklistPresetToggle", Callback = function(v)
     applyPreset(v, "BlacklistColorDd", nil, "BlacklistedTagColor")
@@ -1762,19 +1778,19 @@ CustomizationTab:CreateDropdown({Name = "Preset — Blacklisted Players", Option
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("BlacklistedTagColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Blacklisted Player Tag Color", Color = S.BlacklistedTagColor or Color3.fromRGB(255,140,0), Flag = "BlacklistedTagColorPicker", Callback = function(Value) SetColor("BlacklistedTagColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Blacklisted Player Tag Color", Color = S.BlacklistedTagColor or Color3.fromRGB(255,160,60), Flag = "BlacklistedTagColorPicker", Callback = function(Value) SetColor("BlacklistedTagColor", Value) end})
 
 -- ─── Section: Chams (Through-Wall) ────────────────────────────────────────
 CustomizationTab:CreateSection("Through-Wall Visuals — Chams")
 CustomizationTab:CreateToggle({Name = "Use Preset Color — Chams", CurrentValue = false, Flag = "ChamsPresetToggle", Callback = function(v)
     applyPreset(v, "ChamsColorDd", nil, "ChamsColor")
 end})
-CustomizationTab:CreateDropdown({Name = "Preset — Chams Color", Options = ColorDropdownOptions, CurrentOption = {"Red"}, Flag = "ChamsColorDd", Callback = function(v)
+CustomizationTab:CreateDropdown({Name = "Preset — Chams Color", Options = ColorDropdownOptions, CurrentOption = {"White"}, Flag = "ChamsColorDd", Callback = function(v)
     local f = Rayfield.Flags and Rayfield.Flags["ChamsPresetToggle"]
     if not (f and f.CurrentValue) then return end
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("ChamsColor", rgb) end
 end})
-CustomizationTab:CreateColorPicker({Name = "Fine — Chams Color", Color = S.ChamsColor or Color3.fromRGB(255,30,30), Flag = "ChamsColorPicker", Callback = function(Value) SetColor("ChamsColor", Value) end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Chams Color", Color = S.ChamsColor or Color3.fromRGB(180,180,180), Flag = "ChamsColorPicker", Callback = function(Value) SetColor("ChamsColor", Value) end})
 CustomizationTab:CreateSlider({Name = "Chams Opacity (0–100)", Range = {0, 100}, Increment = 1, CurrentValue = S.ChamsOpacity or 10, Flag = "ChamsOpacity", Callback = function(v) S.ChamsOpacity = v end})
 
 -- ─── Section: Kill Flash ──────────────────────────────────────────────────
@@ -2003,13 +2019,13 @@ MiscTab:CreateButton({
 -- This system lets you selectively redirect selected visuals to the
 -- invisible-to-capture rendering mode at the press of a button.
 
-MiscTab:CreateSection("Screen Recording Cloaking")
+MiscTab:CreateSection("Screen Recording Cloaking [WORK IN PROGRESS]")
 MiscTab:CreateParagraph({
-    Title   = "About This System",
-    Content = "Roblox's screen recording captures ScreenGui frames and Highlight instances.\n\n" ..
-              "✅ Tags / Nametags — TRUE CLOAK: tags are redirected to BillboardGui which is recording-invisible. You still see them on your screen; they will not appear in recordings.\n\n" ..
-              "⚠️ All other options (Crosshair, FOV Circle, ESP Highlights, Box, Skeleton, Snaplines, OOF Arrows) — FULL SUPPRESSION: these rendering types have no recording-invisible alternative in standard executor environments. Cloaking hides them from the recording AND from your screen.\n\n" ..
-              "Select visuals below, then press Hide or Show."
+    Title   = "About This System (Work in Progress)",
+    Content = "⚠️ [WORK IN PROGRESS]: Due to recent Roblox capture system updates and executor rendering implementations (Xeno / Real Executor lacking direct DirectX/Vulkan hooked Drawing overlays), true streamproof cloaking is currently undergoing testing and refinement.\n\n" ..
+              "• Tag cloaking via BillboardGui/SurfaceGui and 2D Drawing overlays may still be captured or fail to render depending on your executor environment.\n" ..
+              "• Full suppression options hide elements from both the screen and recording.\n\n" ..
+              "This feature is temporarily marked as Work in Progress while executor developers update their native overlay rendering hooks."
 })
 
 -- Status monitor: shows hidden/visible state per feature

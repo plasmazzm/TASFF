@@ -37,17 +37,11 @@ end
 local function TrackConnection(conn)
     local env = GetTASFFEnv()
     if not env or type(env.Connections) ~= "table" or not conn then return end
-    if typeof(conn) == "RBXScriptConnection" then
-        for i = #env.Connections, 1, -1 do
-            local existing = env.Connections[i]
-            if not existing or typeof(existing) ~= "RBXScriptConnection" or not existing.Connected then
-                table.remove(env.Connections, i)
-            elseif existing == conn then
-                return
-            end
-        end
-        table.insert(env.Connections, conn)
+    for i = #env.Connections, 1, -1 do
+        local existing = env.Connections[i]
+        if existing == conn then return end
     end
+    table.insert(env.Connections, conn)
 end
 
 local function TrackDrawing(obj)
@@ -505,19 +499,28 @@ local function TriggerPanic()
 end
 S.TriggerPanic = TriggerPanic
 
-local function UnloadScript()
+local function UnloadScript(isRestarting)
     TriggerPanic()
     if getgenv().TASFF then getgenv().TASFF.Running = false end
-    if getgenv().TASFF and getgenv().TASFF.Cleanup then getgenv().TASFF.Cleanup() end
+    if S.ToolAddedConnection then pcall(function() S.ToolAddedConnection:Disconnect() end); S.ToolAddedConnection = nil end
+    if S.ToolRemovedConnection then pcall(function() S.ToolRemovedConnection:Disconnect() end); S.ToolRemovedConnection = nil end
+    if getgenv().TASFF and getgenv().TASFF.Cleanup then pcall(getgenv().TASFF.Cleanup) end
     if getgenv().TASFF and getgenv().TASFF.Connections then
-        for _, conn in ipairs(getgenv().TASFF.Connections) do pcall(function() conn:Disconnect() end) end
-    end
-    -- Bug Fix #4: clean up all tracked drawings and destroy the overlay ScreenGui
-    if getgenv().TASFF and getgenv().TASFF.Drawings then
-        for _, d in ipairs(getgenv().TASFF.Drawings) do
-            pcall(function() if d and d.Frame then d.Frame:Destroy() end end)
+        for _, conn in pairs(getgenv().TASFF.Connections) do
+            pcall(function() conn:Disconnect() end)
         end
-        getgenv().TASFF.Drawings = {}
+        pcall(function() table.clear(getgenv().TASFF.Connections) end)
+    end
+    -- Clean up all tracked drawings and destroy the overlay ScreenGui
+    if getgenv().TASFF and getgenv().TASFF.Drawings then
+        for _, d in pairs(getgenv().TASFF.Drawings) do
+            pcall(function()
+                if d and d.Frame then d.Frame:Destroy()
+                elseif d and d.Remove then d:Remove()
+                elseif d and d.Destroy then d:Destroy() end
+            end)
+        end
+        pcall(function() table.clear(getgenv().TASFF.Drawings) end)
     end
     -- Remove TASFF_Overlay from wherever it was parented (CoreGui or PlayerGui fallback)
     local ok, cg = pcall(function() return game:GetService("CoreGui") end)
@@ -530,20 +533,35 @@ local function UnloadScript()
         local overlay = playerGui:FindFirstChild("TASFF_Overlay")
         if overlay then pcall(function() overlay:Destroy() end) end
     end
-    -- Native Roblox notification — fired before Rayfield GUI is destroyed
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title    = "TASFF Unloaded",
-            Text     = "Script and interface fully terminated.",
-            Duration = 5,
-        })
-    end)
+    -- Native Roblox notification — fired before Rayfield GUI is destroyed (skip if restarting)
+    if not isRestarting then
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title    = "TASFF Unloaded",
+                Text     = "Script and interface fully terminated.",
+                Duration = 5,
+            })
+        end)
+    end
     pcall(function() if Rayfield and Rayfield.Destroy then Rayfield:Destroy() end end)
-    pcall(function()
-        for _, gui in ipairs(CoreGui:GetChildren()) do
-            if gui.Name:find("Rayfield") or gui.Name:find("Sirius") then gui:Destroy() end
-        end
-    end)
+    if ok and cg then
+        pcall(function()
+            for _, gui in ipairs(cg:GetChildren()) do
+                if gui.Name:find("Rayfield") or gui.Name:find("Sirius") or gui.Name == "TASFF_UI" then
+                    gui:Destroy()
+                end
+            end
+        end)
+    end
+    if playerGui then
+        pcall(function()
+            for _, gui in ipairs(playerGui:GetChildren()) do
+                if gui.Name:find("Rayfield") or gui.Name:find("Sirius") or gui.Name == "TASFF_UI" then
+                    gui:Destroy()
+                end
+            end
+        end)
+    end
 end
 S.UnloadScript = UnloadScript
 
@@ -1070,6 +1088,7 @@ end
 S.HandleClickToMark = HandleClickToMark
 
 table.insert(getgenv().TASFF.Connections, UserInputService.InputBegan:Connect(function(input, gpe)
+    if not (getgenv().TASFF and getgenv().TASFF.Running and S.ScriptInitialized) then return end
     if input.UserInputType ~= Enum.UserInputType.Keyboard then
         -- Still process mouse-button marks below
     end
@@ -1862,7 +1881,7 @@ local function IsHiddenFromRecording(featureName)
 end
 
 local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
-    if not S.ScriptInitialized then return end
+    if not (getgenv().TASFF and getgenv().TASFF.Running and S.ScriptInitialized) then return end
     S._lastDeltaTime = deltaTime   -- v2.1.0: FPS watcher reads this
     UpdateSpectator()
     EnsureDrawings()
@@ -2589,22 +2608,29 @@ getgenv().TASFF.Cleanup = function()
         end
         table.clear(getgenv().TASFF.Drawings)
     end
-    if getgenv().TASFF.Connections then
+    if getgenv().TASFF and getgenv().TASFF.Connections then
         for _, conn in pairs(getgenv().TASFF.Connections) do
-            pcall(function()
-                if typeof(conn) == "RBXScriptConnection" and conn.Connected then conn:Disconnect() end
-            end)
+            pcall(function() conn:Disconnect() end)
         end
-        table.clear(getgenv().TASFF.Connections)
+        pcall(function() table.clear(getgenv().TASFF.Connections) end)
     end
     pcall(function() if OverlayGui then OverlayGui:Destroy(); OverlayGui = nil end end)
-    pcall(function()
-        for _, child in ipairs(CoreGui:GetChildren()) do
-            pcall(function()
-                if child.Name == "TASFF_UI" or child.Name == "Rayfield" then child:Destroy() end
-            end)
-        end
-    end)
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then
+        pcall(function()
+            for _, child in ipairs(cg:GetChildren()) do
+                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then child:Destroy() end
+            end
+        end)
+    end
+    local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if pg then
+        pcall(function()
+            for _, child in ipairs(pg:GetChildren()) do
+                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then child:Destroy() end
+            end
+        end)
+    end
 end
 
 print("[TASFF Core] All function slots registered. Render loop active.")

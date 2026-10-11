@@ -1877,7 +1877,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     end
     ClearCrosshair()
     if S.EnableCrosshair and not IsHiddenFromRecording("Crosshair") then   -- Cloak: suppress crosshair
-        local color = S.CrosshairColor or Color3.fromRGB(0, 255, 255)
+        local color = S.CrosshairColor or Color3.fromRGB(240, 240, 240)
         for _, el in pairs(CrosshairElements) do PrepareDrawing(el) end
         local CE = CrosshairElements; local sz = S.CrosshairSize
         if CE.Dot then

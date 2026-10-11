@@ -247,42 +247,63 @@ local function SendLoaderNotify(title, message, icon, duration)
     end)
 end
 
-print("[TASFF Loader] Starting staged initialization sequence...")
-SendLoaderNotify("TASFF Initializing", "Step 1/4: Loading Core State & Classifiers...", "layers", 2)
+local function StartLoadingSequence()
+    print("[TASFF Loader] Starting staged initialization sequence...")
+    SendLoaderNotify("TASFF Initializing", "Step 1/4: Loading Core State & Classifiers...", "layers", 2)
 
-local loadOk, loadError = pcall(function()
-    -- Stage 1: State & Classifiers
-    LoadModule("TASFF_State.lua")   -- _G.TASFF_State = {...}
-    LoadModule("TASFF_Lists.lua")   -- classifiers, feature list, game configs
-    task.wait(0.08)
+    local loadOk, loadError = pcall(function()
+        -- Stage 1: State & Classifiers
+        LoadModule("TASFF_State.lua")   -- _G.TASFF_State = {...}
+        LoadModule("TASFF_Lists.lua")   -- classifiers, feature list, game configs
+        task.wait(0.08)
 
-    -- Stage 2: Core targeting engine & background workers
-    SendLoaderNotify("TASFF Initializing", "Step 2/4: Initializing Targeting Engine & Core...", "cpu", 2)
-    LoadModule("TASFF_Core.lua")    -- S.FunctionSlots = ..., registers loops
-    task.wait(0.08)
+        -- Stage 2: Core targeting engine & background workers
+        SendLoaderNotify("TASFF Initializing", "Step 2/4: Initializing Targeting Engine & Core...", "cpu", 2)
+        LoadModule("TASFF_Core.lua")    -- S.FunctionSlots = ..., registers loops
+        task.wait(0.08)
 
-    -- Stage 3: User Interface & controls
-    SendLoaderNotify("TASFF Initializing", "Step 3/4: Building Interface Elements...", "layout-grid", 2)
-    LoadModule("TASFF_UI.lua")      -- Window created, controls rendered, LoadConfiguration() completed
-    task.wait(0.1)
-end)
-if not loadOk then
-    CleanupPartialRuntime()
-    _G.TASFF_State = nil
-    SendLoaderNotify("TASFF Error", "Initialization aborted: see console.", "alert-triangle", 5)
-    error("[TASFF Loader] Startup aborted and partial runtime was cleaned up:\n" .. tostring(loadError))
+        -- Stage 3: User Interface & controls
+        SendLoaderNotify("TASFF Initializing", "Step 3/4: Building Interface Elements...", "layout-grid", 2)
+        LoadModule("TASFF_UI.lua")      -- Window created, controls rendered, LoadConfiguration() completed
+        task.wait(0.1)
+    end)
+    if not loadOk then
+        CleanupPartialRuntime()
+        _G.TASFF_State = nil
+        SendLoaderNotify("TASFF Error", "Initialization aborted: see console.", "alert-triangle", 5)
+        error("[TASFF Loader] Startup aborted and partial runtime was cleaned up:\n" .. tostring(loadError))
+    end
+
+    local S = _G.TASFF_State
+    S.ScriptInitialized = true
+
+    -- Wire restart function
+    local function RestartScript()
+        if S.Notify then S.Notify({Title="TASFF System", Content="Restarting script...", Duration=2, Image="refresh-cw"}) end
+        task.delay(0.2, function()
+            CleanupPartialRuntime()
+            _G.TASFF_State = nil
+            task.wait(0.1)
+            getgenv().TASFF = {
+                Running              = true,
+                Connections          = {},
+                Drawings             = {},
+                Capabilities         = executorCapabilities,
+                Cleanup              = nil,
+                ThreatMonitorRunning = false,
+                Rayfield             = Rayfield,
+                RestartScript        = nil,
+            }
+            StartLoadingSequence()
+        end)
+    end
+    getgenv().TASFF.RestartScript = RestartScript
+    S.RestartScript = RestartScript
 end
 
--- // ── Post-Init ───────────────────────────────────────────────── // --
--- At this point:
---   • _G.TASFF_State is fully populated with function slots from Core
---   • All UI elements exist and have set their S.* refs (ThreatListLabel, etc.)
---   • Rayfield:LoadConfiguration() has run and callbacks restored S.* values
---   • Mark S.ScriptInitialized = true now that all modules have settled
---   • S.SavedPresets was already loaded by Core (LoadPresetsFromFile)
+StartLoadingSequence()
 
 local S = _G.TASFF_State
-S.ScriptInitialized = true
 
 -- Stage 4: Ready notification
 task.delay(0.2, function()

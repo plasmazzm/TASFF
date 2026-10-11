@@ -1440,6 +1440,8 @@ local function GetVisualAssets(model, forceBillboard)
             tag.Size=UDim2.new(0,200,0,70); tag.AlwaysOnTop=true; tag.StudsOffset=Vector3.new(0,3,0)
             local l = Instance.new("TextLabel", tag)
             l.Size=UDim2.new(1,0,1,0); l.BackgroundTransparency=1; l.Font=Enum.Font.Code; l.TextSize=14
+            l.TextStrokeTransparency=0
+            l.TextStrokeColor3=Color3.fromRGB(0,0,0)
         end
         TagCache[model] = tag
     end
@@ -2252,9 +2254,16 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     local fs=string.format("%s%s%s\nHP: %d | Dist: %d",hdr,ns,t.Name,math.floor(t.Health),dist)
                     if typeof(tag)=="Instance" and tag:IsA("BillboardGui") then
                         local lbl=tag:FindFirstChildOfClass("TextLabel")
-                        if lbl then lbl.Text=fs;lbl.TextColor3=bc end
+                        if lbl then
+                            lbl.Text=fs
+                            lbl.TextColor3=bc
+                            lbl.TextStrokeTransparency=0
+                            lbl.TextStrokeColor3=Color3.fromRGB(0,0,0)
+                        end
                         tag.Adornee=t.Instance:FindFirstChild("Head") or rootPart; tag.Enabled=true
-                    else tag.Text=fs;tag.Position=Vector2.new(hs.X,hs.Y-35);tag.Color=bc;tag.Visible=true end
+                    else
+                        tag.Text=fs;tag.Position=Vector2.new(hs.X,hs.Y-35);tag.Color=bc;tag.Outline=true;tag.Visible=true
+                    end
                 else if typeof(tag)=="Instance" then tag.Enabled=false else pcall(function() tag.Visible=false end) end end
                 -- Cloak: Snaplines
                 local cloakSnap = IsHiddenFromRecording("Snaplines")

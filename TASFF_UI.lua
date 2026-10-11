@@ -2006,13 +2006,15 @@ MiscTab:CreateButton({
 MiscTab:CreateSection("Screen Recording Cloaking")
 MiscTab:CreateParagraph({
     Title   = "About This System",
-    Content = "TASFF maintains two screen overlays:\n" ..
-              "  • TASFF_Overlay (CoreGui) — NOT captured by Roblox recording\n" ..
-              "All drawing-based ESP (Box, Skeleton, Snaplines, OOF Arrows, FOV Circle, Crosshair) lives in this overlay and is permanently recording-invisible.\n\n" ..
-              "✅ Tags / Nametags — when hidden: switches to BillboardGui (3D floating text, like the reference screenshot). Recording-invisible, still visible to you.\n" ..
-              "✅ Box, Skeleton, Snaplines, OOF Arrows, FOV Circle, Crosshair — when hidden: disappear from your own screen (already invisible to recording regardless).\n" ..
-              "ℹ️ ESP Highlights / Chams — always visible to you. Highlight instances cannot be made recording-invisible; they stay on so you retain player tracking.\n\n" ..
-              "Select visuals below, then press Hide or Show."
+    Content = "TASFF maintains dual overlays to control recording visibility:\n" ..
+              "  • TASFF_Overlay (PlayerGui) — captured by Roblox recording\n" ..
+              "  • TASFF_CoreOverlay (CoreGui / Hidden UI) — NOT captured by Roblox recording\n\n" ..
+              "✅ Drawing Visuals (Crosshair, FOV Circle, Box ESP, Skeleton, Snaplines, OOF Arrows):\n" ..
+              "When set to Hide, frames are routed to TASFF_CoreOverlay. They stay fully visible on your screen, but Roblox's screen recorder cannot capture them.\n" ..
+              "When set to Show, frames are routed to TASFF_Overlay so recordings can see them.\n\n" ..
+              "✅ Tags / Nametags:\n" ..
+              "When set to Hide, tags switch to BillboardGui (3D floating text attached to targets) parented to the protected container — visible to you, invisible to recordings.\n\n" ..
+              "ℹ️ Chams / Highlights: Always rendered on screen for player tracking."
 })
 
 -- Status monitor: shows hidden/visible state per feature
@@ -2151,18 +2153,16 @@ UpdateLogTab:CreateLabel("- UI palette colors persist and are applied on the nex
 UpdateLogTab:CreateLabel("- Clarified that PlayerGui overlay tags and Roblox Highlight chams are visible to Roblox recording; retained the legacy StreamProofESP config flag for compatibility.")
 UpdateLogTab:CreateLabel("- v2.2.0 control totals: 79 toggles, 29 sliders, 37 dropdowns, 24 buttons, 5 keybinds. Feature registry: " .. (S.FeatureCount or "?") .. " registered.")
 UpdateLogTab:CreateSection("Version 2.2.0 (Screen Recording Cloaking Update)")
-UpdateLogTab:CreateLabel("- RESTORED CoreGui overlay architecture: TASFF_Overlay now lives in CoreGui (recording-invisible), falling back to PlayerGui if executor blocks CoreGui. An earlier AI had permanently moved it to PlayerGui.")
-UpdateLogTab:CreateLabel("- All drawing-based ESP (Box, Skeleton, Snaplines, OOF Arrows, FOV Circle, Crosshair) is now permanently invisible to Roblox's screen recording system.")
-UpdateLogTab:CreateLabel("- NEW Screen Recording Cloaking System in System tab: selectively hide visuals from your own screen (already recording-invisible, now hidden from your view too).")
-UpdateLogTab:CreateLabel("- Tags / Nametags cloak: switches from ScreenGui Drawing text to BillboardGui (3D floating text attached to players) — recording-invisible AND still visible to you.")
-UpdateLogTab:CreateLabel("- Box, Skeleton, Snaplines, OOF, FOV, Crosshair cloak: Visible=false on your screen. Already invisible to recording regardless.")
-UpdateLogTab:CreateLabel("- ESP Highlights / Chams: always stay visible. Highlight instances cannot be made recording-invisible; kept on to maintain player tracking.")
-UpdateLogTab:CreateLabel("- Status display shows 🟢 VISIBLE / 🔴 HIDDEN per feature, updates every 2 seconds.")
-UpdateLogTab:CreateLabel("- Group key 'Drawing-Based ESP' cloaks Box + Skeleton + Snaplines + OOF Arrows in one selection.")
-UpdateLogTab:CreateLabel("- Buttons: Hide Selected (disappear from your view), Show Selected (restore), Clear All.")
+UpdateLogTab:CreateLabel("- NEW Screen Recording Cloaking System: selectively cloak visuals from Roblox's screen recording while keeping them visible on your own screen.")
+UpdateLogTab:CreateLabel("- DUAL OVERLAY ARCHITECTURE: TASFF_Overlay (PlayerGui, captured by recordings) + TASFF_CoreOverlay (CoreGui / GetHiddenContainer, NOT captured).")
+UpdateLogTab:CreateLabel("- Drawing ESP (Box, Skeleton, Snaplines, OOF Arrows, FOV Circle, Crosshair): When cloaked, frames dynamically route to TASFF_CoreOverlay — they stay fully visible on your monitor but vanish from recordings.")
+UpdateLogTab:CreateLabel("- Tags / Nametags cloak: converts to 3D BillboardGui attached to targets and parented to the protected container — invisible to recordings, visible on screen.")
+UpdateLogTab:CreateLabel("- 'Show Selected' button restores selected visuals to the standard recording-visible overlay.")
+UpdateLogTab:CreateLabel("- Status display: live monitor in System tab shows 🟢 [VISIBLE] / 🔴 [HIDDEN] state per visual category.")
+UpdateLogTab:CreateLabel("- Group key 'Drawing-Based ESP' cloaks Box + Skeleton + Snaplines + OOF Arrows in a single selection.")
 UpdateLogTab:CreateLabel("- FIX ListenForTools: removed duplicate TrackConnection calls; IntelligentEquipFilter now also gates ToolAdded auto-enable.")
 UpdateLogTab:CreateLabel("- FIX TriggerPanic: IsHoldingTriggerKey now released via VirtualInputManager on panic.")
-UpdateLogTab:CreateLabel("- FIX UnloadScript: destroys all Drawing objects and removes TASFF_Overlay from CoreGui/PlayerGui on unload.")
+UpdateLogTab:CreateLabel("- FIX UnloadScript: destroys all Drawing objects and cleans up both TASFF_Overlay and TASFF_CoreOverlay on unload.")
 UpdateLogTab:CreateLabel("- FIX UpdateSpectator: camera subject guarded against nil when player dies during spectate-end.")
 UpdateLogTab:CreateLabel("- FIX GetEffectiveFOV: DynamicFOVMax nil-guarded (math.min(n, nil) error after preset restore).")
 UpdateLogTab:CreateLabel("- FIX ResolvePlayerName: returns nil on no-match; prevents phantom priority entries from stale labels.")

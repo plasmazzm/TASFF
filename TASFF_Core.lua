@@ -77,9 +77,15 @@ TrackConnection(
     end)
 )
 
+local digitMap = {
+    ["0"] = "Zero", ["1"] = "One", ["2"] = "Two", ["3"] = "Three", ["4"] = "Four",
+    ["5"] = "Five", ["6"] = "Six", ["7"] = "Seven", ["8"] = "Eight", ["9"] = "Nine"
+}
+
 local function GetKeyCode(name)
     if type(name) ~= "string" or name == "" then return nil end
     if name:match("^MouseButton") then return nil end
+    if digitMap[name] then name = digitMap[name] end
     local ok, result = pcall(function()
         return Enum.KeyCode[name] or Enum.KeyCode[name:upper()]
     end)
@@ -1131,6 +1137,19 @@ table.insert(getgenv().TASFF.Connections, UserInputService.InputBegan:Connect(fu
                 S.Mode = modes[(idx % #modes) + 1]
                 Notify({Title="TASFF Mode", Content="Aim mode → "..S.Mode, Duration=1.5, Image="refresh-cw"})
                 if S.DebugMode then print("[TASFF Debug] Aim mode cycled to: "..S.Mode) end
+            end
+        end
+
+        -- Target Mark Keybind
+        if not gpe and S.ClickToMarkEnabled and (S.MarkMethod == "Keybind Only" or S.MarkMethod == "Both") then
+            local markKey = GetKeyCode(S.MarkKeybind)
+            if markKey and input.KeyCode == markKey then
+                if not (S.MasterEnabled and S.AimbotActive and S.CurrentTarget ~= nil) then
+                    local toolEquipped = Player.Character and Player.Character:FindFirstChildOfClass("Tool") ~= nil
+                    if not toolEquipped then
+                        HandleClickToMark()
+                    end
+                end
             end
         end
     end

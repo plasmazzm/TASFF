@@ -12,9 +12,18 @@ if not TASFFEnv or not TASFFEnv.Rayfield then
     return
 end
 
+local digitMap = {
+    ["0"] = "Zero", ["1"] = "One", ["2"] = "Two", ["3"] = "Three", ["4"] = "Four",
+    ["5"] = "Five", ["6"] = "Six", ["7"] = "Seven", ["8"] = "Eight", ["9"] = "Nine"
+}
+
 local function SanitizeKeyName(k)
-    if type(k) == "string" and k ~= "" then return k:gsub("Enum%.KeyCode%.", "")
-    elseif typeof(k) == "EnumItem" then return k.Name end
+    if type(k) == "string" and k ~= "" then
+        local cleaned = k:gsub("Enum%.KeyCode%.", "")
+        return digitMap[cleaned] or cleaned
+    elseif typeof(k) == "EnumItem" then
+        return k.Name
+    end
     return nil
 end
 local Rayfield    = TASFFEnv.Rayfield
@@ -522,12 +531,22 @@ MainTab:CreateSection("Activation & Automation")
 MainTab:CreateKeybind({
         Name            = "Aimbot Activation Key",
         CurrentKeybind  = S.AimbotKeybind or "E",
+        HoldToInteract  = false,
+        CallOnChange    = true,
         Flag            = "AimbotKeybind",
         Callback        = function(key)
-            -- Only update the stored keybind string.
-            -- Actual aimbot activation/deactivation is handled by InputBegan in Core.
             local validKey = SanitizeKeyName(key)
-            if validKey then S.AimbotKeybind = validKey end
+            if validKey then
+                S.AimbotKeybind = validKey
+                if S.Notify then
+                    S.Notify({
+                        Title    = "TASFF Keybind",
+                        Content  = "Aimbot key set to [" .. tostring(validKey) .. "]",
+                        Duration = 2,
+                        Image    = "keyboard"
+                    })
+                end
+            end
         end
 })
 MainTab:CreateToggle({Name = "Auto ADS (Automatic Scope)", CurrentValue = S.AutoADSEnabled, Flag = "AutoADS", Callback = function(v)
@@ -1017,16 +1036,21 @@ end})
 IntelTab:CreateKeybind({
     Name           = "Target Mark Keybind",
     CurrentKeybind = S.MarkKeybind or "T",
+    HoldToInteract = false,
+    CallOnChange   = true,
     Flag           = "MarkKeybind",
     Callback       = function(key)
         local validKey = SanitizeKeyName(key)
-        local isRebind = (validKey ~= nil and validKey ~= S.MarkKeybind)
-        if validKey then S.MarkKeybind = validKey end
-        if not isRebind and S.ClickToMarkEnabled and (S.MarkMethod == "Keybind Only" or S.MarkMethod == "Both") then
-            if S.MasterEnabled and S.AimbotActive and S.CurrentTarget ~= nil then return end
-            local toolEquipped = Player.Character and Player.Character:FindFirstChildOfClass("Tool") ~= nil
-            if toolEquipped then return end
-            if S.HandleClickToMark then S.HandleClickToMark() end
+        if validKey then
+            S.MarkKeybind = validKey
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Keybind",
+                    Content  = "Target Mark key set to [" .. tostring(validKey) .. "]",
+                    Duration = 2,
+                    Image    = "keyboard"
+                })
+            end
         end
     end
 })
@@ -2075,10 +2099,22 @@ MiscTab:CreateToggle({Name = "Rapid Aim Mode Cycle (Keybind)", CurrentValue = S.
 MiscTab:CreateKeybind({
     Name           = "Mode Cycle Key",
     CurrentKeybind = S.RapidModeCycleKey or "P",
+    HoldToInteract = false,
+    CallOnChange   = true,
     Flag           = "RapidModeCycleKey",
     Callback       = function(key)
         local validKey = SanitizeKeyName(key)
-        if validKey then S.RapidModeCycleKey = validKey end
+        if validKey then
+            S.RapidModeCycleKey = validKey
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Keybind",
+                    Content  = "Mode cycle key set to [" .. tostring(validKey) .. "]",
+                    Duration = 2,
+                    Image    = "keyboard"
+                })
+            end
+        end
     end
 })
 MiscTab:CreateToggle({Name = "Debug Mode (Verbose Console Output)", CurrentValue = S.DebugMode, Flag = "DebugMode", Callback = function(v) S.DebugMode = v end})
@@ -2086,10 +2122,22 @@ MiscTab:CreateToggle({Name = "Debug Mode (Verbose Console Output)", CurrentValue
 MiscTab:CreateKeybind({
         Name           = "Global Panic Keybind",
         CurrentKeybind = S.PanicKeybind or "Delete",
+        HoldToInteract = false,
+        CallOnChange   = true,
         Flag           = "PanicKeybind",
         Callback       = function(key)
             local validKey = SanitizeKeyName(key)
-            if validKey then S.PanicKeybind = validKey end
+            if validKey then
+                S.PanicKeybind = validKey
+                if S.Notify then
+                    S.Notify({
+                        Title    = "TASFF Keybind",
+                        Content  = "Panic key set to [" .. tostring(validKey) .. "]",
+                        Duration = 2,
+                        Image    = "keyboard"
+                    })
+                end
+            end
         end
     })
 

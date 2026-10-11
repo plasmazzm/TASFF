@@ -1785,10 +1785,9 @@ table.insert(getgenv().TASFF.Connections, Players.PlayerRemoving:Connect(functio
 end))
 
 task.defer(function()
-    task.wait(0.2)
+    -- Render loop remains idle until UI loading sequence completes and explicitly sets S.ScriptInitialized = true
     S.CurrentTarget = nil
-    S.ScriptInitialized = true
-    print("[TASFF v2.2.0] Core initialized.")
+    print("[TASFF v2.2.0] Core function slots registered. Awaiting UI sequence...")
 end)
 
 -- // ══════════════════════════════════════════════════════════════ // --

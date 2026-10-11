@@ -255,7 +255,7 @@ end
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local Window = Rayfield:CreateWindow({
-    Name            = "TASFF 2.1.0 " .. selectedGlobalTheme,
+    Name            = "TASFF 2.2.0 " .. selectedGlobalTheme,
     Icon            = 7488932264,
     LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
@@ -294,7 +294,7 @@ local Window = Rayfield:CreateWindow({
     },
     ConfigurationSaving = {
         Enabled    = true,
-        FolderName = "TASFF V2.1.0",
+        FolderName = "TASFF V2.2.0",
         FileName   = "MainConfig"
     }
 })
@@ -310,7 +310,7 @@ local HomeTab = Window:CreateTab("Home", "home")
 
 HomeTab:CreateSection("Welcome")
 HomeTab:CreateParagraph({
-    Title   = "TASFF v2.1.0 — The Aimbot Script Final Form",
+    Title   = "TASFF v2.2.0 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
            .. "Controls: " .. tostring(S.ToggleCount or 64) .. " Toggles | " .. tostring(S.SliderCount or 27) .. " Sliders | " .. tostring(S.DropdownCount or 27) .. " Dropdowns | " .. tostring(S.ButtonCount or 0) .. " Buttons\n"
@@ -1525,7 +1525,7 @@ local function UpdateWindowTitle(themeName)
     local topbar = main and main:FindFirstChild("Topbar")
     local title = topbar and topbar:FindFirstChild("Title")
     if title and title:IsA("TextLabel") then
-        title.Text = "TASFF 2.1.0 " .. themeName
+        title.Text = "TASFF 2.2.0 " .. themeName
     end
 end
 local function ColorFromHex(hex)
@@ -2157,191 +2157,41 @@ task.defer(RebuildCloakStatus)
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local UpdateLogTab = Window:CreateTab("Update Log", "history")
-UpdateLogTab:CreateSection("Unreleased Customization Improvements")
-UpdateLogTab:CreateLabel("- Added 18 global color presets covering ESP, overlays, Intel categories, chams, combat feedback, visibility, and UI colors.")
-UpdateLogTab:CreateLabel("- Added a preset color monitor showing category, nearest color name, and exact hex value before applying.")
-UpdateLogTab:CreateLabel("- Applying or selecting a global preset updates the window title to include the selected theme.")
-UpdateLogTab:CreateLabel("- UI palette colors persist and are applied on the next load because Rayfield does not support live theme changes.")
-UpdateLogTab:CreateLabel("- Clarified that PlayerGui overlay tags and Roblox Highlight chams are visible to Roblox recording; retained the legacy StreamProofESP config flag for compatibility.")
-UpdateLogTab:CreateLabel("- v2.2.0 control totals: 79 toggles, 29 sliders, 37 dropdowns, 24 buttons, 5 keybinds. Feature registry: " .. (S.FeatureCount or "?") .. " registered.")
-UpdateLogTab:CreateSection("Version 2.2.0 (Screen Recording Cloaking Update)")
-UpdateLogTab:CreateLabel("- NEW Screen Recording Cloaking System: selectively hide visuals from Roblox's screen recording system.")
-UpdateLogTab:CreateLabel("- Tags / Nametags: TRUE CLOAK — redirected to BillboardGui (recording-invisible, player-visible). You see the tag; recording doesn't.")
-UpdateLogTab:CreateLabel("- Drawing ESP (Box, Skeleton, Snaplines, OOF Arrows, FOV Circle, Crosshair) & Chams: cloaking suppresses the visual element to ensure it cannot be captured in recordings.")
-UpdateLogTab:CreateLabel("- 'Show Selected' button restores selected visuals to active visibility.")
-UpdateLogTab:CreateLabel("- Status display: live monitor in System tab shows 🟢 [VISIBLE] / 🔴 [HIDDEN] state per visual category.")
-UpdateLogTab:CreateLabel("- Group key 'Drawing-Based ESP' cloaks Box + Skeleton + Snaplines + OOF Arrows in a single selection.")
-UpdateLogTab:CreateLabel("- FIX ListenForTools: removed duplicate TrackConnection calls; IntelligentEquipFilter now also gates ToolAdded auto-enable.")
-UpdateLogTab:CreateLabel("- FIX TriggerPanic: IsHoldingTriggerKey now released via VirtualInputManager on panic.")
-UpdateLogTab:CreateLabel("- FIX UnloadScript: destroys all Drawing objects and removes TASFF_Overlay on unload.")
-UpdateLogTab:CreateLabel("- FIX UpdateSpectator: camera subject guarded against nil when player dies during spectate-end.")
-UpdateLogTab:CreateLabel("- FIX GetEffectiveFOV: DynamicFOVMax nil-guarded (math.min(n, nil) error after preset restore).")
-UpdateLogTab:CreateLabel("- FIX ResolvePlayerName: returns nil on no-match; prevents phantom priority entries from stale labels.")
-UpdateLogTab:CreateLabel("- FIX Blacklist / ESPWhitelist dropdowns: DisplayName labels resolved to real usernames before storing.")
+UpdateLogTab:CreateSection("Recent Releases & Updates")
 
-UpdateLogTab:CreateSection("Version 2.1.2 (Refinement Update)")
-UpdateLogTab:CreateLabel("- FIX VoS Wallcheck Locking: Visible On Screen mode now actively drops targets when they are fully occluded, fixing the stuck [LOCKED] tag issue.")
-UpdateLogTab:CreateLabel("- FIX Missing Colors UI: Restored missing Customization options for Default Highlight & Name Tags.")
-UpdateLogTab:CreateLabel("- FIX Aimbot Snap-Back: Fixed edge case where Visible On Screen targeting cached old dead limbs and snapped back instantly.")
-UpdateLogTab:CreateLabel("- FIX Dead Target Filtering: Completely eliminated the Ignore Dead toggle - aimbot engine now permanently ignores corpses.")
-UpdateLogTab:CreateLabel("- FIX Kill Flash Rendering: Fading sequence now renders correctly because corpses are briefly preserved for the ESP renderer.")
-UpdateLogTab:CreateLabel("- FIX Threat Intelligence: Expanded kill feed parsing to detect 'creatorTag', 'Killer', and 'killer' object tags.")
-UpdateLogTab:CreateLabel("- FIX Chams Color & Opacity: Custom colors now properly apply to Chams, and the opacity scale (0-100) works seamlessly.")
-UpdateLogTab:CreateLabel("- FIX Blacklisted Tag Colors: Added missing preset toggle and dropdown options for blacklisted tags.")
-UpdateLogTab:CreateLabel("- NEW Kill Flash Fade: The kill confirmation flash now smoothly fades out instead of abruptly disappearing.")
-UpdateLogTab:CreateLabel("- NEW Kill Flash Duration: Added a slider to configure the exact duration of the kill confirmation fade.")
-UpdateLogTab:CreateLabel("- FIX Lock-On Delay: Visibility precompute loop now restarts immediately (no gap wait). Sub-frame delay.")
-UpdateLogTab:CreateLabel("- FIX Optimistic Nil Visibility: New players in FOV circle lock on instantly; background corrects within 1-2 frames.")
-UpdateLogTab:CreateLabel("- NEW Server Info: Home tab shows game name, Place ID, Job ID, and live player count (refreshes every 10s).")
-UpdateLogTab:CreateLabel("- NEW Theming Tab Redesign: All color controls split into logical sections (Overlays, Drawing, Intel, Chams, Combat).")
-UpdateLogTab:CreateLabel("- NEW Per-Section Color System: Each visual category has its own preset toggle, preset dropdown, and fine picker.")
-UpdateLogTab:CreateLabel("- NEW UI Theme Editor: Live color pickers for Rayfield window chrome (Background, Topbar, Accent, Text, Elements).")
-UpdateLogTab:CreateLabel("- NEW Notification Duration Slider: Global control for how long all TASFF notifications are displayed.")
-UpdateLogTab:CreateLabel("- NEW Suppress Rayfield Ads: Toggle to block Rayfield's periodic 'Loving this UI library?' advertising popup.")
-UpdateLogTab:CreateLabel("- NEW Session User Kill Count: Tracks how many kills you (the local player) secured; shown in session stats.")
-UpdateLogTab:CreateLabel("- NEW Priority Player Kill Count: Intel Monitor now shows ☠ N next to tracked players who scored kills.")
-UpdateLogTab:CreateLabel("- NEW DisplayName in Dropdowns: Player dropdowns show 'DisplayName (username)' format for easier identification.")
+UpdateLogTab:CreateParagraph({
+    Title   = "Version 2.2.0 (Screen Recording Cloaking Update)",
+    Content = "• Screen Recording Cloaking System: selectively cloak visuals from Roblox recording.\n" ..
+              "• Tags / Nametags: redirectable to BillboardGui mode (WIP).\n" ..
+              "• Drawing ESP & Chams: suppression toggles to keep recording clean.\n" ..
+              "• Status monitor: live monitor in System tab shows visible/hidden states.\n" ..
+              "• Clean unload and panic keybind fixes."
+})
 
-UpdateLogTab:CreateSection("Version 2.1.1 (Hotfix Patch)")
-UpdateLogTab:CreateLabel("- FIXED Panic Keybind: Panic now permanently locks TASFF. Only a full re-execute restores operation.")
-UpdateLogTab:CreateLabel("- FIXED Silent Aim Camera Freeze: __index hook now only intercepts Mouse object queries, not all CFrame reads.")
-UpdateLogTab:CreateLabel("- FIXED Silent Aim Camera Freeze: __namecall hook detects and ignores PopperCam/ZoomController raycasts.")
-UpdateLogTab:CreateLabel("- FIXED Sticky Aim Snap-Back: SilentAimTargetCache and CurrentTarget cleared instantly on aimbot toggle-off.")
-UpdateLogTab:CreateLabel("- FIXED Kill Intelligence: Creator tag detection now checks 'creator', 'Creator', and 'KilledBy' (string and obj).")
-UpdateLogTab:CreateLabel("- FIXED Priority Point Tracking: Priority/Intel players now gain +15 points per kill.")
-UpdateLogTab:CreateLabel("- NEW Disconnect Notification: Tracked players who leave now trigger a notification with their Intel category.")
-UpdateLogTab:CreateLabel("- NEW Unload Notification: Termination now shows a native Roblox notification (Rayfield may be destroyed).")
-UpdateLogTab:CreateLabel("- NEW Feature 17 — Rapid Aim Mode Cycle: Configurable keybind cycles Legit → Advanced Legit → Blatant.")
-UpdateLogTab:CreateLabel("- NEW Feature 24 — Auto-Update Checker: Checks GitHub version.txt on load and notifies if newer version found.")
-UpdateLogTab:CreateLabel("- NEW Feature 27 — Debug Mode: Toggle verbose console output for targeting, threats, and mode switches.")
-UpdateLogTab:CreateLabel("- NEW Expanded Theming: 11 new color pickers covering Chams, OOF, Kill Flash, Priority, Threat, Nemesis, Blacklisted.")
+UpdateLogTab:CreateParagraph({
+    Title   = "Version 2.1.2 (Refinement Update)",
+    Content = "• Fixed VoS Wallcheck Locking: Visible On Screen drops occluded targets cleanly.\n" ..
+              "• Restored missing customization options for Default Highlight & Name Tags.\n" ..
+              "• Corpses permanently ignored by aimbot engine.\n" ..
+              "• Added Server Info monitor on Home tab.\n" ..
+              "• Redesigned Theming Tab with 18 global presets and UI theme editor."
+})
 
-UpdateLogTab:CreateSection("Version 2.1.0 (Current Release)")
-UpdateLogTab:CreateLabel("- Performance Engine Rewrite: Replaced frame-skip monolith with a 4-slot rotating pipeline.")
-UpdateLogTab:CreateLabel("- Pipeline Design: Each slot (ESP scan / Aimbot scan / VoS raycasts / Maintenance) fires one per frame.")
-UpdateLogTab:CreateLabel("- Target selection and aim application now run every frame — aimbot is never delayed by performance mode.")
-UpdateLogTab:CreateLabel("- Three background task.spawn loops (NPC cache / Workspace sweep / Cache cleanup) replace frame counters.")
-UpdateLogTab:CreateLabel("- Silent Aim Fix: Mouse movement (Advanced Legit) is blocked when SA is on; camera modes still drive correctly.")
-UpdateLogTab:CreateLabel("- Advanced Legit Rewrite: Smoothstep ease + independent X/Y smoothness sliders + micro-offset humanizer.")
-UpdateLogTab:CreateLabel("- Blatant Snap Speed: Configurable 5-100 lerp speed slider (100 = instant, legacy behavior).")
-UpdateLogTab:CreateLabel("- Panic Keybind Fix: Uses enum-to-enum comparison via GetKeyCode() — no longer breaks after config restore.")
-UpdateLogTab:CreateLabel("- Intelligent Equip Filter: Keyword classifier prevents aimbot activation for non-weapon tools.")
-UpdateLogTab:CreateLabel("- Weapon-Type Gating: Triggerbot blocked for classified melee weapons; proximity melee blocked for ranged.")
-UpdateLogTab:CreateLabel("- Blacklisted Player ESP: Blacklisted players now show with [BLACKLISTED] tag in orange instead of disappearing.")
-UpdateLogTab:CreateLabel("- Hide Blacklisted ESP toggle: Optionally fully hide blacklisted players from ESP instead of tagging them.")
-UpdateLogTab:CreateLabel("- VoS Priority Parts: Configurable list of body parts checked first in Visible On Screen mode.")
-UpdateLogTab:CreateLabel("- New TASFF_Lists.lua module: Keyword tables for weapons, melee, non-weapons; game configs; feature list.")
-UpdateLogTab:CreateLabel("- Session statistics fields added: target locks, trigger fires, threats/nemeses added.")
+UpdateLogTab:CreateParagraph({
+    Title   = "Version 2.1.0 & 2.1.1 (Pipeline & Intel Overhaul)",
+    Content = "• 4-Slot rotating performance pipeline decoupled targeting from FPS.\n" ..
+              "• Target selection and aim application run every frame with sub-frame delay.\n" ..
+              "• Centralized Intel Tab with Threat Detector, Nemesis System, and Spectator Mode.\n" ..
+              "• Intelligent Equip Filter and Weapon-Type gating.\n" ..
+              "• 15-hop penetrative wallcheck and frustum-culled OOF arrows."
+})
 
-UpdateLogTab:CreateSection("Version 2.1.0")
-UpdateLogTab:CreateLabel("- Final Architecture Push: Consolidated performance, security, and rendering engines.")
-UpdateLogTab:CreateLabel("- Aimbot Engine: Moved candidate scanning entirely out of pipeline for zero-delay lock-on.")
-UpdateLogTab:CreateLabel("- Threat Neutralization: Instant target death detection added to render loop, fixing delayed threat removal.")
-UpdateLogTab:CreateLabel("- Dynamic FOV Auto-Scale: FOV radius grows at close range and shrinks with distance.")
-UpdateLogTab:CreateLabel("- Advanced Combat: Health Threshold Gating added to ignore players below specific HP ranges.")
-UpdateLogTab:CreateLabel("- Advanced Automation: Auto-Disable Aimbot on Death added to prevent post-death buggy locks.")
-UpdateLogTab:CreateLabel("- Threat Intelligence: FP Cooldowns, Prox Radius limits, Velocity direction checks, and Nemesis Decay added.")
-UpdateLogTab:CreateLabel("- Security & Metrics: Integrated Anti-AFK watcher, FPS Auto-Tuner, and Notification Throttling.")
-UpdateLogTab:CreateLabel("- Storage: Tool Registry Save/Load functionality and Game Config Quick-Load templates implemented.")
-
-UpdateLogTab:CreateSection("Version 2.0.5")
-
-UpdateLogTab:CreateLabel("- The 'Intel Update': Consolidated all player-tracking features into a new centralized Intel Tab.")
-UpdateLogTab:CreateLabel("- Visible on Screen (VoS) Rewrite: Now raycasts 20 limbs independently and ignores own body parts.")
-UpdateLogTab:CreateLabel("- Priority Behavior Overhaul: Replaced StrictPrioritize with Boost vs. Exclusive dropdown options.")
-UpdateLogTab:CreateLabel("- Live Intel Monitor: Dynamic dashboard tracking Marked, Threats, and Nemeses with a points-based heatmap.")
-UpdateLogTab:CreateLabel("- Auto-Flag Systems: Kill-Count Threat detection and automated Nemesis Strike system added.")
-UpdateLogTab:CreateLabel("- Threat Neutralization: Automatically removes Threat tags when the enemy is neutralized (dies).")
-UpdateLogTab:CreateLabel("- Spectator Mode: Bound your camera to any tracked target to monitor them remotely (fixed native conflicts).")
-UpdateLogTab:CreateLabel("- Live Kill Feed: Built-in notification feed explicitly designed to debug Intel logic and false positives.")
-UpdateLogTab:CreateLabel("- Assorted Bug Fixes: Fixed Sticky Aim gaps, Enum.KeyCode errors on mouse binds, and wallcheck conflicts.")
-
-UpdateLogTab:CreateSection("Version 2.0.0")
-UpdateLogTab:CreateLabel("- Version bump to V2.0.0 � modular refactor across 4 files (State/Core/UI/Loader)")
-UpdateLogTab:CreateLabel("- Resolved the Lua 200-local engine limit via _G.TASFF_State shared module pattern")
-UpdateLogTab:CreateLabel("- Restored the original TASFF black-and-red UI theme with complete monolith feature parity")
-UpdateLogTab:CreateLabel("- Completely decoupled ESP rendering from heavy targeting math for butter-smooth 60+ FPS visuals")
-UpdateLogTab:CreateLabel("- Multi-hop penetrative wallcheck (up to 15 hops) for advanced glass/decal penetration")
-UpdateLogTab:CreateLabel("- Patched frustum culling bug where off-screen targets were dropped, fully restoring OOF Arrows")
-UpdateLogTab:CreateLabel("- Fixed Rayfield array-unpacking bugs that previously broke Crosshairs and Visual Mode logic")
-UpdateLogTab:CreateLabel("- Added Fine Control Color Pickers for precise Dynamic Visibility (Visible/Hidden) overrides")
-UpdateLogTab:CreateLabel("- Frame-scope scalar caching in render loop for reduced overhead")
-UpdateLogTab:CreateLabel("- Combined CharacterAdded handler (threat hook + tool observer in one connection)")
-UpdateLogTab:CreateLabel("- Re-structured the rendering loop to ensure visual overlays persist accurately on dropped frames")
-UpdateLogTab:CreateLabel("- Added UTF-8 BOM stripping and HTML error detection to the module loader")
-UpdateLogTab:CreateLabel("- Corrected ConfigurationSaving folder path to match current version")
-
-UpdateLogTab:CreateSection("Version 1.5.0")
-UpdateLogTab:CreateLabel("- Completely overhauled the UI layout into professional, structured categories (HUD, Tactical Overlays, etc.)")
-UpdateLogTab:CreateLabel("- Fixed a critical metamethod inversion that broke Silent Aim for native weapons and ruined wallchecks")
-UpdateLogTab:CreateLabel("- Fixed a math bug where Distance Priority sorted by 2D screen distance instead of true 3D world distance")
-UpdateLogTab:CreateLabel("- Fixed drawing persistence glitches (Invisible FOV) by bypassing backend geometry updates when hidden")
-UpdateLogTab:CreateLabel("- Fixed missing variable serialization in the Preset Configuration Saver and Factory Reset protocols")
-UpdateLogTab:CreateLabel("- Fixed rendering invisibility issues across all ESP geometries (Drawing API transparency mappings)")
-UpdateLogTab:CreateLabel("- Added a missing Remove Tool registry function to the Weapon & Inventory Automation section")
-UpdateLogTab:CreateLabel("- Patched multiple global scope leaks and a potential fatal crash in the Skeletal Mapping routine")
-
-UpdateLogTab:CreateSection("Version 1.4.5")
-UpdateLogTab:CreateLabel("- Added Advanced Legit Mode utilizing Bezier curves for humanized camera smoothing")
-UpdateLogTab:CreateLabel("- Added Dynamic Recoil Control (DRC) to mimic natural human recoil compensation")
-UpdateLogTab:CreateLabel("- Added Virtual Flickbot (Cursor Aim) to instantly teleport the invisible mouse cursor")
-UpdateLogTab:CreateLabel("- Implemented Universal Silent Aim (Namecall Hooking) to redirect bullets silently")
-UpdateLogTab:CreateLabel("- Added Target Switch Delay to pause target acquisition after kills (prevents robotic snapping)")
-UpdateLogTab:CreateLabel("- Added Randomized Hitboxes to bypass statistical anti-cheats in Legit mode")
-UpdateLogTab:CreateLabel("- Implemented The Nemesis System for tiered death tracking and targeted retaliation")
-UpdateLogTab:CreateLabel("- Added Marking Input Modes (Mouse, Keybind, or Both) to prevent accidental priority marking")
-UpdateLogTab:CreateLabel("- Added Dynamic Visibility Colors (Green=Visible, Red=Hidden) to ESP geometries")
-UpdateLogTab:CreateLabel("- Info tag overlay rendering uses ScreenGui for reliable client visibility.")
-UpdateLogTab:CreateLabel("- Added Off-Screen Indicators (OOF Arrows) to track targets located behind the camera")
-UpdateLogTab:CreateLabel("- Added ESP Snaplines (Tracers) with configurable origin point positioning")
-UpdateLogTab:CreateLabel("- Added Clipboard Preset Import & Export (JSON) for easy configuration sharing")
-UpdateLogTab:CreateLabel("- Added Auto-Save Configuration protocol to preserve settings upon script unload")
-
-UpdateLogTab:CreateSection("Version 1.4.0")
-UpdateLogTab:CreateLabel("- Added Threat Detector & Threat Memory subsystem with configurable timeout")
-UpdateLogTab:CreateLabel("- Implemented Strict Prioritize targeting mode")
-UpdateLogTab:CreateLabel("- Added Invisible FOV mode (maintains lock boundary without rendering circle)")
-UpdateLogTab:CreateLabel("- Added Penetrative Wallchecks (No Collision, Transparency Threshold & Decals)")
-UpdateLogTab:CreateLabel("- Implemented Auto ADS (Aim Down Sights) automatic holding")
-UpdateLogTab:CreateLabel("- Added Click-to-Mark / Keybind-to-Mark and Focus Mode ESP filtering")
-UpdateLogTab:CreateLabel("- Added Triggerbot Click Modes (Virtual vs Physical) & 3rd Person coordinate support")
-UpdateLogTab:CreateLabel("- Added Key Triggerbot with Single Press, Mash, and Hold modes")
-UpdateLogTab:CreateLabel("- Added Dedicated Advanced Settings Tab and Misc utilities (Panic, Reset, Clean Unload)")
-UpdateLogTab:CreateLabel("- Full frame-skipping Performance engine with runtime mode indicator")
-
-UpdateLogTab:CreateSection("Version 1.3.5")
-UpdateLogTab:CreateLabel("- Added Aimbot & ESP Render Distance culling sliders (100-1000 studs)")
-UpdateLogTab:CreateLabel("- Implemented Target Grace Period delay timer before locking onto targets")
-UpdateLogTab:CreateLabel("- Added Chams ESP mode featuring dynamic transparency/opacity controls")
-UpdateLogTab:CreateLabel("- Added 2D Box ESP visual overlay")
-UpdateLogTab:CreateLabel("- Added Skeleton ESP rendering with full support for R6 & R15 avatar joint structures")
-UpdateLogTab:CreateLabel("- Fixed table reference mutation corruption on cached ignore list raycasts")
-UpdateLogTab:CreateLabel("- Fixed Melee Mode execution structure to operate independently of Aimbot lock states")
-UpdateLogTab:CreateLabel("- Added a brand new Presets Tab featuring profile saving, loading, renaming, and deletion")
-
-UpdateLogTab:CreateSection("Version 1.3.0")
-UpdateLogTab:CreateLabel("- Added Target Near Center crosshair prioritization to Combat options")
-UpdateLogTab:CreateLabel("- Added Inventory Auto-Activation trigger system upon tool equipping features")
-UpdateLogTab:CreateLabel("- Added Instant Tool-Instance Blacklist registration action buttons to Settings")
-UpdateLogTab:CreateLabel("- Implemented advanced vector-rendered screen center Crosshairs (Plus, Square, Circle)")
-UpdateLogTab:CreateLabel("- Added Crosshair color mapping configurations straight to Customization presets")
-UpdateLogTab:CreateLabel("- Added character text extensions: Show Display Name and structural Tool Check tags")
-
-UpdateLogTab:CreateSection("Version 1.2.5")
-UpdateLogTab:CreateLabel("- Added full-screen targeting mechanics automatically when FOV visual elements are disabled")
-UpdateLogTab:CreateLabel("- Added complete Autoclicker Tab featuring customizable speed interval mechanics")
-UpdateLogTab:CreateLabel("- Implemented input options: Repeated rapid Mash triggers vs continuous input Hold states")
-UpdateLogTab:CreateLabel("- Added Combat Melee Mode subsystem with independent range and interval calculations")
-UpdateLogTab:CreateLabel("- Added fully separated Highlight NPCs and Show NPC Info toggle parameters")
-UpdateLogTab:CreateLabel("- Added persistent Sticky Aim mechanics with automatic target validation filters")
-UpdateLogTab:CreateLabel("- Fixed Sticky Aim wall clipping bugs by routing locks directly into visibility raycasts")
-
-UpdateLogTab:CreateSection("Version 1.2.0")
-UpdateLogTab:CreateLabel("- Added a brand new Customization Tab with color presets")
-UpdateLogTab:CreateLabel("- Fixed the respawn bug where player highlights would vanish")
-UpdateLogTab:CreateLabel("- Linked the Show Target Info text color directly to custom themes")
-UpdateLogTab:CreateLabel("- Removed the broken dynamic interface theme reloader for stability")
-UpdateLogTab:CreateLabel("- Added Visible On Screen, located in target bodypart dropdown")
+UpdateLogTab:CreateParagraph({
+    Title   = "Historical Releases (v1.2.0 - v2.0.0)",
+    Content = "• Modular refactor across 4 files (State, Lists, Core, UI) overcoming Lua local limit.\n" ..
+              "• Advanced Legit Bezier curve smoothing, Universal Silent Aim, Dynamic Recoil (DRC).\n" ..
+              "• Autoclicker with Hold/Mash triggers, Melee Mode, and Profile Presets manager."
+})
 
 -- // â”€â”€ Load Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
 -- MUST be called last. Restores all flagged values from disk and
@@ -2352,6 +2202,9 @@ for key, value in pairs(S) do
         ConfigDefaults[key] = value
     end
 end
+
+-- Let UI elements settle and allow Roblox engine to render a frame before triggering configuration callbacks
+task.wait(0.1)
 
 local loaded, loadError = pcall(function()
     Rayfield:LoadConfiguration()

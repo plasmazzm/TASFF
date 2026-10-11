@@ -295,7 +295,7 @@ local Window = Rayfield:CreateWindow({
     ConfigurationSaving = {
         Enabled    = true,
         FolderName = "TASFF V2.2.0",
-        FileName   = "MainConfig"
+        FileName   = "Config_Place_" .. tostring(game.PlaceId or "Global")
     }
 })
 
@@ -313,7 +313,7 @@ HomeTab:CreateParagraph({
     Title   = "TASFF v2.2.0 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 64) .. " Toggles | " .. tostring(S.SliderCount or 27) .. " Sliders | " .. tostring(S.DropdownCount or 27) .. " Dropdowns | " .. tostring(S.ButtonCount or 0) .. " Buttons\n"
+           .. "Controls: " .. tostring(S.ToggleCount or 79) .. " Toggles | " .. tostring(S.SliderCount or 29) .. " Sliders | " .. tostring(S.DropdownCount or 38) .. " Dropdowns | " .. tostring(S.ButtonCount or 24) .. " Buttons | " .. tostring(S.StatusDisplayCount or 6) .. " Status Displays\n"
            .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
 })
 
@@ -1305,7 +1305,10 @@ PresetDropdownRef = PresetsTab:CreateDropdown({
     Options       = GetPresetNamesList(),
     CurrentOption = {"No Profiles Found"},
     Flag          = "PresetSelectDropdown",
-    Callback      = function(v) SelectedPresetToManage = type(v) == "table" and v[1] or v end
+    Callback      = function(v)
+        SelectedPresetToManage = type(v) == "table" and v[1] or v
+        if UpdatePresetStatusDisplay then pcall(UpdatePresetStatusDisplay) end
+    end
 })
 
 local STO_FLAG = {
@@ -1402,31 +1405,167 @@ PresetsTab:CreateButton({
     end
 })
 
-PresetsTab:CreateSection("Built-In Game Profiles")
-PresetsTab:CreateParagraph({
-    Title   = "Quick-Load Configs",
-    Content = "Pre-configured profiles for popular games. Loading these will override your current settings."
-})
-
 PresetsTab:CreateButton({
-    Name = "Load Da Hood Config (Legit)",
+    Name     = "Override Selected Profile with Current Settings",
     Callback = function()
-        pcall(function() Rayfield.Flags["AimMethod"]:Set("Legit (Camera)") end)
-        pcall(function() Rayfield.Flags["TargetPart"]:Set("Head") end)
-        pcall(function() Rayfield.Flags["PredIntense"]:Set(0.12) end)
-        pcall(function() Rayfield.Flags["SmoothSpeed"]:Set(1.5) end)
-        if S.Notify then S.Notify({Title="TASFF Presets", Content="Loaded Da Hood (Legit) profile.", Duration=2, Image="check"}) end
+        local selected = PresetDropdownRef and PresetDropdownRef.CurrentOption
+        if type(selected) == "table" then
+            local k,v = next(selected)
+            selected = (type(v) == "boolean" and v) and k or (type(v) == "string" and v) or selected[1]
+        end
+        if not selected or selected == "" then selected = SelectedPresetToManage end
+
+        if selected and selected ~= "No Profiles Found" and S.SavedPresets[selected] then
+            S.SavedPresets[selected] = {
+                -- Core & Combat
+                MasterEnabled = S.MasterEnabled, TargetingEnabled = S.TargetingEnabled, Mode = S.Mode,
+                TargetPart = S.TargetPart, PriorityMode = S.PriorityMode, VitalityMode = S.VitalityMode,
+                TargetNearCenter = S.TargetNearCenter, Smoothness = S.Smoothness, PredictionAmount = S.PredictionAmount,
+                SilentAimEnabled = S.SilentAimEnabled, DynamicRecoilEnabled = S.DynamicRecoilEnabled,
+                RandomizeHitboxEnabled = S.RandomizeHitboxEnabled, TargetSwitchDelayEnabled = S.TargetSwitchDelayEnabled,
+                SwitchDelayMs = S.SwitchDelayMs, GracePeriodEnabled = S.GracePeriodEnabled, GracePeriodMs = S.GracePeriodMs,
+                AimbotRenderDistance = S.AimbotRenderDistance, StickyAimEnabled = S.StickyAimEnabled, AutoADSEnabled = S.AutoADSEnabled,
+                -- Visuals & Overlays
+                VisualMode = S.VisualMode, UseHighlight = S.UseHighlight, UseNPCHighlight = S.UseNPCHighlight,
+                FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
+                ESPRenderDistance = S.ESPRenderDistance, ChamsEnabled = S.ChamsEnabled, ChamsOpacity = S.ChamsOpacity,
+                BoxModeEnabled = S.BoxModeEnabled, SkeletonModeEnabled = S.SkeletonModeEnabled, SnaplinesEnabled = S.SnaplinesEnabled,
+                SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius,
+                UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
+                ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
+                EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
+                ManualCalibrationEnabled = S.ManualCalibrationEnabled, CalibrationOffsetX = S.CalibrationOffsetX, CalibrationOffsetY = S.CalibrationOffsetY,
+                -- Triggerbot & Automation
+                AutoClickEnabled = S.AutoClickEnabled, TriggerbotClickMode = S.TriggerbotClickMode, ClickMethod = S.ClickMethod,
+                ClickInterval = S.ClickInterval, ThirdPersonTriggerbot = S.ThirdPersonTriggerbot, KeyTriggerbotEnabled = S.KeyTriggerbotEnabled,
+                KeyTriggerMode = S.KeyTriggerMode, MeleeModeEnabled = S.MeleeModeEnabled, MeleeDetectionRange = S.MeleeDetectionRange,
+                MeleeClickInterval = S.MeleeClickInterval,
+                -- Advanced & Logic
+                ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
+                BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
+                KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
+                StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
+                TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
+                -- Settings & Entities
+                TargetPlayers = S.TargetPlayers, TargetNPCs = S.TargetNPCs, TeamCheck = S.TeamCheck,
+                AutoEnableOnEquip = S.AutoEnableOnEquip, IgnoreDead = S.IgnoreDead,
+            }
+            for _, field in ipairs(ColorFields) do
+                if typeof(S[field]) == "Color3" then
+                    S.SavedPresets[selected][field] = EncodeColor(S[field])
+                end
+            end
+            local saved = S.SavePresetsToFile and S.SavePresetsToFile()
+            if UpdatePresetStatusDisplay then pcall(UpdatePresetStatusDisplay) end
+            if S.Notify then
+                S.Notify({
+                    Title = "TASFF Presets",
+                    Content = saved and ("Overwrote profile: " .. selected)
+                        or ("Profile overridden in memory, but could not be saved to disk: " .. selected),
+                    Duration = 4,
+                    Image = saved and "save" or "alert-triangle",
+                })
+            end
+        else
+            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected to override.", Duration = 2, Image = "alert-triangle"}) end
+        end
     end
 })
 
-PresetsTab:CreateButton({
-    Name = "Load Phantom Forces Config (Blatant)",
-    Callback = function()
-        pcall(function() Rayfield.Flags["AimMethod"]:Set("Blatant") end)
-        pcall(function() Rayfield.Flags["TargetPart"]:Set("Head") end)
-        pcall(function() Rayfield.Flags["BlatantSnapSpeed"]:Set(100) end)
-        pcall(function() Rayfield.Flags["WallCheck"]:Set(true) end)
-        if S.Notify then S.Notify({Title="TASFF Presets", Content="Loaded Phantom Forces (Blatant) profile.", Duration=2, Image="check"}) end
+PresetsTab:CreateSection("Profile Feature Inspection")
+local selectedPresetCategory = "Combat"
+local PresetStatusParagraph = PresetsTab:CreateParagraph({
+    Title   = "Preset Status — Combat",
+    Content = "Select a profile from the dropdown above to view its configuration."
+})
+
+local function BuildPresetStatusContent(profileName, category)
+    local data = profileName and S.SavedPresets and S.SavedPresets[profileName]
+    if not data then return "No profile selected or profile data is empty." end
+
+    local on, off = {}, {}
+    local function check(label, flagVal)
+        if flagVal == true then table.insert(on, "  ✔ " .. label)
+        else table.insert(off, "  ✘ " .. label) end
+    end
+
+    if category == "Combat" then
+        check("Master Switch",          data.MasterEnabled)
+        check("Aimbot Engine",          data.TargetingEnabled)
+        check("Silent Aim",             data.SilentAimEnabled)
+        check("Sticky Aim",             data.StickyAimEnabled)
+        check("Dynamic Recoil (DRC)",   data.DynamicRecoilEnabled)
+        check("Auto ADS",               data.AutoADSEnabled)
+        check("Randomize Hitboxes",     data.RandomizeHitboxEnabled)
+        check("Target Near Center",     data.TargetNearCenter)
+        check("Target Switch Delay",    data.TargetSwitchDelayEnabled)
+        check("Grace Period",           data.GracePeriodEnabled)
+        check("Triggerbot",             data.AutoClickEnabled)
+        check("Melee Mode",             data.MeleeModeEnabled)
+    elseif category == "Visuals" then
+        check("Highlights (Players)",   data.UseHighlight)
+        check("Highlights (NPCs)",      data.UseNPCHighlight)
+        check("Info Tags (Players)",    data.UseInfoTag)
+        check("Info Tags (NPCs)",       data.UseNPCInfoTag)
+        check("Snaplines",              data.SnaplinesEnabled)
+        check("OOF Arrows",             data.OOFArrowsEnabled)
+        check("Box ESP",                data.BoxModeEnabled)
+        check("Skeleton ESP",           data.SkeletonModeEnabled)
+        check("Chams",                  data.ChamsEnabled)
+        check("Visibility Colors",      data.VisibilityColorsEnabled)
+        check("Show Display Name",      data.ShowDisplayName)
+        check("Show Tool Check",        data.ShowToolCheck)
+    elseif category == "Intel" then
+        check("Threat Detector",        data.ThreatDetectorEnabled)
+        check("Nemesis System",         data.NemesisEnabled)
+        check("Click-to-Mark",          data.ClickToMarkEnabled)
+        check("Focus Mode ESP",         data.FocusMode)
+        check("Wall Check",             data.WallCheck)
+        check("Team Check",             data.TeamCheck)
+        check("Target Players",         data.TargetPlayers)
+        check("Target NPCs",            data.TargetNPCs)
+    elseif category == "Automation" then
+        check("Auto-Engage on Equip",   data.AutoEnableOnEquip)
+        check("FOV Circle",             data.ShowFOV)
+        check("Invisible FOV",          data.InvisibleFOV)
+    end
+
+    local lines = {}
+    if #on > 0 then
+        table.insert(lines, "ENABLED (" .. profileName .. "):")
+        for _, l in ipairs(on) do table.insert(lines, l) end
+    end
+    if #off > 0 then
+        if #on > 0 then table.insert(lines, "") end
+        table.insert(lines, "DISABLED (" .. profileName .. "):")
+        for _, l in ipairs(off) do table.insert(lines, l) end
+    end
+    if #lines == 0 then return "No features in this category." end
+    return table.concat(lines, "\n")
+end
+
+local function UpdatePresetStatusDisplay()
+    local selected = PresetDropdownRef and PresetDropdownRef.CurrentOption
+    if type(selected) == "table" then
+        local k,v = next(selected)
+        selected = (type(v) == "boolean" and v) and k or (type(v) == "string" and v) or selected[1]
+    end
+    if not selected or selected == "" then selected = SelectedPresetToManage end
+    local content = BuildPresetStatusContent(selected, selectedPresetCategory)
+    local title = "Preset Status — " .. selectedPresetCategory .. (selected and selected ~= "" and (" (" .. selected .. ")") or "")
+    pcall(function()
+        PresetStatusParagraph:Set({Title = title, Content = content})
+    end)
+end
+
+PresetsTab:CreateDropdown({
+    Name          = "Inspect Preset Category",
+    Options       = {"Combat", "Visuals", "Intel", "Automation"},
+    CurrentOption = {"Combat"},
+    Flag          = "InspectPresetCategory",
+    Callback      = function(v)
+        selectedPresetCategory = type(v) == "table" and v[1] or v or "Combat"
+        UpdatePresetStatusDisplay()
     end
 })
 
@@ -2001,6 +2140,19 @@ MiscTab:CreateButton({
 })
 
 MiscTab:CreateButton({
+    Name     = "Restart Script & Reload Interface",
+    Callback = function()
+        if S.RestartScript then
+            S.RestartScript()
+        elseif getgenv and getgenv().TASFF and getgenv().TASFF.RestartScript then
+            getgenv().TASFF.RestartScript()
+        else
+            if S.Notify then S.Notify({Title = "TASFF System", Content = "Restart function unavailable. Re-execute via executor.", Duration = 3, Image = "alert-triangle"}) end
+        end
+    end
+})
+
+MiscTab:CreateButton({
     Name     = "Terminate Script & Unload Interface",
     Callback = function()
         if S.UnloadScript then S.UnloadScript() end
@@ -2160,12 +2312,16 @@ local UpdateLogTab = Window:CreateTab("Update Log", "history")
 UpdateLogTab:CreateSection("Recent Releases & Updates")
 
 UpdateLogTab:CreateParagraph({
-    Title   = "Version 2.2.0 (Screen Recording Cloaking Update)",
-    Content = "• Screen Recording Cloaking System: selectively cloak visuals from Roblox recording.\n" ..
-              "• Tags / Nametags: redirectable to BillboardGui mode (WIP).\n" ..
-              "• Drawing ESP & Chams: suppression toggles to keep recording clean.\n" ..
-              "• Status monitor: live monitor in System tab shows visible/hidden states.\n" ..
-              "• Clean unload and panic keybind fixes."
+    Title   = "Version 2.2.0 (Screen Recording Cloaking & Profile Architecture Update)",
+    Content = "• Screen Recording Cloaking System: selectively cloak visuals from Roblox recording (WIP).\n" ..
+              "• High-Contrast ESP Tag Outlines: black text stroke border prevents camouflage through same-colored geometry.\n" ..
+              "• Restart Script Engine: reload interface and re-initialize without re-injecting in your executor.\n" ..
+              "• Per-Game Autosaving: configs auto-save into PlaceId-specific profiles (Config_Place_<PlaceId>).\n" ..
+              "• Preset Feature Inspection Status Display: inspect enabled/disabled features of any saved profile with category dropdown.\n" ..
+              "• Override Selected Profile: overwrite any existing profile with current configuration in 1 click.\n" ..
+              "• Streamlined Presets: removed deprecated hardcoded quick-loads in favor of dynamic profile management.\n" ..
+              "• System Metrics: Home tab displays total status displays count alongside UI controls.\n" ..
+              "• Staged Loading Sequence: 4-stage unbundled module pipeline with progress notifications to prevent post-execution crashes."
 })
 
 UpdateLogTab:CreateParagraph({

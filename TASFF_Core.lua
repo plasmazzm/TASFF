@@ -477,8 +477,10 @@ local function TriggerPanic()
     SetADSState(false)
     if S.IsHoldingClick then
         S.IsHoldingClick = false
-        local loc = UserInputService:GetMouseLocation()
-        VirtualInputManager:SendMouseButtonEvent(loc.X, loc.Y, 0, false, game, 0)
+        pcall(function()
+            local loc = UserInputService:GetMouseLocation()
+            VirtualInputManager:SendMouseButtonEvent(loc.X, loc.Y, 0, false, game, 0)
+        end)
     end
     if S.IsHoldingTriggerKey then
         S.IsHoldingTriggerKey = false
@@ -1072,10 +1074,34 @@ table.insert(getgenv().TASFF.Connections, UserInputService.InputBegan:Connect(fu
         -- Still process mouse-button marks below
     end
     if input.KeyCode ~= Enum.KeyCode.Unknown then
+        -- Panic key (always highest priority, ignores gpe)
         local panicKey = GetKeyCode(S.PanicKeybind)
         if panicKey and input.KeyCode == panicKey then
             TriggerPanic(); return
         end
+
+        -- Aimbot activation toggle
+        if not gpe and S.MasterEnabled and not S.PanicLocked then
+            local aimKey = GetKeyCode(S.AimbotKeybind)
+            if aimKey and input.KeyCode == aimKey then
+                S.AimbotActive = not S.AimbotActive
+                if not S.AimbotActive then
+                    S.CurrentTarget = nil
+                    S.AimbotCandidates = {}
+                    S.SilentAimTargetCache = nil
+                    S.LastCustomTargetData = nil
+                    S.SilentAimTargetCacheTime = 0
+                    if S.SetADSState then S.SetADSState(false) end
+                end
+                Notify({
+                    Title   = "TASFF Aimbot",
+                    Content = S.AimbotActive and "Aimbot ACTIVE" or "Aimbot PAUSED",
+                    Duration = 1.5,
+                    Image   = S.AimbotActive and "crosshair" or "crosshair-off",
+                })
+            end
+        end
+
         -- Feature 17: Rapid Aim Mode Cycle
         if not gpe and S.RapidModeCycleEnabled then
             local cycleKey = GetKeyCode(S.RapidModeCycleKey)
@@ -2553,13 +2579,32 @@ end)
 getgenv().TASFF.Cleanup = function()
     pcall(function() hookmetamethod(game,"__index",oldIndex) end)
     pcall(function() hookmetamethod(game,"__namecall",oldNamecall) end)
-    if getgenv().TASFF.Drawings then for _,d in ipairs(getgenv().TASFF.Drawings) do pcall(function() d:Remove() end) end; table.clear(getgenv().TASFF.Drawings) end
+    if getgenv().TASFF.Drawings then
+        for _, d in ipairs(getgenv().TASFF.Drawings) do
+            pcall(function()
+                if d and d.Frame then d.Frame:Destroy()      -- overlay ScreenGui frame
+                elseif d and d.Remove then d:Remove()        -- legacy Drawing API object
+                elseif d and d.Destroy then d:Destroy() end
+            end)
+        end
+        table.clear(getgenv().TASFF.Drawings)
+    end
     if getgenv().TASFF.Connections then
-        for _,conn in pairs(getgenv().TASFF.Connections) do if typeof(conn)=="RBXScriptConnection" and conn.Connected then conn:Disconnect() end end
+        for _, conn in pairs(getgenv().TASFF.Connections) do
+            pcall(function()
+                if typeof(conn) == "RBXScriptConnection" and conn.Connected then conn:Disconnect() end
+            end)
+        end
         table.clear(getgenv().TASFF.Connections)
     end
-    if OverlayGui then OverlayGui:Destroy(); OverlayGui = nil end
-    for _,child in ipairs(CoreGui:GetChildren()) do if child.Name=="TASFF_UI" or child.Name=="Rayfield" then child:Destroy() end end
+    pcall(function() if OverlayGui then OverlayGui:Destroy(); OverlayGui = nil end end)
+    pcall(function()
+        for _, child in ipairs(CoreGui:GetChildren()) do
+            pcall(function()
+                if child.Name == "TASFF_UI" or child.Name == "Rayfield" then child:Destroy() end
+            end)
+        end
+    end)
 end
 
 print("[TASFF Core] All function slots registered. Render loop active.")

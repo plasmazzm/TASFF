@@ -33,6 +33,7 @@ local PerformanceIndicator   = nil   -- paragraph element ref
 local PriorityMonitorLabel   = nil   -- paragraph element ref
 local ThreatListLabel        = nil   -- paragraph element ref
 local PresetInputName        = ""
+local UpdatePresetStatusDisplay  -- forward declaration (defined in Presets section below)
 
 -- // â”€â”€ Theming Color Map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
 
@@ -523,21 +524,11 @@ MainTab:CreateKeybind({
         CurrentKeybind  = S.AimbotKeybind or "E",
         Flag            = "AimbotKeybind",
         Callback        = function(key)
+            -- Only update the stored keybind string.
+            -- Actual aimbot activation/deactivation is handled by InputBegan in Core.
             local validKey = SanitizeKeyName(key)
-            local isRebind = (validKey ~= nil and validKey ~= S.AimbotKeybind)
             if validKey then S.AimbotKeybind = validKey end
-            if not isRebind and S.MasterEnabled and not S.PanicLocked then
-            S.AimbotActive = not S.AimbotActive
-            if not S.AimbotActive then
-                S.CurrentTarget = nil
-                S.AimbotCandidates = {}
-                S.SilentAimTargetCache = nil
-                S.LastCustomTargetData = nil
-                S.SilentAimTargetCacheTime = 0
-                if S.SetADSState then S.SetADSState(false) end
-            end
         end
-    end
 })
 MainTab:CreateToggle({Name = "Auto ADS (Automatic Scope)", CurrentValue = S.AutoADSEnabled, Flag = "AutoADS", Callback = function(v)
     S.AutoADSEnabled = v
@@ -840,18 +831,35 @@ IntelTab:CreateButton({
 IntelTab:CreateButton({
     Name     = "Clear All Non-Nemesis",
     Callback = function()
+        -- Pass 1: collect names to remove (safe — avoids modifying table while iterating)
+        local toRemove = {}
         for name, data in pairs(S.IntelPlayers) do
             if not data.nemesis then
-                S.IntelPlayers[name] = nil
-                S.ThreatMemory[name] = nil
-                local idx = table.find(S.PriorityPlayers, name)
-                if idx then table.remove(S.PriorityPlayers, idx) end
+                table.insert(toRemove, name)
             end
         end
+        -- Pass 2: remove collected entries
+        for _, name in ipairs(toRemove) do
+            S.IntelPlayers[name] = nil
+            S.ThreatMemory[name] = nil
+        end
+        -- Pass 3: rebuild PriorityPlayers keeping only confirmed Nemeses
+        -- (also catches players added directly via dropdown without going through Intel)
+        local nemesisSet = {}
+        for name, data in pairs(S.IntelPlayers) do
+            if data.nemesis then nemesisSet[name] = true end
+        end
+        local kept = {}
+        for _, name in ipairs(S.PriorityPlayers) do
+            if nemesisSet[name] then table.insert(kept, name) end
+        end
+        S.PriorityPlayers = kept
         S.IntelSelected = ""
+        -- Force ESP highlights to recolor immediately (don't wait for next render frame)
+        if S.ClearVisuals then S.ClearVisuals() end
         if S.SyncPriorityUI then S.SyncPriorityUI() end
         if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
-        if S.Notify then S.Notify({Title="Intel",Content="Cleared all non-Nemesis entries.",Duration=2,Image="trash-2"}) end
+        if S.Notify then S.Notify({Title="Intel", Content="Cleared all non-Nemesis entries.", Duration=2, Image="trash-2"}) end
     end
 })
 
@@ -1544,7 +1552,7 @@ local function BuildPresetStatusContent(profileName, category)
     return table.concat(lines, "\n")
 end
 
-local function UpdatePresetStatusDisplay()
+UpdatePresetStatusDisplay = function()  -- assigns to the forward-declared upvalue at the top of the file
     local selected = PresetDropdownRef and PresetDropdownRef.CurrentOption
     if type(selected) == "table" then
         local k,v = next(selected)

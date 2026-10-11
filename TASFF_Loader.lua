@@ -233,17 +233,43 @@ end
 --   4. UI     — reads S, builds Rayfield window, sets S.ThreatListLabel etc.,
 --               calls Rayfield:LoadConfiguration() at the very end
 
-print("[TASFF Loader] Loading modules...")
+-- Helper notification for early stages before S.Notify is bound
+local function SendLoaderNotify(title, message, icon, duration)
+    pcall(function()
+        if Rayfield and Rayfield.Notify then
+            Rayfield:Notify({
+                Title = title or "TASFF Loader",
+                Content = message or "",
+                Duration = duration or 2.5,
+                Image = icon or "info"
+            })
+        end
+    end)
+end
+
+print("[TASFF Loader] Starting staged initialization sequence...")
+SendLoaderNotify("TASFF Initializing", "Step 1/4: Loading Core State & Classifiers...", "layers", 2)
 
 local loadOk, loadError = pcall(function()
+    -- Stage 1: State & Classifiers
     LoadModule("TASFF_State.lua")   -- _G.TASFF_State = {...}
     LoadModule("TASFF_Lists.lua")   -- classifiers, feature list, game configs
-    LoadModule("TASFF_Core.lua")    -- S.FunctionSlots = ..., render loop starts
-    LoadModule("TASFF_UI.lua")      -- Window created, LoadConfiguration() called
+    task.wait(0.08)
+
+    -- Stage 2: Core targeting engine & background workers
+    SendLoaderNotify("TASFF Initializing", "Step 2/4: Initializing Targeting Engine & Core...", "cpu", 2)
+    LoadModule("TASFF_Core.lua")    -- S.FunctionSlots = ..., registers loops
+    task.wait(0.08)
+
+    -- Stage 3: User Interface & controls
+    SendLoaderNotify("TASFF Initializing", "Step 3/4: Building Interface Elements...", "layout-grid", 2)
+    LoadModule("TASFF_UI.lua")      -- Window created, controls rendered, LoadConfiguration() completed
+    task.wait(0.1)
 end)
 if not loadOk then
     CleanupPartialRuntime()
     _G.TASFF_State = nil
+    SendLoaderNotify("TASFF Error", "Initialization aborted: see console.", "alert-triangle", 5)
     error("[TASFF Loader] Startup aborted and partial runtime was cleaned up:\n" .. tostring(loadError))
 end
 
@@ -252,17 +278,25 @@ end
 --   • _G.TASFF_State is fully populated with function slots from Core
 --   • All UI elements exist and have set their S.* refs (ThreatListLabel, etc.)
 --   • Rayfield:LoadConfiguration() has run and callbacks restored S.* values
---   • Core's task.defer will set S.ScriptInitialized = true after ~0.2s
+--   • Mark S.ScriptInitialized = true now that all modules have settled
 --   • S.SavedPresets was already loaded by Core (LoadPresetsFromFile)
 
 local S = _G.TASFF_State
+S.ScriptInitialized = true
 
--- Final notify (fires after ScriptInitialized is set by Core's deferred task)
-task.delay(0.4, function()
+-- Stage 4: Ready notification
+task.delay(0.2, function()
     if S.Notify then
         S.Notify({
-            Title    = "TASFF v2.1.0",
-            Content  = "Script loaded successfully. Master Switch to begin.",
+            Title    = "TASFF v2.2.0 Ready",
+            Content  = "All modules loaded stably! Master Switch to begin.",
+            Duration = 4,
+            Image    = "shield-check"
+        })
+    elseif Rayfield and Rayfield.Notify then
+        Rayfield:Notify({
+            Title    = "TASFF v2.2.0 Ready",
+            Content  = "All modules loaded stably! Master Switch to begin.",
             Duration = 4,
             Image    = "shield-check"
         })
@@ -278,7 +312,7 @@ task.spawn(function()
     end)
     if ok and result then
         local remote = result:match("([%d%.]+)")
-        local current = S.CurrentVersion or "2.1.0"
+        local current = S.CurrentVersion or "2.2.0"
         if remote and remote ~= current then
             if S.Notify then
                 S.Notify({Title="TASFF Update", Content="v"..remote.." available! Re-execute to update.", Duration=8, Image="arrow-up-circle"})
@@ -287,4 +321,4 @@ task.spawn(function()
     end
 end)
 
-print("[TASFF Loader] ══ All modules loaded. TASFF v2.1.0 is running. ══")
+print("[TASFF Loader] ══ All modules loaded. TASFF v2.2.0 is running. ══")

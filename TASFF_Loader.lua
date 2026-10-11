@@ -103,17 +103,23 @@ if previousTASFF and type(previousTASFF) == "table" then
     -- Belt-and-suspenders: also iterate connections directly
     if previousTASFF.Connections then
         for _, conn in pairs(previousTASFF.Connections) do
-            if conn and typeof(conn) == "RBXScriptConnection" and conn.Connected then
-                pcall(function() conn:Disconnect() end)
-            end
+            pcall(function() conn:Disconnect() end)
         end
     end
 
     -- Belt-and-suspenders: also iterate drawings directly
     if previousTASFF.Drawings then
-        for _, d in ipairs(previousTASFF.Drawings) do
-            pcall(function() d:Remove() end)
+        for _, d in pairs(previousTASFF.Drawings) do
+            pcall(function()
+                if d and d.Frame then d.Frame:Destroy()
+                elseif d and d.Remove then d:Remove()
+                elseif d and d.Destroy then d:Destroy() end
+            end)
         end
+    end
+
+    if previousTASFF.Rayfield and previousTASFF.Rayfield.Destroy then
+        pcall(function() previousTASFF.Rayfield:Destroy() end)
     end
 
     -- Reset shared state so Core rebuilds everything cleanly
@@ -142,13 +148,24 @@ local function CleanupPartialRuntime()
     if type(runtime.Cleanup) == "function" then
         pcall(runtime.Cleanup)
     end
-    for _, conn in ipairs(runtime.Connections or {}) do
-        if conn and typeof(conn) == "RBXScriptConnection" then
-            pcall(function() conn:Disconnect() end)
-        end
+    for _, conn in pairs(runtime.Connections or {}) do
+        pcall(function() conn:Disconnect() end)
     end
-    for _, drawing in ipairs(runtime.Drawings or {}) do
-        pcall(function() drawing:Remove() end)
+    pcall(function()
+        if runtime.Connections then table.clear(runtime.Connections) end
+    end)
+    for _, drawing in pairs(runtime.Drawings or {}) do
+        pcall(function()
+            if drawing and drawing.Frame then drawing.Frame:Destroy()
+            elseif drawing and drawing.Remove then drawing:Remove()
+            elseif drawing and drawing.Destroy then drawing:Destroy() end
+        end)
+    end
+    pcall(function()
+        if runtime.Drawings then table.clear(runtime.Drawings) end
+    end)
+    if runtime.Rayfield and runtime.Rayfield.Destroy then
+        pcall(function() runtime.Rayfield:Destroy() end)
     end
 end
 
@@ -162,12 +179,14 @@ if not executorCapabilities.LoadString then
     CleanupPartialRuntime()
     error("[TASFF Loader] This executor does not provide loadstring; modules cannot be compiled.")
 end
+local cachedRayfieldFactory = nil
 local rayfieldOk, RayfieldOrError = pcall(function()
     local rayfieldSource = SafeHttpGet("https://sirius.menu/rayfield", "Rayfield")
     local rayfieldFactory, compileError = loadstring(rayfieldSource)
     if type(rayfieldFactory) ~= "function" then
         error("[TASFF Loader] Failed to compile Rayfield bootstrap: " .. tostring(compileError))
     end
+    cachedRayfieldFactory = rayfieldFactory
     local instance = rayfieldFactory()
     if type(instance) ~= "table" then
         error("[TASFF Loader] Rayfield bootstrap returned an invalid instance.")
@@ -277,13 +296,69 @@ local function StartLoadingSequence()
     local S = _G.TASFF_State
     S.ScriptInitialized = true
 
+    -- Stage 4: Ready notification
+    task.delay(0.2, function()
+        if S and S.Notify then
+            S.Notify({
+                Title    = "TASFF v2.2.0 Ready",
+                Content  = "All modules loaded stably! Master Switch to begin.",
+                Duration = 4,
+                Image    = "shield-check"
+            })
+        elseif Rayfield and Rayfield.Notify then
+            Rayfield:Notify({
+                Title    = "TASFF v2.2.0 Ready",
+                Content  = "All modules loaded stably! Master Switch to begin.",
+                Duration = 4,
+                Image    = "shield-check"
+            })
+        end
+    end)
+
     -- Wire restart function
     local function RestartScript()
-        if S.Notify then S.Notify({Title="TASFF System", Content="Restarting script...", Duration=2, Image="refresh-cw"}) end
+        if S and S.Notify then
+            S.Notify({Title="TASFF System", Content="Restarting script & reloading UI...", Duration=2, Image="refresh-cw"})
+        elseif Rayfield and Rayfield.Notify then
+            pcall(function() Rayfield:Notify({Title="TASFF System", Content="Restarting script & reloading UI...", Duration=2, Image="refresh-cw"}) end)
+        end
+
         task.delay(0.2, function()
-            CleanupPartialRuntime()
+            -- Step 1: Fully unload previous running instance
+            if S and S.UnloadScript then
+                pcall(function() S.UnloadScript(true) end)
+            else
+                CleanupPartialRuntime()
+            end
+
+            -- Step 2: Ensure old Rayfield window is destroyed
+            pcall(function()
+                if Rayfield and Rayfield.Destroy then Rayfield:Destroy() end
+            end)
+
             _G.TASFF_State = nil
-            task.wait(0.1)
+            task.wait(0.25)
+
+            -- Step 3: Re-instantiate fresh Rayfield instance
+            local freshRayfield = nil
+            if cachedRayfieldFactory then
+                local ok, inst = pcall(cachedRayfieldFactory)
+                if ok and type(inst) == "table" then
+                    freshRayfield = inst
+                end
+            end
+            if not freshRayfield then
+                pcall(function()
+                    local rfSource = SafeHttpGet("https://sirius.menu/rayfield", "Rayfield")
+                    local fac = loadstring(rfSource)
+                    if type(fac) == "function" then
+                        cachedRayfieldFactory = fac
+                        freshRayfield = fac()
+                    end
+                end)
+            end
+
+            Rayfield = freshRayfield
             getgenv().TASFF = {
                 Running              = true,
                 Connections          = {},
@@ -294,6 +369,8 @@ local function StartLoadingSequence()
                 Rayfield             = Rayfield,
                 RestartScript        = nil,
             }
+
+            -- Step 4: Re-run staged loading sequence
             StartLoadingSequence()
         end)
     end
@@ -304,25 +381,6 @@ end
 StartLoadingSequence()
 
 local S = _G.TASFF_State
-
--- Stage 4: Ready notification
-task.delay(0.2, function()
-    if S.Notify then
-        S.Notify({
-            Title    = "TASFF v2.2.0 Ready",
-            Content  = "All modules loaded stably! Master Switch to begin.",
-            Duration = 4,
-            Image    = "shield-check"
-        })
-    elseif Rayfield and Rayfield.Notify then
-        Rayfield:Notify({
-            Title    = "TASFF v2.2.0 Ready",
-            Content  = "All modules loaded stably! Master Switch to begin.",
-            Duration = 4,
-            Image    = "shield-check"
-        })
-    end
-end)
 
 -- Feature 24: Auto-Update Version Checker
 task.spawn(function()

@@ -107,16 +107,21 @@ local FeatureList = {
     "18 Global UI Theme Presets", "Theme-Aware Window Title",
     -- v2.2.0 Additions
     "Screen Recording Cloaking System",
+    "High-Contrast ESP Tag Outlines",
+    "Restart Script Engine",
+    "Per-Game Autosaving",
+    "Preset Feature Inspection Status Display",
+    "Override Selected Profile",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
--- v2.2.0 additions: +1 dropdown (Select Visuals to Hide), +3 buttons (Hide, Show, Clear All)
-S.ToggleCount   = 79
-S.SliderCount   = 29
-S.DropdownCount = 37   -- +1 (Recording Cloak selector)
-S.ButtonCount   = 24   -- +3 (Hide Selected, Show Selected, Clear All Cloak Overrides)
-S.KeybindCount  = 5
+S.ToggleCount         = 79
+S.SliderCount         = 29
+S.DropdownCount       = 38   -- +1 (Recording Cloak), +1 (Inspect Preset Category)
+S.ButtonCount         = 24   -- +3 (Cloaking), +1 (Restart), -2 (Quick-Load configs removed), +1 (Override Profile)
+S.KeybindCount        = 5
+S.StatusDisplayCount  = 6    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --
 -- Applied via the Presets tab "Quick-Load Game Config" dropdown.

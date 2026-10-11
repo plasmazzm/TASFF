@@ -338,6 +338,7 @@ _G.TASFF_State = {
     DrawSkeleton                = nil,
     LoadPresetsFromFile         = nil,
     SavePresetsToFile           = nil,
+    RestartScript               = nil,
 
     -- // ── v2.1.0 Function Slots (set by TASFF_Lists.lua) ──────── // --
     ClassifyTool                = nil,   -- ClassifyTool(name) → "Weapon"|"Melee"|"NonWeapon"|"Unknown"
@@ -345,6 +346,7 @@ _G.TASFF_State = {
     IsMeleeWeapon               = nil,
     IsNonWeapon                 = nil,
     FeatureCount                = 0,     -- populated by TASFF_Lists.lua on load
+    StatusDisplayCount          = 6,     -- populated by TASFF_Lists.lua on load
     PresetGameConfigs           = {},    -- populated by TASFF_Lists.lua on load
 }
 

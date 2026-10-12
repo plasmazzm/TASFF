@@ -944,17 +944,261 @@ local function RegisterThreat(attackerName, isKill)
 end
 
 
+-- // ── Enhanced Threat Intelligence Engine (v2.2.0) ────────────── // --
+local RecentStatKills = {} -- [Player] = { delta = number, time = number }
+
+local function ExtractPlayerFromValue(val)
+    if not val then return nil end
+    if typeof(val) == "Instance" then
+        if val:IsA("Player") then return val end
+        if val:IsA("Model") then
+            local p = Players:GetPlayerFromCharacter(val)
+            if p then return p end
+        end
+        if val:IsA("ObjectValue") and val.Value then
+            if val.Value:IsA("Player") then return val.Value end
+            if val.Value:IsA("Model") then
+                local p = Players:GetPlayerFromCharacter(val.Value)
+                if p then return p end
+            end
+        elseif (val:IsA("StringValue") or val:IsA("TextValue")) and val.Value ~= "" then
+            local p = Players:FindFirstChild(val.Value)
+            if p then return p end
+            for _, pl in ipairs(Players:GetPlayers()) do
+                if pl.DisplayName:lower() == val.Value:lower() or pl.Name:lower() == val.Value:lower() then
+                    return pl
+                end
+            end
+        elseif (val:IsA("IntValue") or val:IsA("NumberValue")) and val.Value > 1000 then
+            local p = Players:GetPlayerByUserId(val.Value)
+            if p then return p end
+        end
+    elseif type(val) == "string" and val ~= "" then
+        local p = Players:FindFirstChild(val)
+        if p then return p end
+        for _, pl in ipairs(Players:GetPlayers()) do
+            if pl.DisplayName:lower() == val:lower() or pl.Name:lower() == val:lower() then
+                return pl
+            end
+        end
+    elseif type(val) == "number" and val > 1000 then
+        local p = Players:GetPlayerByUserId(val)
+        if p then return p end
+    end
+    return nil
+end
+
+local ThreatTagNames = {
+    "creator", "Creator", "creatorTag", "CreatorTag", "KilledBy", "killedBy",
+    "Killer", "killer", "Attacker", "attacker", "LastAttacker", "lastAttacker",
+    "DamageTag", "damageTag", "LastDamagedBy", "lastDamagedBy", "HitBy", "hitBy",
+    "tag", "Tag", "KillCredit", "killCredit"
+}
+
+local ThreatAttributeNames = {
+    "creator", "Creator", "Killer", "killer", "KilledBy", "killedBy",
+    "Attacker", "attacker", "LastDamagedBy", "lastDamagedBy", "LastAttacker",
+    "lastAttacker", "KillCredit"
+}
+
+local function ScanForKillerTag(char, hum)
+    if not (char or hum) then return nil end
+    local containers = {}
+    if hum then table.insert(containers, hum) end
+    if char then table.insert(containers, char) end
+    if hum then
+        local t = hum:FindFirstChild("Tags") or hum:FindFirstChild("Damage")
+        if t then table.insert(containers, t) end
+    end
+    if char then
+        local t = char:FindFirstChild("Tags") or char:FindFirstChild("Damage")
+        if t then table.insert(containers, t) end
+    end
+
+    -- 1. Check child value objects
+    for _, container in ipairs(containers) do
+        for _, tagName in ipairs(ThreatTagNames) do
+            local child = container:FindFirstChild(tagName)
+            if child then
+                local p = ExtractPlayerFromValue(child)
+                if p then return p end
+            end
+        end
+    end
+
+    -- 2. Check Luau attributes
+    for _, container in ipairs(containers) do
+        for _, attrName in ipairs(ThreatAttributeNames) do
+            local attrVal = container:GetAttribute(attrName)
+            if attrVal ~= nil then
+                local p = ExtractPlayerFromValue(attrVal)
+                if p then return p end
+            end
+        end
+    end
+
+    return nil
+end
+
+-- Hook Leaderstats for a player to track kill deltas
+local function HookPlayerLeaderstats(p)
+    if not p then return end
+    local function hookFolder(folder)
+        if not folder then return end
+        for _, item in ipairs(folder:GetChildren()) do
+            local name = item.Name:lower()
+            if name:find("kill") or name:find("ko") or name:find("frag") or name:find("elim") or name == "score" or name == "points" then
+                if item:IsA("IntValue") or item:IsA("NumberValue") then
+                    local lastVal = item.Value
+                    TrackConnection(item.Changed:Connect(function(newVal)
+                        if typeof(newVal) == "number" and newVal > lastVal then
+                            RecentStatKills[p] = { delta = newVal - lastVal, time = tick() }
+                        end
+                        lastVal = newVal
+                    end))
+                end
+            end
+        end
+        TrackConnection(folder.ChildAdded:Connect(function(item)
+            local name = item.Name:lower()
+            if name:find("kill") or name:find("ko") or name:find("frag") or name:find("elim") or name == "score" or name == "points" then
+                if item:IsA("IntValue") or item:IsA("NumberValue") then
+                    local lastVal = item.Value
+                    TrackConnection(item.Changed:Connect(function(newVal)
+                        if typeof(newVal) == "number" and newVal > lastVal then
+                            RecentStatKills[p] = { delta = newVal - lastVal, time = tick() }
+                        end
+                        lastVal = newVal
+                    end))
+                end
+            end
+        end))
+    end
+
+    local ls = p:FindFirstChild("leaderstats") or p:FindFirstChild("Stats") or p:FindFirstChild("stats")
+    if ls then hookFolder(ls) end
+    TrackConnection(p.ChildAdded:Connect(function(child)
+        local n = child.Name:lower()
+        if n == "leaderstats" or n == "stats" then hookFolder(child) end
+    end))
+end
+
+for _, pl in ipairs(Players:GetPlayers()) do HookPlayerLeaderstats(pl) end
+TrackConnection(Players.PlayerAdded:Connect(HookPlayerLeaderstats))
+
+-- Advanced Asynchronous Killer Resolution
+local function ResolveKiller(victimPlayer, victimChar, victimHum, onResolved)
+    task.spawn(function()
+        local killer = nil
+        local victimName = victimPlayer and victimPlayer.Name or "?"
+        local victimRoot = victimChar and victimChar:FindFirstChild("HumanoidRootPart")
+        local victimPos  = victimRoot and victimRoot.Position
+
+        -- Tier 1: Immediate tag scan
+        if S.DeepThreatScanEnabled ~= false then
+            killer = ScanForKillerTag(victimChar, victimHum)
+        else
+            local creator = victimHum and (victimHum:FindFirstChild("creator") or victimHum:FindFirstChild("creatorTag"))
+            killer = ExtractPlayerFromValue(creator)
+        end
+        if killer and killer ~= victimPlayer then
+            if S.DebugMode then print("[TASFF Intel] Killer resolved via Tier 1 (immediate tag) for victim " .. victimName .. ": " .. killer.Name) end
+            onResolved(killer)
+            return
+        end
+
+        -- Tier 1.5: Micro-yield retry (handles network replication lag of tags)
+        task.wait(0.04)
+        if S.DeepThreatScanEnabled ~= false then
+            killer = ScanForKillerTag(victimChar, victimHum)
+            if killer and killer ~= victimPlayer then
+                if S.DebugMode then print("[TASFF Intel] Killer resolved via Tier 1.5 (delayed tag) for victim " .. victimName .. ": " .. killer.Name) end
+                onResolved(killer)
+                return
+            end
+        end
+
+        -- Tier 2: Leaderstats Delta Correlator (with optional proximity filter)
+        if S.StatCorrelatorEnabled ~= false then
+            local now = tick()
+            local bestCandidate = nil
+            local bestTimeDiff = 999
+            local proximityLimit = (S.ThreatProximityRadius or 80) * 2
+            for pl, statData in pairs(RecentStatKills) do
+                if pl ~= victimPlayer then
+                    local diff = now - statData.time
+                    if diff >= 0 and diff <= 0.35 and diff < bestTimeDiff then
+                        -- Proximity filter: skip candidates too far away to be the killer
+                        local plRoot = pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+                        if victimPos and plRoot then
+                            if (plRoot.Position - victimPos).Magnitude <= proximityLimit then
+                                bestCandidate = pl
+                                bestTimeDiff = diff
+                            elseif S.DebugMode then
+                                print("[TASFF Intel] Tier 2 skipped " .. pl.Name .. " (too far: " .. math.floor((plRoot.Position - victimPos).Magnitude) .. " studs)")
+                            end
+                        else
+                            -- No position data — accept without proximity filter
+                            bestCandidate = pl
+                            bestTimeDiff = diff
+                        end
+                    end
+                end
+            end
+            if bestCandidate then
+                if S.DebugMode then print("[TASFF Intel] Killer resolved via Tier 2 (stat delta) for victim " .. victimName .. ": " .. bestCandidate.Name) end
+                onResolved(bestCandidate)
+                return
+            end
+        end
+
+        -- Tier 2.5: Secondary yield for slower leaderstats sync (with proximity filter)
+        if S.StatCorrelatorEnabled ~= false then
+            task.wait(0.06)
+            local now = tick()
+            local proximityLimit = (S.ThreatProximityRadius or 80) * 2
+            for pl, statData in pairs(RecentStatKills) do
+                if pl ~= victimPlayer then
+                    local diff = now - statData.time
+                    if diff >= 0 and diff <= 0.45 then
+                        local plRoot = pl.Character and pl.Character:FindFirstChild("HumanoidRootPart")
+                        if victimPos and plRoot then
+                            if (plRoot.Position - victimPos).Magnitude <= proximityLimit then
+                                if S.DebugMode then print("[TASFF Intel] Killer resolved via Tier 2.5 (delayed stat delta) for victim " .. victimName .. ": " .. pl.Name) end
+                                onResolved(pl)
+                                return
+                            elseif S.DebugMode then
+                                print("[TASFF Intel] Tier 2.5 skipped " .. pl.Name .. " (too far: " .. math.floor((plRoot.Position - victimPos).Magnitude) .. " studs)")
+                            end
+                        else
+                            if S.DebugMode then print("[TASFF Intel] Killer resolved via Tier 2.5 (delayed stat delta) for victim " .. victimName .. ": " .. pl.Name) end
+                            onResolved(pl)
+                            return
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Unresolved / Environment / Suicide
+        if S.DebugMode then print("[TASFF Intel] Killer UNRESOLVED for victim " .. victimName .. " (no tag, no stat delta, or out of range)") end
+        onResolved(nil)
+    end)
+end
+
 local function HookThreatHealth(char)
     if not char then return end
     local humanoid = char:WaitForChild("Humanoid", 3)
     if not humanoid then return end
     local lastHealth = humanoid.Health
-    TrackConnection(humanoid.HealthChanged:Connect(function(newHealth)
-        if S.ThreatDetectorEnabled and newHealth < lastHealth then
-            local isKill = (newHealth <= 0)
-            local creator = humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("creatorTag")
-            if creator and creator:IsA("ObjectValue") and creator.Value and creator.Value:IsA("Player") then
-                RegisterThreat(creator.Value.Name, isKill)
+    local diedHandled = false
+
+    local function handleLocalDeath()
+        if diedHandled then return end
+        diedHandled = true
+        ResolveKiller(Player, char, humanoid, function(killer)
+            if killer then
+                RegisterThreat(killer.Name, true)
             else
                 local myPos = char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart.Position
                 if myPos then
@@ -971,12 +1215,47 @@ local function HookThreatHealth(char)
                             end
                         end
                     end
-                    if nearestAttacker then RegisterThreat(nearestAttacker, isKill) end
+                    if nearestAttacker then RegisterThreat(nearestAttacker, true) end
+                end
+            end
+        end)
+    end
+
+    TrackConnection(humanoid.HealthChanged:Connect(function(newHealth)
+        if S.ThreatDetectorEnabled and newHealth < lastHealth then
+            if newHealth <= 0 then
+                handleLocalDeath()
+            else
+                local creator = (S.DeepThreatScanEnabled ~= false and ScanForKillerTag(char, humanoid))
+                    or humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("creatorTag")
+                local pObj = ExtractPlayerFromValue(creator)
+                if pObj and pObj ~= Player then
+                    RegisterThreat(pObj.Name, false)
+                else
+                    local myPos = char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart.Position
+                    if myPos then
+                        local nearestAttacker, nearestDist = nil, S.ThreatProximityRadius or 80
+                        for _, p in ipairs(Players:GetPlayers()) do
+                            if p ~= Player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                                local root = p.Character.HumanoidRootPart
+                                local d = (root.Position - myPos).Magnitude
+                                if d < nearestDist then
+                                    local vel = root.AssemblyLinearVelocity
+                                    if vel.Magnitude < 5 or vel.Unit:Dot((myPos - root.Position).Unit) > 0.3 then
+                                        nearestDist = d; nearestAttacker = p.Name
+                                    end
+                                end
+                            end
+                        end
+                        if nearestAttacker then RegisterThreat(nearestAttacker, false) end
+                    end
                 end
             end
         end
         lastHealth = newHealth
     end))
+
+    TrackConnection(humanoid.Died:Connect(handleLocalDeath))
 end
 
 
@@ -1009,6 +1288,13 @@ task.spawn(function()
                     S.PlayerNemesisStrikeTimes[name] = nil
                     S.PlayerNemesisStrikes[name] = nil
                 end
+            end
+        end
+
+        -- RecentStatKills GC: prune entries older than 2 seconds to prevent memory leak
+        for pl, statData in pairs(RecentStatKills) do
+            if now - statData.time > 2 then
+                RecentStatKills[pl] = nil
             end
         end
     end
@@ -1764,67 +2050,66 @@ local function HookNeutralization(p)
     local function hookHum(char)
         local hum = char:WaitForChild("Humanoid", 5)
         if not hum then return end
-        TrackConnection(hum.Died:Connect(function()
-            local killerName = "Unknown"
-            local killerObj = nil
-            
-            -- Detect creator (covers ObjectValue and StringValue variants)
-            local creator = hum:FindFirstChild("creator") or hum:FindFirstChild("Creator") or hum:FindFirstChild("KilledBy") or hum:FindFirstChild("creatorTag") or hum:FindFirstChild("Killer") or hum:FindFirstChild("killer")
-            if creator then
-                if creator:IsA("ObjectValue") and creator.Value and creator.Value:IsA("Player") then
-                    killerObj = creator.Value
-                    killerName = killerObj.Name
-                elseif creator:IsA("StringValue") and creator.Value ~= "" then
-                    local pObj = Players:FindFirstChild(creator.Value)
-                    if pObj then
-                        killerObj = pObj
-                        killerName = pObj.Name
-                    end
+        local diedHandled = false
+
+        local function handlePlayerDeath()
+            if diedHandled then return end
+            diedHandled = true
+
+            ResolveKiller(p, char, hum, function(killerObj)
+                local killerName = killerObj and killerObj.Name or "Unknown"
+
+                if S.KillFeedEnabled and killerName ~= "Unknown" and killerName ~= p.Name then
+                    Notify({Title="TASFF Intel", Content=killerName.." killed "..p.Name, Duration=2, Image="crosshair"})
                 end
-            end
 
-            if S.KillFeedEnabled and killerName ~= "Unknown" and killerName ~= p.Name then
-                Notify({Title="TASFF Intel", Content=killerName.." killed "..p.Name, Duration=2, Image="crosshair"})
-            end
+                -- Session User Kill Count: track if WE killed this player
+                local localPlayerKilled = (killerObj == Player)
+                if localPlayerKilled then
+                    S.SessionUserKills = (S.SessionUserKills or 0) + 1
+                    if S.DebugMode then print("[TASFF Debug] Session kill #"..S.SessionUserKills.." on "..p.Name) end
+                end
 
-            -- Session User Kill Count: track if WE killed this player
-            local localPlayerKilled = (killerObj == Player)
-            if localPlayerKilled then
-                S.SessionUserKills = (S.SessionUserKills or 0) + 1
-                if S.DebugMode then print("[TASFF Debug] Session kill #"..S.SessionUserKills.." on "..p.Name) end
-            end
-
-            if killerObj and killerObj ~= Player and killerObj ~= p then
-                -- Add to global kill count for auto-flagging
-                if S.KillCountThreatEnabled then
-                    S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
-                    if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
-                        local kData = S.IntelPlayers and S.IntelPlayers[killerName]
-                        local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
-                        if not isTracked then
-                            if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
-                            Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
+                if killerObj and killerObj ~= Player and killerObj ~= p then
+                    -- Add to global kill count for auto-flagging
+                    if S.KillCountThreatEnabled then
+                        S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
+                        if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
+                            local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+                            local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
+                            if not isTracked then
+                                if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
+                                Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
+                            end
                         end
                     end
+
+                    -- Track per-priority-player kill counts for Intel Monitor display
+                    local isPrio = table.find(S.PriorityPlayers or {}, killerName)
+                    local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+                    if isPrio or kData then
+                        if not S.PriorityPlayerKills then S.PriorityPlayerKills = {} end
+                        S.PriorityPlayerKills[killerName] = (S.PriorityPlayerKills[killerName] or 0) + 1
+                        if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
+                    end
                 end
 
-                -- Track per-priority-player kill counts for Intel Monitor display
-                local isPrio = table.find(S.PriorityPlayers or {}, killerName)
-                local kData = S.IntelPlayers and S.IntelPlayers[killerName]
-                if isPrio or kData then
-                    if not S.PriorityPlayerKills then S.PriorityPlayerKills = {} end
-                    S.PriorityPlayerKills[killerName] = (S.PriorityPlayerKills[killerName] or 0) + 1
-                    if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
+                if not S.ThreatNeutralizationEnabled then return end
+                local data = S.IntelPlayers and S.IntelPlayers[p.Name]
+                local isPrio = table.find(S.PriorityPlayers or {}, p.Name)
+                if (data and not data.nemesis) or isPrio then
+                    if S.RemoveFromIntel then S.RemoveFromIntel(p.Name, false) end
+                    Notify({Title="Intel",Content="Neutralized: "..p.Name.." removed from Intel.",Duration=2,Image="check-circle"})
                 end
-            end
+            end)
+        end
 
-            if not S.ThreatNeutralizationEnabled then return end
-            local data = S.IntelPlayers and S.IntelPlayers[p.Name]
-            local isPrio = table.find(S.PriorityPlayers or {}, p.Name)
-            if (data and not data.nemesis) or isPrio then
-                if S.RemoveFromIntel then S.RemoveFromIntel(p.Name, false) end
-                Notify({Title="Intel",Content="Neutralized: "..p.Name.." removed from Intel.",Duration=2,Image="check-circle"})
-            end
+        TrackConnection(hum.Died:Connect(handlePlayerDeath))
+        TrackConnection(hum.HealthChanged:Connect(function(newHealth)
+            if newHealth <= 0 then handlePlayerDeath() end
+        end))
+        TrackConnection(char.AncestryChanged:Connect(function(_, parent)
+            if not parent and hum.Health < 20 then handlePlayerDeath() end
         end))
     end
     -- Hook current character (if already spawned)

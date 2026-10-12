@@ -944,7 +944,7 @@ local function RegisterThreat(attackerName, isKill)
 end
 
 
--- // ── Enhanced Threat Intelligence Engine (v2.2.0) ────────────── // --
+-- // ── Enhanced Threat Intelligence Engine (v2.2.5) ────────────── // --
 local RecentStatKills = {} -- [Player] = { delta = number, time = number }
 
 local function ExtractPlayerFromValue(val)
@@ -2138,7 +2138,7 @@ end))
 task.defer(function()
     -- Render loop remains idle until UI loading sequence completes and explicitly sets S.ScriptInitialized = true
     S.CurrentTarget = nil
-    print("[TASFF v2.2.0] Core function slots registered. Awaiting UI sequence...")
+    print("[TASFF v2.2.5] Core function slots registered. Awaiting UI sequence...")
 end)
 
 -- // ══════════════════════════════════════════════════════════════ // --
@@ -2182,6 +2182,26 @@ local function IsHiddenFromRecording(featureName)
     local hfr = S.HiddenFromRecording
     if not hfr then return false end
     return hfr[featureName] == true
+end
+
+-- // ── v2.2.5 Humanized Legit Aim Engine Helpers ────────────────── // --
+local currentHitboxDrift    = Vector3.new(0, 0, 0)
+local targetHitboxDrift     = Vector3.new(0, 0, 0)
+local lastDriftPickTime     = 0
+local smoothedAimPos        = nil
+local lastTrackedTargetChar = nil
+
+-- Multi-harmonic organic physiological tremor (breathing + muscle micro-oscillation)
+local function GetHumanTremor(dt)
+    local t = tick()
+    -- Slow natural breathing / wrist posture drift (0.6 - 0.9 Hz)
+    local swayX = math.sin(t * 1.5) * 0.65 + math.cos(t * 2.1) * 0.35
+    local swayY = math.cos(t * 1.3) * 0.55 + math.sin(t * 1.8) * 0.25
+    -- Physiological muscle tremor (9 - 13 Hz micro-tremor)
+    local tremorX = math.sin(t * 9.6) * 0.32 + math.cos(t * 14.1) * 0.18
+    local tremorY = math.cos(t * 10.2) * 0.28 + math.sin(t * 15.3) * 0.16
+    local intensity = S.HumanTremorIntensity or 0.6
+    return Vector2.new(swayX + tremorX, swayY + tremorY) * intensity
 end
 
 local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
@@ -2699,7 +2719,43 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     if S.RandomizeHitboxEnabled then local opts={"Head","UpperTorso","LowerTorso"};bn=opts[math.random(1,#opts)] end
                 end
                 local bone=CT.Instance:FindFirstChild(bn) or CT.Root
-                if bone then TWP=bone.Position+(bone.AssemblyLinearVelocity*PA) end
+                if bone then
+                    local rawPos = bone.Position + (bone.AssemblyLinearVelocity * PA)
+                    if S.HumanizedAimEnabled and (Mode == "Legit (Camera)" or Mode == "Advanced Legit (Mouse)") then
+                        -- 1. Hitbox Volume Surface Drift: wander naturally within bone boundaries
+                        if S.HitboxOffsetDrift then
+                            local now = tick()
+                            if CT.Instance ~= lastTrackedTargetChar or (now - lastDriftPickTime) > 0.7 then
+                                lastDriftPickTime = now
+                                if bn == "Head" then
+                                    targetHitboxDrift = Vector3.new((math.random() - 0.5) * 0.45, (math.random() - 0.5) * 0.35, (math.random() - 0.5) * 0.45)
+                                elseif bn:find("Torso") then
+                                    targetHitboxDrift = Vector3.new((math.random() - 0.5) * 0.8, (math.random() - 0.5) * 0.9, (math.random() - 0.5) * 0.8)
+                                else
+                                    targetHitboxDrift = Vector3.new((math.random() - 0.5) * 0.35, (math.random() - 0.5) * 0.35, (math.random() - 0.5) * 0.35)
+                                end
+                            end
+                            currentHitboxDrift = currentHitboxDrift:Lerp(targetHitboxDrift, math.clamp(deltaTime * 3.5, 0.05, 1))
+                            rawPos = rawPos + currentHitboxDrift
+                        end
+
+                        -- 2. Target Inertia Tracking: dampen rapid strafing direction flips (AD-AD spam)
+                        if S.TargetInertiaTracking then
+                            if CT.Instance ~= lastTrackedTargetChar or not smoothedAimPos then
+                                smoothedAimPos = rawPos
+                            else
+                                local reactRate = S.TargetReactionRate or 14
+                                smoothedAimPos = smoothedAimPos:Lerp(rawPos, math.clamp(deltaTime * reactRate, 0.05, 1))
+                            end
+                            TWP = smoothedAimPos
+                        else
+                            TWP = rawPos
+                        end
+                    else
+                        TWP = rawPos
+                    end
+                    lastTrackedTargetChar = CT.Instance
+                end
             end
             if TWP and S.WallCheck and TP~="Visible On Screen" then
                 local ti={}; for _,v in ipairs(cachedIgnoreList) do table.insert(ti,v) end; table.insert(ti,CT.Instance)
@@ -2714,29 +2770,90 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local tsp=os and ApplyScreenCalibration(Vector2.new(sp.X,sp.Y)) or nil
                 local Sm=S.Smoothness
                 if Mode=="Legit (Camera)" then
-                    Camera.CFrame=Camera.CFrame:Lerp(tcf,math.clamp(deltaTime*(6/math.max(0.1,Sm)),0.01,1))
+                    if S.HumanizedAimEnabled and tsp then
+                        local screenCenter = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
+                        local diff = tsp - screenCenter
+                        local dist = diff.Magnitude
+                        local deadzone = S.AimDeadzoneRadius or 6
+
+                        -- Target Deadzone Slack: relaxes pull force when crosshair is already resting on target
+                        local deadzoneFactor = (dist <= deadzone) and math.clamp(dist / math.max(1, deadzone), 0, 1) or 1.0
+
+                        -- Wrist Arc Curvature: natural curved trajectory
+                        local curveFactor = S.AimPathCurvature or 0.45
+                        local perp = Vector2.new(-diff.Y, diff.X)
+                        if perp.Magnitude > 0.001 then perp = perp.Unit else perp = Vector2.new(0, 0) end
+                        local progress = math.clamp(dist / 220, 0, 1) * math.clamp((450 - dist) / 220, 0, 1)
+                        local arcOffset = perp * (dist * 0.16 * curveFactor * progress)
+
+                        -- Physiological Muscle Tremor & Sway
+                        local tremor = (S.HumanTremorEnabled and GetHumanTremor(deltaTime)) or Vector2.new(0, 0)
+                        local tremorAngleY = math.rad(-tremor.X * 0.012)
+                        local tremorAngleX = math.rad(tremor.Y * 0.012)
+
+                        -- Natural Smoothstep Ease (acceleration and deceleration curve)
+                        local ease = math.clamp(dist / 140, 0.06, 1.0)
+                        local alpha = math.clamp(deltaTime * (5.5 / math.max(0.1, Sm)) * ease * deadzoneFactor, 0.002, 0.75)
+
+                        -- Reconstruct curved world point for CFrame interpolation
+                        local curvedScreen = tsp + arcOffset
+                        local curvedRay = Camera:ViewportPointToRay(curvedScreen.X, curvedScreen.Y)
+                        local camDist = (TWP - Camera.CFrame.Position).Magnitude
+                        local humanAimPoint = curvedRay.Origin + (curvedRay.Direction * camDist)
+
+                        local targetCF = CFrame.new(Camera.CFrame.Position, humanAimPoint) * CFrame.Angles(tremorAngleX, tremorAngleY, 0)
+                        Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
+                    else
+                        Camera.CFrame=Camera.CFrame:Lerp(tcf,math.clamp(deltaTime*(6/math.max(0.1,Sm)),0.01,1))
+                    end
                 elseif Mode=="Advanced Legit (Mouse)" then
-                    -- v2.1.0 fix: smoothstep approach + split X/Y smoothness + micro-offset humanization
-                    -- SA on: skip mouse movement entirely — hook handles bullet redirect
+                    -- v2.2.5 Humanized dynamics: curved wrist arc + deadzone slack + organic tremor
                     if not S.SilentAimEnabled and tsp then
                         local mp=UserInputService:GetMouseLocation()
                         local diff=tsp-mp; local d2=diff.Magnitude
                         if d2 > 0.5 then
                             local Sx=math.max(0.1, S.SmoothnessX or Sm)
                             local Sy=math.max(0.1, S.SmoothnessY or Sm)
-                            -- Ease: approaches fast when far, decelerates near target
-                            local ease=math.clamp(d2/150, 0.05, 1.0)
-                            local stepX=math.clamp(deltaTime*(20/Sx)*ease, 0.005, 0.7)
-                            local stepY=math.clamp(deltaTime*(20/Sy)*ease, 0.005, 0.7)
-                            -- Subtle random micro-offset for human feel (only when not locked in)
-                            local microX=d2>10 and (math.random()-0.5)*2.0 or 0
-                            local microY=d2>10 and (math.random()-0.5)*2.0 or 0
-                            local mvX=(diff.X+microX)*stepX
-                            local mvY=(diff.Y+microY)*stepY
-                            if UserInputService.MouseBehavior==Enum.MouseBehavior.LockCenter then
-                                mousemoverel(mvX, mvY)
+                            if S.HumanizedAimEnabled then
+                                local deadzone = S.AimDeadzoneRadius or 6
+                                local deadzoneFactor = (d2 <= deadzone) and math.clamp(d2 / math.max(1, deadzone), 0, 1) or 1.0
+
+                                -- Wrist Arc Curvature
+                                local curveFactor = S.AimPathCurvature or 0.45
+                                local perp = Vector2.new(-diff.Y, diff.X)
+                                if perp.Magnitude > 0.001 then perp = perp.Unit else perp = Vector2.new(0, 0) end
+                                local progress = math.clamp(d2 / 200, 0, 1) * math.clamp((420 - d2) / 200, 0, 1)
+                                local arcOffset = perp * (d2 * 0.16 * curveFactor * progress)
+
+                                -- Organic Physiological Tremor
+                                local tremor = (S.HumanTremorEnabled and GetHumanTremor(deltaTime)) or Vector2.new(0, 0)
+
+                                -- Natural Ease: smooth acceleration and deceleration
+                                local ease = math.clamp(d2 / 140, 0.06, 1.0)
+                                local stepX = math.clamp(deltaTime * (20 / Sx) * ease * deadzoneFactor, 0.003, 0.7)
+                                local stepY = math.clamp(deltaTime * (20 / Sy) * ease * deadzoneFactor, 0.003, 0.7)
+
+                                local effectiveDiff = diff + arcOffset
+                                local mvX = (effectiveDiff.X * stepX) + (tremor.X * (d2 > 4 and 0.45 or 0.15))
+                                local mvY = (effectiveDiff.Y * stepY) + (tremor.Y * (d2 > 4 and 0.45 or 0.15))
+                                if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+                                    mousemoverel(mvX, mvY)
+                                else
+                                    mousemoveabs(mp.X + mvX, mp.Y + mvY)
+                                end
                             else
-                                mousemoveabs(mp.X+mvX, mp.Y+mvY)
+                                local ease=math.clamp(d2/150, 0.05, 1.0)
+                                local stepX=math.clamp(deltaTime*(20/Sx)*ease, 0.005, 0.7)
+                                local stepY=math.clamp(deltaTime*(20/Sy)*ease, 0.005, 0.7)
+                                local microX=d2>10 and (math.random()-0.5)*2.0 or 0
+                                local microY=d2>10 and (math.random()-0.5)*2.0 or 0
+                                local mvX=(diff.X+microX)*stepX
+                                local mvY=(diff.Y+microY)*stepY
+                                if UserInputService.MouseBehavior==Enum.MouseBehavior.LockCenter then
+                                    mousemoverel(mvX, mvY)
+                                else
+                                    mousemoveabs(mp.X+mvX, mp.Y+mvY)
+                                end
                             end
                         end
                     end
@@ -2750,8 +2867,9 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     end
                 end
             end
-
-
+        else
+            smoothedAimPos = nil
+            lastTrackedTargetChar = nil
         end
         local MME=S.MeleeModeEnabled; local eMR=false
         if MME and Player.Character then

@@ -323,7 +323,7 @@ HomeTab:CreateParagraph({
     Title   = "TASFF v2.2.5 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 85) .. " Toggles | " .. tostring(S.SliderCount or 32) .. " Sliders | " .. tostring(S.DropdownCount or 38) .. " Dropdowns | " .. tostring(S.ButtonCount or 24) .. " Buttons | " .. tostring(S.StatusDisplayCount or 6) .. " Status Displays\n"
+           .. "Controls: " .. tostring(S.ToggleCount or 87) .. " Toggles | " .. tostring(S.SliderCount or 32) .. " Sliders | " .. tostring(S.DropdownCount or 38) .. " Dropdowns | " .. tostring(S.ButtonCount or 24) .. " Buttons | " .. tostring(S.StatusDisplayCount or 6) .. " Status Displays\n"
            .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
 })
 
@@ -370,14 +370,14 @@ end)
 HomeTab:CreateSection("Quick Feature Status")
 HomeTab:CreateParagraph({
     Title   = "How to Read",
-    Content = "Select a category from the dropdown below. Enabled features appear first (✔), then disabled (✘). Changes made in other tabs are reflected on next category switch."
+    Content = "Select a category from the dropdown below. Enabled features appear first ([V]), then disabled ([X]). Changes made in other tabs are reflected on next category switch."
 })
 
 local function BuildStatusContent(category)
     local on, off = {}, {}
     local function check(label, flag)
-        if flag then table.insert(on, "  \xE2\x9C\x94 " .. label)
-        else table.insert(off, "  \xE2\x9C\x98 " .. label) end
+        if flag then table.insert(on, "  [V] " .. label)
+        else table.insert(off, "  [X] " .. label) end
     end
     if category == "Combat" then
         check("Master Switch",          S.MasterEnabled)
@@ -399,6 +399,7 @@ local function BuildStatusContent(category)
         check("Info Tags (NPCs)",       S.UseNPCInfoTag)
         check("Snaplines",              S.SnaplinesEnabled)
         check("OOF Arrows",             S.OOFArrowsEnabled)
+        check("OOF Arrows (Priority)",  S.OOFArrowsPriorityOnly)
         check("Box ESP",                S.BoxModeEnabled)
         check("Skeleton ESP",           S.SkeletonModeEnabled)
         check("Chams",                  S.ChamsEnabled)
@@ -414,6 +415,7 @@ local function BuildStatusContent(category)
         check("Team Check",             S.TeamCheck)
         check("Target Players",         S.TargetPlayers)
         check("Target NPCs",            S.TargetNPCs)
+        check("Ignore Threat Victims",  S.IgnoreThreatVictims)
     elseif category == "Automation" then
         check("Auto-Engage on Equip",   S.AutoEnableOnEquip)
         check("Intelligent Equip Filter", S.IntelligentEquipFilter)
@@ -696,6 +698,7 @@ VisualTab:CreateDropdown({Name = "Snapline Origin Point", Options = {"Bottom", "
 end})
 VisualTab:CreateToggle({Name = "Off-Screen Indicators (OOF Arrows)", CurrentValue = S.OOFArrowsEnabled, Flag = "OOFArrowsEnabled", Callback = function(v) S.OOFArrowsEnabled = v end})
 VisualTab:CreateSlider({Name = "OOF Indicator Radius", Range = {50, 400}, Increment = 10, CurrentValue = S.OOFArrowRadius, Flag = "OOFArrowRadius", Callback = function(v) S.OOFArrowRadius = v end})
+VisualTab:CreateToggle({Name = "OOF Indicators - Priority Targets Only", CurrentValue = S.OOFArrowsPriorityOnly, Flag = "OOFArrowsPriorityOnly", Callback = function(v) S.OOFArrowsPriorityOnly = v end})
 
 VisualTab:CreateSection("Target Intelligence Tags")
 VisualTab:CreateToggle({Name = "Render Player Tags", CurrentValue = S.UseInfoTag, Flag = "UseInfoTag", Callback = function(v) S.UseInfoTag = v end})
@@ -989,6 +992,9 @@ IntelTab:CreateToggle({Name = "Enable Threat Detector (Damage Tracking)", Curren
 end})
 IntelTab:CreateToggle({Name = "Threat Neutralization (Auto-expire on kill)", CurrentValue = S.ThreatNeutralizationEnabled, Flag = "ThreatNeutralization", Callback = function(v)
     S.ThreatNeutralizationEnabled = v
+end})
+IntelTab:CreateToggle({Name = "Ignore Threat Victims (Prevent Threat/Nemesis Trigger on Kill)", CurrentValue = S.IgnoreThreatVictims ~= false, Flag = "IgnoreThreatVictims", Callback = function(v)
+    S.IgnoreThreatVictims = v
 end})
 IntelTab:CreateSlider({Name = "Threat Memory Expiration (Seconds)", Range = {1, 60}, Increment = 1, CurrentValue = S.ThreatTimeout, Flag = "ThreatTimeout", Callback = function(v)
     S.ThreatTimeout = v
@@ -1321,7 +1327,7 @@ PresetsTab:CreateButton({
                 FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
                 ESPRenderDistance = S.ESPRenderDistance, ChamsEnabled = S.ChamsEnabled, ChamsOpacity = S.ChamsOpacity,
                 BoxModeEnabled = S.BoxModeEnabled, SkeletonModeEnabled = S.SkeletonModeEnabled, SnaplinesEnabled = S.SnaplinesEnabled,
-                SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius,
+                SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius, OOFArrowsPriorityOnly = S.OOFArrowsPriorityOnly,
                 UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
                 ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
@@ -1335,7 +1341,7 @@ PresetsTab:CreateButton({
                 ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
-                DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled,
+                DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1401,6 +1407,7 @@ local STO_FLAG = {
     DecalsCheck = "DecalsCheck", TargetPlayers = "TargetPlayers", TargetNPCs = "TargetNPCs", TeamCheck = "TeamCheck",
     AutoEnableOnEquip = "AutoEquipAim", IgnoreDead = "IgnoreDead",
     DeepThreatScanEnabled = "DeepThreatScan", StatCorrelatorEnabled = "StatCorrelator",
+    IgnoreThreatVictims = "IgnoreThreatVictims", OOFArrowsPriorityOnly = "OOFArrowsPriorityOnly",
     HumanizedAimEnabled = "HumanizedAim", AimPathCurvature = "AimCurvature", AimDeadzoneRadius = "AimDeadzone",
     HumanTremorEnabled = "HumanTremor", HumanTremorIntensity = "TremorIntensity",
     TargetInertiaTracking = "TargetInertia", HitboxOffsetDrift = "HitboxDrift"
@@ -1502,7 +1509,7 @@ PresetsTab:CreateButton({
                 FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
                 ESPRenderDistance = S.ESPRenderDistance, ChamsEnabled = S.ChamsEnabled, ChamsOpacity = S.ChamsOpacity,
                 BoxModeEnabled = S.BoxModeEnabled, SkeletonModeEnabled = S.SkeletonModeEnabled, SnaplinesEnabled = S.SnaplinesEnabled,
-                SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius,
+                SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius, OOFArrowsPriorityOnly = S.OOFArrowsPriorityOnly,
                 UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
                 ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
@@ -1516,7 +1523,7 @@ PresetsTab:CreateButton({
                 ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
-                DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled,
+                DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1558,8 +1565,8 @@ local function BuildPresetStatusContent(profileName, category)
 
     local on, off = {}, {}
     local function check(label, flagVal)
-        if flagVal == true then table.insert(on, "  ✔ " .. label)
-        else table.insert(off, "  ✘ " .. label) end
+        if flagVal == true then table.insert(on, "  [V] " .. label)
+        else table.insert(off, "  [X] " .. label) end
     end
 
     if category == "Combat" then
@@ -1586,6 +1593,7 @@ local function BuildPresetStatusContent(profileName, category)
         check("Info Tags (NPCs)",       data.UseNPCInfoTag)
         check("Snaplines",              data.SnaplinesEnabled)
         check("OOF Arrows",             data.OOFArrowsEnabled)
+        check("OOF Arrows (Priority)",  data.OOFArrowsPriorityOnly)
         check("Box ESP",                data.BoxModeEnabled)
         check("Skeleton ESP",           data.SkeletonModeEnabled)
         check("Chams",                  data.ChamsEnabled)
@@ -1603,6 +1611,7 @@ local function BuildPresetStatusContent(profileName, category)
         check("Target NPCs",            data.TargetNPCs)
         check("Deep Tag Scanner",       data.DeepThreatScanEnabled)
         check("Stat Correlator",        data.StatCorrelatorEnabled)
+        check("Ignore Threat Victims",  data.IgnoreThreatVictims)
     elseif category == "Automation" then
         check("Auto-Engage on Equip",   data.AutoEnableOnEquip)
         check("FOV Circle",             data.ShowFOV)
@@ -2418,6 +2427,10 @@ UpdateLogTab:CreateParagraph({
     Title   = "Version 2.2.5 (Threat Intelligence & Humanized Legit Aim Engine)",
     Content = "• Enhanced Threat Intelligence Engine: multi-tier killer attribution with deep 22-tag/13-attribute scans and leaderstats delta correlation for zero-tag games.\n" ..
               "• Proximity Attributor Filter: leaderstats kill correlations filtered within proximity radius to eliminate false positives.\n" ..
+              "• Threat Victim Kill Protection: optional toggle ensures killing an existing threat does not credit the killer towards threat streaks or nemesis triggers.\n" ..
+              "• Detailed Neutralization Killfeed: displays contextual intel registry reasons in killfeed notifications (e.g. 'Killer neutralized Victim (nemesis/threat/click to mark)').\n" ..
+              "• Priority-Filtered OOF Indicators: toggle to isolate off-screen arrow indicators to only point towards priority/intel targets.\n" ..
+              "• High-Compatibility Status Display Icons: replaced unrendered box Unicode symbols with clean universal [V] and [X] indicators across all status monitors.\n" ..
               "• Humanized Legit Dynamics: anti-spectator organic aiming mimicking realistic human biomechanics.\n" ..
               "• Aim Path Wrist Curvature: crosshair and camera travel in organic parabolic arcs rather than robotic straight vectors.\n" ..
               "• Target Deadzone Slack: relaxes magnetic pull when crosshair is already resting on target, preventing glued-crosshair spectator giveaways.\n" ..
@@ -2500,6 +2513,7 @@ local booleanSettings = {
     "AutoExpireOnDisconnect", "KillCountThreatEnabled", "KillFeedEnabled",
     "DeepThreatScanEnabled", "StatCorrelatorEnabled", "HumanizedAimEnabled",
     "HumanTremorEnabled", "TargetInertiaTracking", "HitboxOffsetDrift",
+    "IgnoreThreatVictims", "OOFArrowsPriorityOnly",
 }
 for _, key in ipairs(booleanSettings) do
     if type(S[key]) ~= "boolean" then

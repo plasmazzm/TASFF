@@ -265,7 +265,7 @@ end
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local Window = Rayfield:CreateWindow({
-    Name            = "TASFF 2.2.0 " .. selectedGlobalTheme,
+    Name            = "TASFF 2.2.5 " .. selectedGlobalTheme,
     Icon            = 7488932264,
     LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
@@ -304,7 +304,7 @@ local Window = Rayfield:CreateWindow({
     },
     ConfigurationSaving = {
         Enabled    = true,
-        FolderName = "TASFF V2.2.0",
+        FolderName = "TASFF V2.2.5",
         FileName   = "Config_Place_" .. tostring(game.PlaceId or "Global")
     }
 })
@@ -320,10 +320,10 @@ local HomeTab = Window:CreateTab("Home", "home")
 
 HomeTab:CreateSection("Welcome")
 HomeTab:CreateParagraph({
-    Title   = "TASFF v2.2.0 — The Aimbot Script Final Form",
+    Title   = "TASFF v2.2.5 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 79) .. " Toggles | " .. tostring(S.SliderCount or 29) .. " Sliders | " .. tostring(S.DropdownCount or 38) .. " Dropdowns | " .. tostring(S.ButtonCount or 24) .. " Buttons | " .. tostring(S.StatusDisplayCount or 6) .. " Status Displays\n"
+           .. "Controls: " .. tostring(S.ToggleCount or 85) .. " Toggles | " .. tostring(S.SliderCount or 32) .. " Sliders | " .. tostring(S.DropdownCount or 38) .. " Dropdowns | " .. tostring(S.ButtonCount or 24) .. " Buttons | " .. tostring(S.StatusDisplayCount or 6) .. " Status Displays\n"
            .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
 })
 
@@ -607,6 +607,27 @@ MainTab:CreateSlider({Name = "Velocity Prediction Intensity", Range = {0, 0.5}, 
 end})
 MainTab:CreateToggle({Name = "Dynamic Recoil Control (DRC)", CurrentValue = S.DynamicRecoilEnabled, Flag = "DynamicRecoil", Callback = function(v)
     S.DynamicRecoilEnabled = v
+end})
+MainTab:CreateToggle({Name = "Humanized Legit Dynamics (Anti-Spectator)", CurrentValue = S.HumanizedAimEnabled, Flag = "HumanizedAim", Callback = function(v)
+    S.HumanizedAimEnabled = v
+end})
+MainTab:CreateSlider({Name = "Aim Path Wrist Curvature (Arc)", Range = {0, 1}, Increment = 0.05, CurrentValue = S.AimPathCurvature or 0.45, Flag = "AimCurvature", Callback = function(v)
+    S.AimPathCurvature = v
+end})
+MainTab:CreateSlider({Name = "Target Deadzone Slack (Pixels)", Range = {0, 20}, Increment = 1, CurrentValue = S.AimDeadzoneRadius or 6, Flag = "AimDeadzone", Callback = function(v)
+    S.AimDeadzoneRadius = v
+end})
+MainTab:CreateToggle({Name = "Physiological Hand Tremor & Sway", CurrentValue = S.HumanTremorEnabled, Flag = "HumanTremor", Callback = function(v)
+    S.HumanTremorEnabled = v
+end})
+MainTab:CreateSlider({Name = "Hand Tremor Intensity", Range = {0.1, 2}, Increment = 0.1, CurrentValue = S.HumanTremorIntensity or 0.6, Flag = "TremorIntensity", Callback = function(v)
+    S.HumanTremorIntensity = v
+end})
+MainTab:CreateToggle({Name = "Human Reaction Inertia (Strafe Dampener)", CurrentValue = S.TargetInertiaTracking, Flag = "TargetInertia", Callback = function(v)
+    S.TargetInertiaTracking = v
+end})
+MainTab:CreateToggle({Name = "Hitbox Volume Surface Drift", CurrentValue = S.HitboxOffsetDrift, Flag = "HitboxDrift", Callback = function(v)
+    S.HitboxOffsetDrift = v
 end})
 
 
@@ -1291,6 +1312,10 @@ PresetsTab:CreateButton({
                 RandomizeHitboxEnabled = S.RandomizeHitboxEnabled, TargetSwitchDelayEnabled = S.TargetSwitchDelayEnabled,
                 SwitchDelayMs = S.SwitchDelayMs, GracePeriodEnabled = S.GracePeriodEnabled, GracePeriodMs = S.GracePeriodMs,
                 AimbotRenderDistance = S.AimbotRenderDistance, StickyAimEnabled = S.StickyAimEnabled, AutoADSEnabled = S.AutoADSEnabled,
+                HumanizedAimEnabled = S.HumanizedAimEnabled, AimPathCurvature = S.AimPathCurvature,
+                AimDeadzoneRadius = S.AimDeadzoneRadius, HumanTremorEnabled = S.HumanTremorEnabled,
+                HumanTremorIntensity = S.HumanTremorIntensity, TargetInertiaTracking = S.TargetInertiaTracking,
+                HitboxOffsetDrift = S.HitboxOffsetDrift,
                 -- Visuals & Overlays
                 VisualMode = S.VisualMode, UseHighlight = S.UseHighlight, UseNPCHighlight = S.UseNPCHighlight,
                 FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
@@ -1375,7 +1400,10 @@ local STO_FLAG = {
     NoCollisionCheck = "NoCollisionCheck", TransparencyCheck = "TransparencyCheck", TransparencyThreshold = "TransparencyThreshold",
     DecalsCheck = "DecalsCheck", TargetPlayers = "TargetPlayers", TargetNPCs = "TargetNPCs", TeamCheck = "TeamCheck",
     AutoEnableOnEquip = "AutoEquipAim", IgnoreDead = "IgnoreDead",
-    DeepThreatScanEnabled = "DeepThreatScan", StatCorrelatorEnabled = "StatCorrelator"
+    DeepThreatScanEnabled = "DeepThreatScan", StatCorrelatorEnabled = "StatCorrelator",
+    HumanizedAimEnabled = "HumanizedAim", AimPathCurvature = "AimCurvature", AimDeadzoneRadius = "AimDeadzone",
+    HumanTremorEnabled = "HumanTremor", HumanTremorIntensity = "TremorIntensity",
+    TargetInertiaTracking = "TargetInertia", HitboxOffsetDrift = "HitboxDrift"
 }
 
 PresetsTab:CreateButton({
@@ -1465,6 +1493,10 @@ PresetsTab:CreateButton({
                 RandomizeHitboxEnabled = S.RandomizeHitboxEnabled, TargetSwitchDelayEnabled = S.TargetSwitchDelayEnabled,
                 SwitchDelayMs = S.SwitchDelayMs, GracePeriodEnabled = S.GracePeriodEnabled, GracePeriodMs = S.GracePeriodMs,
                 AimbotRenderDistance = S.AimbotRenderDistance, StickyAimEnabled = S.StickyAimEnabled, AutoADSEnabled = S.AutoADSEnabled,
+                HumanizedAimEnabled = S.HumanizedAimEnabled, AimPathCurvature = S.AimPathCurvature,
+                AimDeadzoneRadius = S.AimDeadzoneRadius, HumanTremorEnabled = S.HumanTremorEnabled,
+                HumanTremorIntensity = S.HumanTremorIntensity, TargetInertiaTracking = S.TargetInertiaTracking,
+                HitboxOffsetDrift = S.HitboxOffsetDrift,
                 -- Visuals & Overlays
                 VisualMode = S.VisualMode, UseHighlight = S.UseHighlight, UseNPCHighlight = S.UseNPCHighlight,
                 FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
@@ -1543,6 +1575,10 @@ local function BuildPresetStatusContent(profileName, category)
         check("Grace Period",           data.GracePeriodEnabled)
         check("Triggerbot",             data.AutoClickEnabled)
         check("Melee Mode",             data.MeleeModeEnabled)
+        check("Humanized Legit Aim",    data.HumanizedAimEnabled)
+        check("Physiological Tremor",   data.HumanTremorEnabled)
+        check("Reaction Inertia",       data.TargetInertiaTracking)
+        check("Hitbox Drift",           data.HitboxOffsetDrift)
     elseif category == "Visuals" then
         check("Highlights (Players)",   data.UseHighlight)
         check("Highlights (NPCs)",      data.UseNPCHighlight)
@@ -1707,7 +1743,7 @@ local function UpdateWindowTitle(themeName)
     local topbar = main and main:FindFirstChild("Topbar")
     local title = topbar and topbar:FindFirstChild("Title")
     if title and title:IsA("TextLabel") then
-        title.Text = "TASFF 2.2.0 " .. themeName
+        title.Text = "TASFF 2.2.5 " .. themeName
     end
 end
 local function ColorFromHex(hex)
@@ -2379,6 +2415,19 @@ local UpdateLogTab = Window:CreateTab("Update Log", "history")
 UpdateLogTab:CreateSection("Recent Releases & Updates")
 
 UpdateLogTab:CreateParagraph({
+    Title   = "Version 2.2.5 (Threat Intelligence & Humanized Legit Aim Engine)",
+    Content = "• Enhanced Threat Intelligence Engine: multi-tier killer attribution with deep 22-tag/13-attribute scans and leaderstats delta correlation for zero-tag games.\n" ..
+              "• Proximity Attributor Filter: leaderstats kill correlations filtered within proximity radius to eliminate false positives.\n" ..
+              "• Humanized Legit Dynamics: anti-spectator organic aiming mimicking realistic human biomechanics.\n" ..
+              "• Aim Path Wrist Curvature: crosshair and camera travel in organic parabolic arcs rather than robotic straight vectors.\n" ..
+              "• Target Deadzone Slack: relaxes magnetic pull when crosshair is already resting on target, preventing glued-crosshair spectator giveaways.\n" ..
+              "• Physiological Muscle Tremor & Sway: dual-frequency sinusoidal hand micro-tremors (9-13 Hz) and breathing sway (0.7 Hz) replace synthetic white noise.\n" ..
+              "• Human Reaction Inertia: realistic ~120ms inertia dampens impossible 0ms snap reversals against rapid AD-AD strafers.\n" ..
+              "• Hitbox Surface Drift: smoothly wanders across bone volume rather than locking to the geometric origin point.\n" ..
+              "• Memory Leak Safeguards: automated periodic garbage collection for stat delta tables and thread lifecycle tracking."
+})
+
+UpdateLogTab:CreateParagraph({
     Title   = "Version 2.2.0 (Screen Recording Cloaking & Profile Architecture Update)",
     Content = "• Screen Recording Cloaking System: selectively cloak visuals from Roblox recording (WIP).\n" ..
               "• High-Contrast ESP Tag Outlines: black text stroke border prevents camouflage through same-colored geometry.\n" ..
@@ -2449,6 +2498,8 @@ local booleanSettings = {
     "ChamsEnabled", "BoxModeEnabled", "SkeletonModeEnabled", "SnaplinesEnabled",
     "OOFArrowsEnabled", "GracePeriodEnabled", "ThreatNeutralizationEnabled",
     "AutoExpireOnDisconnect", "KillCountThreatEnabled", "KillFeedEnabled",
+    "DeepThreatScanEnabled", "StatCorrelatorEnabled", "HumanizedAimEnabled",
+    "HumanTremorEnabled", "TargetInertiaTracking", "HitboxOffsetDrift",
 }
 for _, key in ipairs(booleanSettings) do
     if type(S[key]) ~= "boolean" then
@@ -2467,6 +2518,8 @@ local numericRanges = {
     MeleeDetectionRange = {1, 1000}, CalibrationOffsetX = {-2000, 2000},
     CalibrationOffsetY = {-2000, 2000}, DynamicFOVMax = {1, 2000},
     HealthThreshold = {0, 100}, NotifyMaxPer3s = {1, 100},
+    AimPathCurvature = {0, 1}, AimDeadzoneRadius = {0, 50},
+    HumanTremorIntensity = {0.1, 5}, TargetReactionRate = {1, 50},
 }
 for key, bounds in pairs(numericRanges) do
     local value = S[key]

@@ -29,6 +29,16 @@ _G.TASFF_State = {
     BlatantSnapSpeed            = 100,           -- 100 = instant snap; <100 = lerp fraction
     PredictionAmount            = 0.16,
 
+    -- // ── v2.2.5 Humanized Legit Aim Engine ────────────────────── // --
+    HumanizedAimEnabled         = true,          -- master switch for natural human-like aiming dynamics
+    AimPathCurvature            = 0.45,         -- wrist/arm arc curvature (0 = straight line, 1.0 = organic arc)
+    AimDeadzoneRadius           = 6,            -- pixel deadzone slack: relaxes lock when already on target
+    HumanTremorEnabled          = true,          -- organic physiological muscle tremor & breathing sway
+    HumanTremorIntensity       = 0.6,          -- tremor intensity scale (0.1 to 2.0)
+    TargetInertiaTracking       = true,          -- reaction inertia: dampens impossible 0ms strafe reaction snaps
+    TargetReactionRate          = 14,           -- reaction rate speed (lower = more human inertia, higher = faster response)
+    HitboxOffsetDrift           = true,          -- wanders smoothly within hitbox boundary instead of locking center point
+
     -- // ── v1.5.0 Combat Upgrades ─────────────────────────────── // --
     TargetSwitchDelayEnabled    = false,
     SwitchDelayMs               = 200,
@@ -54,6 +64,8 @@ _G.TASFF_State = {
     PriorityBehavior            = "Boost",
     ThreatNeutralizationEnabled = false,
     AutoExpireOnDisconnect      = false,
+    DeepThreatScanEnabled       = true,
+    StatCorrelatorEnabled       = true,
     
     -- // -- Intel System Features (v2.0.5) --------------------------- // --
     KillCountThreatEnabled      = false,
@@ -208,7 +220,7 @@ _G.TASFF_State = {
     PresetFileName              = "TASFF_V1.5.5_Presets.json",
     ColorSettingsFileName       = "TASFF_ColorSettings.json",
     ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
-    CurrentVersion              = "2.2.0",
+    CurrentVersion              = "2.2.5",
 
     -- // ── Session Statistics (v2.1.0) ─────────────────────────── // --
     SessionStartTime            = 0,

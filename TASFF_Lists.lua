@@ -112,12 +112,22 @@ local FeatureList = {
     "Per-Game Autosaving",
     "Preset Feature Inspection Status Display",
     "Override Selected Profile",
+    -- v2.2.5 Additions
+    "Enhanced Threat Intelligence Engine",
+    "Deep Tag & Attribute Scanner",
+    "Leaderboard Stat Correlator",
+    "Humanized Legit Dynamics",
+    "Aim Path Wrist Curvature",
+    "Target Deadzone Slack",
+    "Physiological Hand Tremor & Sway",
+    "Human Reaction Inertia Tracking",
+    "Hitbox Surface Drift",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 79
-S.SliderCount         = 29
+S.ToggleCount         = 85   -- +2 (Deep Tag Scanner, Stat Correlator), +4 (Humanized Aim, Hand Tremor, Reaction Inertia, Hitbox Drift)
+S.SliderCount         = 32   -- +3 (Aim Curvature, Target Deadzone, Tremor Intensity)
 S.DropdownCount       = 38   -- +1 (Recording Cloak), +1 (Inspect Preset Category)
 S.ButtonCount         = 24   -- +3 (Cloaking), +1 (Restart), -2 (Quick-Load configs removed), +1 (Override Profile)
 S.KeybindCount        = 5

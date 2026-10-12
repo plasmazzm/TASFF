@@ -300,14 +300,14 @@ local function StartLoadingSequence()
     task.delay(0.2, function()
         if S and S.Notify then
             S.Notify({
-                Title    = "TASFF v2.2.0 Ready",
+                Title    = "TASFF v2.2.5 Ready",
                 Content  = "All modules loaded stably! Master Switch to begin.",
                 Duration = 4,
                 Image    = "shield-check"
             })
         elseif Rayfield and Rayfield.Notify then
             Rayfield:Notify({
-                Title    = "TASFF v2.2.0 Ready",
+                Title    = "TASFF v2.2.5 Ready",
                 Content  = "All modules loaded stably! Master Switch to begin.",
                 Duration = 4,
                 Image    = "shield-check"
@@ -391,7 +391,7 @@ task.spawn(function()
     end)
     if ok and result then
         local remote = result:match("([%d%.]+)")
-        local current = S.CurrentVersion or "2.2.0"
+        local current = S.CurrentVersion or "2.2.5"
         if remote and remote ~= current then
             if S.Notify then
                 S.Notify({Title="TASFF Update", Content="v"..remote.." available! Re-execute to update.", Duration=8, Image="arrow-up-circle"})
@@ -400,4 +400,4 @@ task.spawn(function()
     end
 end)
 
-print("[TASFF Loader] ══ All modules loaded. TASFF v2.2.0 is running. ══")
+print("[TASFF Loader] ══ All modules loaded. TASFF v2.2.5 is running. ══")

@@ -116,6 +116,8 @@ local FeatureList = {
     "Enhanced Threat Intelligence Engine",
     "Deep Tag & Attribute Scanner",
     "Leaderboard Stat Correlator",
+    "Threat Victim Kill Bypass",
+    "Priority-Target OOF Arrows",
     "Humanized Legit Dynamics",
     "Aim Path Wrist Curvature",
     "Target Deadzone Slack",
@@ -126,7 +128,7 @@ local FeatureList = {
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 85   -- +2 (Deep Tag Scanner, Stat Correlator), +4 (Humanized Aim, Hand Tremor, Reaction Inertia, Hitbox Drift)
+S.ToggleCount         = 87   -- +2 (Deep Tag Scanner, Stat Correlator), +4 (Humanized Aim), +2 (Ignore Threat Victims, OOF Priority Only)
 S.SliderCount         = 32   -- +3 (Aim Curvature, Target Deadzone, Tremor Intensity)
 S.DropdownCount       = 38   -- +1 (Recording Cloak), +1 (Inspect Preset Category)
 S.ButtonCount         = 24   -- +3 (Cloaking), +1 (Restart), -2 (Quick-Load configs removed), +1 (Override Profile)

@@ -980,6 +980,12 @@ end})
 IntelTab:CreateToggle({Name = "Auto-Expire Tracked Players on Disconnect", CurrentValue = S.AutoExpireOnDisconnect, Flag = "AutoExpireOnDisconnect", Callback = function(v)
     S.AutoExpireOnDisconnect = v
 end})
+IntelTab:CreateToggle({Name = "Deep Tag & Attribute Scanner (Multi-Kit)", CurrentValue = S.DeepThreatScanEnabled ~= false, Flag = "DeepThreatScan", Callback = function(v)
+    S.DeepThreatScanEnabled = v
+end})
+IntelTab:CreateToggle({Name = "Leaderboard Stat Correlator (Zero-Tag Games)", CurrentValue = S.StatCorrelatorEnabled ~= false, Flag = "StatCorrelator", Callback = function(v)
+    S.StatCorrelatorEnabled = v
+end})
 
 IntelTab:CreateSection("Nemesis System")
 IntelTab:CreateToggle({Name = "Enable Nemesis System (Death Tracking)", CurrentValue = S.NemesisEnabled, Flag = "NemesisEnabled", Callback = function(v)
@@ -1304,6 +1310,7 @@ PresetsTab:CreateButton({
                 ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
+                DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1367,7 +1374,8 @@ local STO_FLAG = {
     ClickToMarkEnabled = "ClickToMark", MarkMethod = "MarkMethod", StrictPrioritize = "StrictPrioritize", WallCheck = "WallCheck",
     NoCollisionCheck = "NoCollisionCheck", TransparencyCheck = "TransparencyCheck", TransparencyThreshold = "TransparencyThreshold",
     DecalsCheck = "DecalsCheck", TargetPlayers = "TargetPlayers", TargetNPCs = "TargetNPCs", TeamCheck = "TeamCheck",
-    AutoEnableOnEquip = "AutoEquipAim", IgnoreDead = "IgnoreDead"
+    AutoEnableOnEquip = "AutoEquipAim", IgnoreDead = "IgnoreDead",
+    DeepThreatScanEnabled = "DeepThreatScan", StatCorrelatorEnabled = "StatCorrelator"
 }
 
 PresetsTab:CreateButton({
@@ -1476,6 +1484,7 @@ PresetsTab:CreateButton({
                 ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
+                DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1556,6 +1565,8 @@ local function BuildPresetStatusContent(profileName, category)
         check("Team Check",             data.TeamCheck)
         check("Target Players",         data.TargetPlayers)
         check("Target NPCs",            data.TargetNPCs)
+        check("Deep Tag Scanner",       data.DeepThreatScanEnabled)
+        check("Stat Correlator",        data.StatCorrelatorEnabled)
     elseif category == "Automation" then
         check("Auto-Engage on Equip",   data.AutoEnableOnEquip)
         check("FOV Circle",             data.ShowFOV)

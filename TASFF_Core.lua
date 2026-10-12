@@ -2059,8 +2059,36 @@ local function HookNeutralization(p)
             ResolveKiller(p, char, hum, function(killerObj)
                 local killerName = killerObj and killerObj.Name or "Unknown"
 
+                -- Check if the victim was a threat or priority target in Intel
+                local victimIntel = S.IntelPlayers and S.IntelPlayers[p.Name]
+                local victimIsPrio = table.find(S.PriorityPlayers or {}, p.Name) ~= nil
+                local isThreatVictim = (victimIntel ~= nil) or victimIsPrio
+                local priorityReason = ""
+                if isThreatVictim then
+                    local src = victimIntel and victimIntel.source
+                    if src == "Nemesis" or (victimIntel and victimIntel.nemesis) then
+                        priorityReason = "nemesis"
+                    elseif src == "Threat" then
+                        priorityReason = "threat"
+                    elseif src == "Marked" then
+                        priorityReason = "click to mark"
+                    elseif src == "Registry" then
+                        priorityReason = "registry"
+                    elseif victimIsPrio then
+                        priorityReason = "priority"
+                    else
+                        priorityReason = "priority"
+                    end
+                end
+
                 if S.KillFeedEnabled and killerName ~= "Unknown" and killerName ~= p.Name then
-                    Notify({Title="TASFF Intel", Content=killerName.." killed "..p.Name, Duration=2, Image="crosshair"})
+                    local feedContent
+                    if isThreatVictim and priorityReason ~= "" then
+                        feedContent = killerName .. " neutralized " .. p.Name .. " (" .. priorityReason .. ")"
+                    else
+                        feedContent = killerName .. " killed " .. p.Name
+                    end
+                    Notify({Title="TASFF Intel", Content=feedContent, Duration=2, Image="crosshair"})
                 end
 
                 -- Session User Kill Count: track if WE killed this player
@@ -2070,7 +2098,11 @@ local function HookNeutralization(p)
                     if S.DebugMode then print("[TASFF Debug] Session kill #"..S.SessionUserKills.." on "..p.Name) end
                 end
 
-                if killerObj and killerObj ~= Player and killerObj ~= p then
+                -- If victim was a threat/priority player and IgnoreThreatVictims is enabled,
+                -- killing them does NOT count towards the killer's killstreak, nemesis, or threat auto-flagging.
+                local skipThreatAttribution = (S.IgnoreThreatVictims ~= false and isThreatVictim)
+
+                if killerObj and killerObj ~= Player and killerObj ~= p and not skipThreatAttribution then
                     -- Add to global kill count for auto-flagging
                     if S.KillCountThreatEnabled then
                         S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
@@ -2587,7 +2619,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             -- Cloak: OOF Arrows
             local cloakOOF = IsHiddenFromRecording("OOF Arrows")
                 or IsHiddenFromRecording("Drawing-Based ESP (Box, Skeleton, Snaplines, OOF Arrows)")
-            if OOFE and not onScreen and not cloakOOF then
+            local oofTargetValid = not S.OOFArrowsPriorityOnly or isPriority
+            if OOFE and not onScreen and not cloakOOF and oofTargetValid then
                 if not OOFArrowCache[t.Instance] then
                     local arrow=NewDrawing("Triangle")
                     if arrow then arrow.Thickness=2;arrow.Filled=true;OOFArrowCache[t.Instance]=arrow end

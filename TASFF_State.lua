@@ -28,6 +28,8 @@ _G.TASFF_State = {
     SmoothnessY                 = 1.5,           -- vertical smoothness for Advanced Legit (Mouse)
     BlatantSnapSpeed            = 100,           -- 100 = instant snap; <100 = lerp fraction
     PredictionAmount            = 0.16,
+    DistancePredictionAdjustEnabled = false,
+    MaxAutoPrediction           = 0.45,
 
     -- // ── v2.2.5 Humanized Legit Aim Engine ────────────────────── // --
     HumanizedAimEnabled         = true,          -- master switch for natural human-like aiming dynamics
@@ -67,6 +69,8 @@ _G.TASFF_State = {
     AutoExpireOnDisconnect      = false,
     DeepThreatScanEnabled       = true,
     StatCorrelatorEnabled       = true,
+    OtherPlayersDamageTracking  = true,          -- tracks non-lethal damage between any players; flags aggressors as Threats
+    ExpertInstinctsEnabled      = false,         -- instant counter-snap and target lock when attacked
     
     -- // -- Intel System Features (v2.0.5) --------------------------- // --
     KillCountThreatEnabled      = false,

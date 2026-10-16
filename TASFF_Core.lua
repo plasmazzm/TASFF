@@ -1222,19 +1222,26 @@ local function HookThreatHealth(char)
     end
 
     TrackConnection(humanoid.HealthChanged:Connect(function(newHealth)
-        if S.ThreatDetectorEnabled and newHealth < lastHealth then
+        if (S.ThreatDetectorEnabled or S.ExpertInstinctsEnabled) and newHealth < lastHealth then
             if newHealth <= 0 then
                 handleLocalDeath()
             else
                 local creator = (S.DeepThreatScanEnabled ~= false and ScanForKillerTag(char, humanoid))
                     or humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("creatorTag")
                 local pObj = ExtractPlayerFromValue(creator)
+                local attackerName = nil
+                local attackerObj = nil
                 if pObj and pObj ~= Player then
-                    RegisterThreat(pObj.Name, false)
+                    attackerName = pObj.Name
+                    attackerObj = pObj
+                    if S.ThreatDetectorEnabled then
+                        RegisterThreat(pObj.Name, false)
+                    end
                 else
                     local myPos = char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart.Position
                     if myPos then
                         local nearestAttacker, nearestDist = nil, S.ThreatProximityRadius or 80
+                        local nearestObj = nil
                         for _, p in ipairs(Players:GetPlayers()) do
                             if p ~= Player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                                 local root = p.Character.HumanoidRootPart
@@ -1242,12 +1249,52 @@ local function HookThreatHealth(char)
                                 if d < nearestDist then
                                     local vel = root.AssemblyLinearVelocity
                                     if vel.Magnitude < 5 or vel.Unit:Dot((myPos - root.Position).Unit) > 0.3 then
-                                        nearestDist = d; nearestAttacker = p.Name
+                                        nearestDist = d; nearestAttacker = p.Name; nearestObj = p
                                     end
                                 end
                             end
                         end
-                        if nearestAttacker then RegisterThreat(nearestAttacker, false) end
+                        if nearestAttacker then
+                            attackerName = nearestAttacker
+                            attackerObj = nearestObj
+                            if S.ThreatDetectorEnabled then
+                                RegisterThreat(nearestAttacker, false)
+                            end
+                        end
+                    end
+                end
+
+                -- v2.2.5 Expert Instincts: Instant counter-reaction camera snap & lock-on
+                if S.ExpertInstinctsEnabled and attackerObj and attackerObj.Character then
+                    local aChar = attackerObj.Character
+                    local aRoot = aChar:FindFirstChild("HumanoidRootPart")
+                    local aHum = aChar:FindFirstChildOfClass("Humanoid")
+                    if aRoot and aHum and aHum.Health > 0 then
+                        S.VisibilityPrecomputed[aChar] = true
+                        if S.DeadTargetsCache then S.DeadTargetsCache[aChar] = nil end
+                        local targetPart = aChar:FindFirstChild(S.TargetPart) or aChar:FindFirstChild("Head") or aRoot
+                        local aimPos = targetPart.Position
+                        Camera.CFrame = CFrame.new(Camera.CFrame.Position, aimPos)
+                        S.CurrentTarget = {
+                            Instance = aChar,
+                            Root = aRoot,
+                            Name = attackerName or attackerObj.Name,
+                            IsPlayer = true,
+                            Player = attackerObj,
+                            ScreenAnchor = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2),
+                            DistFromCenter = 0,
+                            Distance = (aimPos - Camera.CFrame.Position).Magnitude,
+                            Position = aimPos,
+                            ScreenPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2),
+                            Health = aHum.Health,
+                            TeamColor = attackerObj.TeamColor and attackerObj.TeamColor.Color or Color3.fromRGB(255, 60, 60)
+                        }
+                        if S.MasterEnabled then
+                            S.AimbotActive = true
+                        end
+                        if S.Notify then
+                            S.Notify({Title = "Expert Instincts", Content = "Counter-locked onto attacker: " .. (attackerName or attackerObj.Name), Duration = 2, Image = "zap"})
+                        end
                     end
                 end
             end
@@ -1924,9 +1971,16 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
         end
         local isTeammate = isPlayer and Player.Team and pObj.Team and pObj.Team == Player.Team
         if S.TeamCheck and isTeammate then return end
-        -- v2.1.0 Render-thread wallcheck elimination:
-        -- Read from S.VisibilityPrecomputed (set by background loop ③, one yield per entity).
-        -- Falls back to live raycast ONLY on cold start (entry is nil before first sweep completes).
+
+        local pos = root.Position
+        local distFromCam = (pos - Camera.CFrame.Position).Magnitude
+        if distFromCam > (maxDistance or S.AimbotRenderDistance) then return end
+
+        -- v2.1.0 Render-thread wallcheck elimination with v2.2.5 Ambush Latency Fix:
+        -- Read from S.VisibilityPrecomputed (background loop ③).
+        -- If nil (cold start), do live check.
+        -- If false, but target is close (< 120 studs), in Intel, or in Priority list,
+        -- perform an immediate live check to eliminate the 300-600ms background sweep delay on surprise attacks!
         if performWallCheck then
             local precomp = S.VisibilityPrecomputed[model]
             if precomp == nil then
@@ -1936,13 +1990,23 @@ local function GetPotentialTargets(ignoreFOV, performWallCheck, customIgnoreList
                     precomp = IsVisibleCachedWrapper(model, S.ActivePartName, customIgnoreList)
                 end
                 S.VisibilityPrecomputed[model] = precomp
+            elseif not precomp then
+                local isPriorityOrClose = (distFromCam < 120) or (S.IntelPlayers and S.IntelPlayers[targetName] ~= nil) or (table.find(S.PriorityPlayers or {}, targetName) ~= nil)
+                if isPriorityOrClose then
+                    local liveVis
+                    if S.TargetPart == "Visible On Screen" then
+                        liveVis = FindVisibleOnScreenPart(model, customIgnoreList) ~= nil
+                    else
+                        liveVis = IsVisibleCachedWrapper(model, S.ActivePartName, customIgnoreList)
+                    end
+                    if liveVis then
+                        precomp = true
+                        S.VisibilityPrecomputed[model] = true
+                    end
+                end
             end
             if not precomp then return end
         end
-
-        local pos = root.Position
-        local distFromCam = (pos - Camera.CFrame.Position).Magnitude
-        if distFromCam > (maxDistance or S.AimbotRenderDistance) then return end
         local sPos, onScreen = Camera:WorldToViewportPoint(pos)
         local screenAnchor, screenPos, distFromCenter
         if ignoreFOV then
@@ -2136,9 +2200,28 @@ local function HookNeutralization(p)
             end)
         end
 
+        local lastHealth = hum.Health
         TrackConnection(hum.Died:Connect(handlePlayerDeath))
         TrackConnection(hum.HealthChanged:Connect(function(newHealth)
-            if newHealth <= 0 then handlePlayerDeath() end
+            if newHealth <= 0 then
+                handlePlayerDeath()
+            elseif S.OtherPlayersDamageTracking and newHealth < lastHealth then
+                local creator = (S.DeepThreatScanEnabled ~= false and ScanForKillerTag(char, hum))
+                    or hum:FindFirstChild("creator") or hum:FindFirstChild("creatorTag")
+                local attacker = ExtractPlayerFromValue(creator)
+                if attacker and attacker ~= p and attacker ~= Player then
+                    local victimIntel = S.IntelPlayers and S.IntelPlayers[p.Name]
+                    local victimIsPrio = table.find(S.PriorityPlayers or {}, p.Name) ~= nil
+                    local isThreatVictim = (victimIntel ~= nil) or victimIsPrio
+                    local skipThreat = (S.IgnoreThreatVictims ~= false and isThreatVictim)
+                    if not skipThreat then
+                        if S.AddToIntel then
+                            S.AddToIntel(attacker.Name, "Threat", 10)
+                        end
+                    end
+                end
+            end
+            lastHealth = newHealth
         end))
         TrackConnection(char.AncestryChanged:Connect(function(_, parent)
             if not parent and hum.Health < 20 then handlePlayerDeath() end
@@ -2227,11 +2310,11 @@ local lastTrackedTargetChar = nil
 local function GetHumanTremor(dt)
     local t = tick()
     -- Slow natural breathing / wrist posture drift (0.6 - 0.9 Hz)
-    local swayX = math.sin(t * 1.5) * 0.65 + math.cos(t * 2.1) * 0.35
-    local swayY = math.cos(t * 1.3) * 0.55 + math.sin(t * 1.8) * 0.25
+    local swayX = math.sin(t * 1.5) * 1.8 + math.cos(t * 2.1) * 1.0
+    local swayY = math.cos(t * 1.3) * 1.5 + math.sin(t * 1.8) * 0.8
     -- Physiological muscle tremor (9 - 13 Hz micro-tremor)
-    local tremorX = math.sin(t * 9.6) * 0.32 + math.cos(t * 14.1) * 0.18
-    local tremorY = math.cos(t * 10.2) * 0.28 + math.sin(t * 15.3) * 0.16
+    local tremorX = math.sin(t * 9.6) * 1.2 + math.cos(t * 14.1) * 0.6
+    local tremorY = math.cos(t * 10.2) * 1.0 + math.sin(t * 15.3) * 0.5
     local intensity = S.HumanTremorIntensity or 0.6
     return Vector2.new(swayX + tremorX, swayY + tremorY) * intensity
 end
@@ -2736,7 +2819,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         if CT and TargetingEnabled and AimbotActive and canAimWithTool then
             local TWP=nil
             local tv=CT.Root and CT.Root.AssemblyLinearVelocity or Vector3.new(0,0,0)
-            local isM=tv.Magnitude>1.5; local Mode=S.Mode; local PA=S.PredictionAmount
+            local isM=tv.Magnitude>1.5; local Mode=S.Mode; local PA=S.PredictionAmount or 0.16
+            if S.DistancePredictionAdjustEnabled and CT.Root then
+                local targetDist = (CT.Root.Position - Camera.CFrame.Position).Magnitude
+                local maxPA = S.MaxAutoPrediction or 0.45
+                local distFactor = math.clamp((targetDist - 40) / 360, 0, 1)
+                PA = PA + (maxPA - PA) * distFactor
+            end
             if TP=="Visible On Screen" then
                 if S.LastCustomTargetData and S.LastCustomTargetData.Part and S.LastCustomTargetData.Part.Parent and S.LastCustomTargetData.Part:IsDescendantOf(CT.Instance) then
                     local lvPart = S.LastCustomTargetData.Part
@@ -2821,15 +2910,15 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 
                         -- Physiological Muscle Tremor & Sway
                         local tremor = (S.HumanTremorEnabled and GetHumanTremor(deltaTime)) or Vector2.new(0, 0)
-                        local tremorAngleY = math.rad(-tremor.X * 0.012)
-                        local tremorAngleX = math.rad(tremor.Y * 0.012)
+                        local tremorAngleY = math.rad(-tremor.X * 0.08)
+                        local tremorAngleX = math.rad(tremor.Y * 0.08)
 
                         -- Natural Smoothstep Ease (acceleration and deceleration curve)
                         local ease = math.clamp(dist / 140, 0.06, 1.0)
                         local alpha = math.clamp(deltaTime * (5.5 / math.max(0.1, Sm)) * ease * deadzoneFactor, 0.002, 0.75)
 
-                        -- Reconstruct curved world point for CFrame interpolation
-                        local curvedScreen = tsp + arcOffset
+                        -- Reconstruct curved world point for CFrame interpolation (with screen-space tremor)
+                        local curvedScreen = tsp + arcOffset + tremor
                         local curvedRay = Camera:ViewportPointToRay(curvedScreen.X, curvedScreen.Y)
                         local camDist = (TWP - Camera.CFrame.Position).Magnitude
                         local humanAimPoint = curvedRay.Origin + (curvedRay.Direction * camDist)
@@ -2867,8 +2956,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                                 local stepY = math.clamp(deltaTime * (20 / Sy) * ease * deadzoneFactor, 0.003, 0.7)
 
                                 local effectiveDiff = diff + arcOffset
-                                local mvX = (effectiveDiff.X * stepX) + (tremor.X * (d2 > 4 and 0.45 or 0.15))
-                                local mvY = (effectiveDiff.Y * stepY) + (tremor.Y * (d2 > 4 and 0.45 or 0.15))
+                                local mvX = (effectiveDiff.X * stepX) + (tremor.X * 0.85)
+                                local mvY = (effectiveDiff.Y * stepY) + (tremor.Y * 0.85)
                                 if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
                                     mousemoverel(mvX, mvY)
                                 else
@@ -2887,6 +2976,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                                 else
                                     mousemoveabs(mp.X+mvX, mp.Y+mvY)
                                 end
+                            end
+                        elseif S.HumanizedAimEnabled and S.HumanTremorEnabled then
+                            local tremor = GetHumanTremor(deltaTime) * 0.4
+                            if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+                                mousemoverel(tremor.X, tremor.Y)
+                            else
+                                mousemoveabs(mp.X + tremor.X, mp.Y + tremor.Y)
                             end
                         end
                     end

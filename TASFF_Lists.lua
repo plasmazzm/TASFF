@@ -124,14 +124,19 @@ local FeatureList = {
     "Physiological Hand Tremor & Sway",
     "Human Reaction Inertia Tracking",
     "Hitbox Surface Drift",
+    "Ambush Latency Eliminator",
+    "Distance-Based Auto Prediction",
+    "Universal Player Damage Tracking",
+    "Expert Instincts (Instant Counter-Lock)",
+    "Dedicated Misc & System Tab Separation",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 87   -- +2 (Deep Tag Scanner, Stat Correlator), +4 (Humanized Aim), +2 (Ignore Threat Victims, OOF Priority Only)
-S.SliderCount         = 32   -- +3 (Aim Curvature, Target Deadzone, Tremor Intensity)
-S.DropdownCount       = 38   -- +1 (Recording Cloak), +1 (Inspect Preset Category)
-S.ButtonCount         = 24   -- +3 (Cloaking), +1 (Restart), -2 (Quick-Load configs removed), +1 (Override Profile)
+S.ToggleCount         = 90   -- +3 (Distance Prediction, Universal Damage Tracking, Expert Instincts)
+S.SliderCount         = 33   -- +1 (Maximum Auto Prediction)
+S.DropdownCount       = 38
+S.ButtonCount         = 24
 S.KeybindCount        = 5
 S.StatusDisplayCount  = 6    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status
 

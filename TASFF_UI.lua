@@ -392,6 +392,7 @@ local function BuildStatusContent(category)
         check("Grace Period",           S.GracePeriodEnabled)
         check("Triggerbot",             S.AutoClickEnabled)
         check("Melee Mode",             S.MeleeModeEnabled)
+        check("Distance Auto-Prediction", S.DistancePredictionAdjustEnabled)
     elseif category == "Visuals" then
         check("Highlights (Players)",   S.UseHighlight)
         check("Highlights (NPCs)",      S.UseNPCHighlight)
@@ -408,6 +409,8 @@ local function BuildStatusContent(category)
         check("Show Tool Check",        S.ShowToolCheck)
     elseif category == "Intel" then
         check("Threat Detector",        S.ThreatDetectorEnabled)
+        check("Universal Damage Track", S.OtherPlayersDamageTracking)
+        check("Expert Instincts",       S.ExpertInstinctsEnabled)
         check("Nemesis System",         S.NemesisEnabled)
         check("Click-to-Mark",          S.ClickToMarkEnabled)
         check("Focus Mode ESP",         S.FocusMode)
@@ -606,6 +609,12 @@ MainTab:CreateSlider({Name = "Blatant Snap Speed (100 = Instant)", Range = {5, 1
 end})
 MainTab:CreateSlider({Name = "Velocity Prediction Intensity", Range = {0, 0.5}, Increment = 0.01, CurrentValue = S.PredictionAmount, Flag = "PredIntense", Callback = function(v)
     S.PredictionAmount = v
+end})
+MainTab:CreateToggle({Name = "Distance-Based Auto Prediction Adjust", CurrentValue = S.DistancePredictionAdjustEnabled, Flag = "DistancePredictionAdjustEnabled", Callback = function(v)
+    S.DistancePredictionAdjustEnabled = v
+end})
+MainTab:CreateSlider({Name = "Maximum Auto Prediction", Range = {0.16, 1.0}, Increment = 0.01, CurrentValue = S.MaxAutoPrediction or 0.45, Flag = "MaxAutoPrediction", Callback = function(v)
+    S.MaxAutoPrediction = v
 end})
 MainTab:CreateToggle({Name = "Dynamic Recoil Control (DRC)", CurrentValue = S.DynamicRecoilEnabled, Flag = "DynamicRecoil", Callback = function(v)
     S.DynamicRecoilEnabled = v
@@ -990,6 +999,12 @@ end})
 IntelTab:CreateToggle({Name = "Enable Threat Detector (Damage Tracking)", CurrentValue = S.ThreatDetectorEnabled, Flag = "ThreatDetector", Callback = function(v)
     S.ThreatDetectorEnabled = v
 end})
+IntelTab:CreateToggle({Name = "Universal Player Damage Tracking", CurrentValue = S.OtherPlayersDamageTracking, Flag = "OtherPlayersDamageTracking", Callback = function(v)
+    S.OtherPlayersDamageTracking = v
+end})
+IntelTab:CreateToggle({Name = "Expert Instincts (Instant Counter-Lock)", CurrentValue = S.ExpertInstinctsEnabled, Flag = "ExpertInstinctsEnabled", Callback = function(v)
+    S.ExpertInstinctsEnabled = v
+end})
 IntelTab:CreateToggle({Name = "Threat Neutralization (Auto-expire on kill)", CurrentValue = S.ThreatNeutralizationEnabled, Flag = "ThreatNeutralization", Callback = function(v)
     S.ThreatNeutralizationEnabled = v
 end})
@@ -1322,6 +1337,7 @@ PresetsTab:CreateButton({
                 AimDeadzoneRadius = S.AimDeadzoneRadius, HumanTremorEnabled = S.HumanTremorEnabled,
                 HumanTremorIntensity = S.HumanTremorIntensity, TargetInertiaTracking = S.TargetInertiaTracking,
                 HitboxOffsetDrift = S.HitboxOffsetDrift,
+                DistancePredictionAdjustEnabled = S.DistancePredictionAdjustEnabled, MaxAutoPrediction = S.MaxAutoPrediction,
                 -- Visuals & Overlays
                 VisualMode = S.VisualMode, UseHighlight = S.UseHighlight, UseNPCHighlight = S.UseNPCHighlight,
                 FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
@@ -1342,6 +1358,7 @@ PresetsTab:CreateButton({
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
+                OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1410,7 +1427,9 @@ local STO_FLAG = {
     IgnoreThreatVictims = "IgnoreThreatVictims", OOFArrowsPriorityOnly = "OOFArrowsPriorityOnly",
     HumanizedAimEnabled = "HumanizedAim", AimPathCurvature = "AimCurvature", AimDeadzoneRadius = "AimDeadzone",
     HumanTremorEnabled = "HumanTremor", HumanTremorIntensity = "TremorIntensity",
-    TargetInertiaTracking = "TargetInertia", HitboxOffsetDrift = "HitboxDrift"
+    TargetInertiaTracking = "TargetInertia", HitboxOffsetDrift = "HitboxDrift",
+    DistancePredictionAdjustEnabled = "DistancePredictionAdjustEnabled", MaxAutoPrediction = "MaxAutoPrediction",
+    OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled"
 }
 
 PresetsTab:CreateButton({
@@ -1504,6 +1523,7 @@ PresetsTab:CreateButton({
                 AimDeadzoneRadius = S.AimDeadzoneRadius, HumanTremorEnabled = S.HumanTremorEnabled,
                 HumanTremorIntensity = S.HumanTremorIntensity, TargetInertiaTracking = S.TargetInertiaTracking,
                 HitboxOffsetDrift = S.HitboxOffsetDrift,
+                DistancePredictionAdjustEnabled = S.DistancePredictionAdjustEnabled, MaxAutoPrediction = S.MaxAutoPrediction,
                 -- Visuals & Overlays
                 VisualMode = S.VisualMode, UseHighlight = S.UseHighlight, UseNPCHighlight = S.UseNPCHighlight,
                 FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
@@ -1524,6 +1544,7 @@ PresetsTab:CreateButton({
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
+                OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1586,6 +1607,7 @@ local function BuildPresetStatusContent(profileName, category)
         check("Physiological Tremor",   data.HumanTremorEnabled)
         check("Reaction Inertia",       data.TargetInertiaTracking)
         check("Hitbox Drift",           data.HitboxOffsetDrift)
+        check("Distance Auto-Prediction", data.DistancePredictionAdjustEnabled)
     elseif category == "Visuals" then
         check("Highlights (Players)",   data.UseHighlight)
         check("Highlights (NPCs)",      data.UseNPCHighlight)
@@ -1602,6 +1624,8 @@ local function BuildPresetStatusContent(profileName, category)
         check("Show Tool Check",        data.ShowToolCheck)
     elseif category == "Intel" then
         check("Threat Detector",        data.ThreatDetectorEnabled)
+        check("Universal Damage Track", data.OtherPlayersDamageTracking)
+        check("Expert Instincts",       data.ExpertInstinctsEnabled)
         check("Nemesis System",         data.NemesisEnabled)
         check("Click-to-Mark",          data.ClickToMarkEnabled)
         check("Focus Mode ESP",         data.FocusMode)
@@ -2097,45 +2121,9 @@ CustomizationTab:CreateButton({Name = "Reset UI Theme to Default", Callback = fu
     ScheduleColorSettingsSave()
 end})
 
-local MiscTab = Window:CreateTab("System", "cog")
+local MiscTab = Window:CreateTab("Misc", "layers")
 
-
-MiscTab:CreateSection("Performance Engine")
-PerformanceIndicator = MiscTab:CreateParagraph({
-    Title   = "Active Performance Profile",
-    Content = "Current Mode: " .. (S.PerformanceMode or "Medium") ..
-              " (Interval: " .. ((S.PerformanceIntervals or {})[S.PerformanceMode] or 3) .. " frames)"
-})
-S.PerformanceIndicator = PerformanceIndicator
-
-MiscTab:CreateDropdown({
-    Name            = "Core Frame-Skip Strategy",
-    Options         = S.PerformanceModes or {"Ultra High", "High", "Medium", "Low", "Ultra Low"},
-    CurrentOption   = {S.PerformanceMode},
-    MultipleOptions = false,
-    Flag            = "PerformanceMode",
-    Callback        = function(v)
-        S.PerformanceMode = v[1] or "Medium"
-        S.FrameCounters.HeavySystems = 0
-        S.FrameCounters.NPCs         = 0
-        S.FrameCounters.WorkspaceSweep = 0
-        S.FrameCounters.CacheCleanup = 0
-        pcall(function()
-            PerformanceIndicator:Set({
-                Title   = "Active Performance Profile",
-                Content = "Current Mode: " .. S.PerformanceMode ..
-                          " (Interval: " .. ((S.PerformanceIntervals or {})[S.PerformanceMode] or 3) .. " frames)"
-            })
-        end)
-    end
-})
-
-MiscTab:CreateSection("Security & Failsafes")
-MiscTab:CreateParagraph({
-    Title   = "Panic System & Clean Unload",
-    Content = "Panic: Instantly suspends Master Switch, releases all virtual mouse/key inputs, and hides overlays.\nKill/Unload: Destroys the Rayfield GUI completely and terminates all backend memory connections."
-})
-
+MiscTab:CreateSection("Notification Controls")
 MiscTab:CreateToggle({Name = "Silence All Notifications", CurrentValue = S.DisableNotifications, Flag = "DisableNotifications", Callback = function(v)
     S.DisableNotifications = v
 end})
@@ -2147,10 +2135,8 @@ MiscTab:CreateToggle({Name = "Suppress Rayfield Advertising Notifications", Curr
     S.SuppressRayfieldAds = v
 end})
 
+MiscTab:CreateSection("Utilities")
 MiscTab:CreateToggle({Name = "Anti-AFK (Prevent Kick)", CurrentValue = S.AntiAFKEnabled, Flag = "AntiAFK", Callback = function(v) S.AntiAFKEnabled = v end})
-MiscTab:CreateToggle({Name = "FPS Watcher (Auto-Tune Performance Mode)", CurrentValue = S.FPSWatcherEnabled, Flag = "FPSWatcher", Callback = function(v) S.FPSWatcherEnabled = v end})
-
-MiscTab:CreateSection("Quick Controls")
 MiscTab:CreateToggle({Name = "Rapid Aim Mode Cycle (Keybind)", CurrentValue = S.RapidModeCycleEnabled, Flag = "RapidModeCycle", Callback = function(v) S.RapidModeCycleEnabled = v end})
 MiscTab:CreateKeybind({
     Name           = "Mode Cycle Key",
@@ -2171,103 +2157,6 @@ MiscTab:CreateKeybind({
                 })
             end
         end
-    end
-})
-MiscTab:CreateToggle({Name = "Debug Mode (Verbose Console Output)", CurrentValue = S.DebugMode, Flag = "DebugMode", Callback = function(v) S.DebugMode = v end})
-
-MiscTab:CreateKeybind({
-        Name           = "Global Panic Keybind",
-        CurrentKeybind = S.PanicKeybind or "Delete",
-        HoldToInteract = false,
-        CallOnChange   = true,
-        Flag           = "PanicKeybind",
-        Callback       = function(key)
-            local validKey = SanitizeKeyName(key)
-            if validKey then
-                S.PanicKeybind = validKey
-                if S.Notify then
-                    S.Notify({
-                        Title    = "TASFF Keybind",
-                        Content  = "Panic key set to [" .. tostring(validKey) .. "]",
-                        Duration = 2,
-                        Image    = "keyboard"
-                    })
-                end
-            end
-        end
-    })
-
-MiscTab:CreateButton({
-    Name     = "Execute Panic Protocol",
-    Callback = function()
-        if S.TriggerPanic then S.TriggerPanic() end
-    end
-})
-
-MiscTab:CreateButton({
-    Name     = "Factory Reset (Restore All Defaults)",
-    Callback = function()
-        -- Exhaustive reset to prevent "frankenstein" states
-        S.MasterEnabled = false;        S.TargetingEnabled = true;      S.Mode = "Legit (Camera)"
-        S.TargetPart = "Head";          S.ActivePartName = "Head"
-        S.PriorityMode = "None";        S.VitalityMode = "None";        S.TargetNearCenter = false
-        S.Smoothness = 1.5;             S.PredictionAmount = 0.16
-        S.SilentAimEnabled = false;     S.DynamicRecoilEnabled = false
-        S.RandomizeHitboxEnabled = false
-        S.TargetSwitchDelayEnabled = false; S.SwitchDelayMs = 200
-        S.GracePeriodEnabled = false;   S.GracePeriodMs = 150
-        S.AimbotRenderDistance = 1000;  S.StickyAimEnabled = false;     S.AutoADSEnabled = false
-        S.VisualMode = "Single";        S.UseHighlight = true;          S.UseNPCHighlight = true
-        S.FocusMode = false;            S.StreamProofESP = true;        S.VisibilityColorsEnabled = false
-        S.ESPRenderDistance = 1000;     S.ChamsEnabled = false;         S.ChamsOpacity = 10
-        S.BoxModeEnabled = false;       S.SkeletonModeEnabled = false
-        S.SnaplinesEnabled = false;     S.SnaplineOrigin = "Bottom"
-        S.OOFArrowsEnabled = false;     S.OOFArrowRadius = 150
-        S.UseInfoTag = true;            S.UseNPCInfoTag = true
-        S.ShowDisplayName = false;      S.ShowToolCheck = false
-        S.ShowFOV = false;              S.InvisibleFOV = false;         S.FOVSize = 100
-        S.AimReferenceMode = "Screen Center"
-        S.EnableCrosshair = false;      S.CrosshairStyle = "Plus";      S.CrosshairSize = 10
-        S.ManualCalibrationEnabled = false; S.CalibrationOffsetX = 0;   S.CalibrationOffsetY = 0
-        S.AutoClickEnabled = false;     S.TriggerbotClickMode = "Virtual"; S.ClickMethod = "Mash"
-        S.ClickInterval = 100;          S.ThirdPersonTriggerbot = false
-        S.KeyTriggerbotEnabled = false; S.KeyTriggerMode = "Single Press"
-        S.MeleeModeEnabled = false;     S.MeleeDetectionRange = 5;      S.MeleeClickInterval = 100
-        S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
-        S.BlacklistExpiredThreats = false
-        S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
-        S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
-        S.ClickToMarkEnabled = false;   S.MarkMethod = "Both"
-        S.StrictPrioritize = false;     S.WallCheck = true
-        S.NoCollisionCheck = false;     S.TransparencyCheck = false;    S.TransparencyThreshold = 0.5
-        S.DecalsCheck = false
-        S.TargetPlayers = true;         S.TargetNPCs = false;           S.TeamCheck = false
-        S.AutoEnableOnEquip = false;    S.IgnoreDead = true
-        S.CurrentTarget = nil
-        if S.SetADSState    then S.SetADSState(false) end
-        if S.ClearVisuals   then S.ClearVisuals()     end
-        if S.ClearCrosshair then S.ClearCrosshair()   end
-        if S.Notify then S.Notify({Title = "TASFF System", Content = "Factory Reset complete. All modules restored to default.", Duration = 3, Image = "list-restart"}) end
-    end
-})
-
-MiscTab:CreateButton({
-    Name     = "Restart Script & Reload Interface",
-    Callback = function()
-        if S.RestartScript then
-            S.RestartScript()
-        elseif getgenv and getgenv().TASFF and getgenv().TASFF.RestartScript then
-            getgenv().TASFF.RestartScript()
-        else
-            if S.Notify then S.Notify({Title = "TASFF System", Content = "Restart function unavailable. Re-execute via executor.", Duration = 3, Image = "alert-triangle"}) end
-        end
-    end
-})
-
-MiscTab:CreateButton({
-    Name     = "Terminate Script & Unload Interface",
-    Callback = function()
-        if S.UnloadScript then S.UnloadScript() end
     end
 })
 
@@ -2414,6 +2303,151 @@ end)
 -- Initial build
 task.defer(RebuildCloakStatus)
 
+-- // ══════════════════════════════════════════════════════════════ // --
+-- //                       SYSTEM TAB (v2.2.5)                     // --
+-- // ══════════════════════════════════════════════════════════════ // --
+
+local SystemTab = Window:CreateTab("System", "cog")
+
+SystemTab:CreateSection("Performance Engine")
+PerformanceIndicator = SystemTab:CreateParagraph({
+    Title   = "Active Performance Profile",
+    Content = "Current Mode: " .. (S.PerformanceMode or "Medium") ..
+              " (Interval: " .. ((S.PerformanceIntervals or {})[S.PerformanceMode] or 3) .. " frames)"
+})
+S.PerformanceIndicator = PerformanceIndicator
+
+SystemTab:CreateDropdown({
+    Name            = "Core Frame-Skip Strategy",
+    Options         = S.PerformanceModes or {"Ultra High", "High", "Medium", "Low", "Ultra Low"},
+    CurrentOption   = {S.PerformanceMode},
+    MultipleOptions = false,
+    Flag            = "PerformanceMode",
+    Callback        = function(v)
+        S.PerformanceMode = v[1] or "Medium"
+        S.FrameCounters.HeavySystems = 0
+        S.FrameCounters.NPCs         = 0
+        S.FrameCounters.WorkspaceSweep = 0
+        S.FrameCounters.CacheCleanup = 0
+        pcall(function()
+            PerformanceIndicator:Set({
+                Title   = "Active Performance Profile",
+                Content = "Current Mode: " .. S.PerformanceMode ..
+                          " (Interval: " .. ((S.PerformanceIntervals or {})[S.PerformanceMode] or 3) .. " frames)"
+            })
+        end)
+    end
+})
+
+SystemTab:CreateToggle({Name = "FPS Watcher (Auto-Tune Performance Mode)", CurrentValue = S.FPSWatcherEnabled, Flag = "FPSWatcher", Callback = function(v) S.FPSWatcherEnabled = v end})
+
+SystemTab:CreateSection("Security & Failsafes")
+SystemTab:CreateParagraph({
+    Title   = "Panic System & Clean Unload",
+    Content = "Panic: Instantly suspends Master Switch, releases all virtual mouse/key inputs, and hides overlays.\nKill/Unload: Destroys the Rayfield GUI completely and terminates all backend memory connections."
+})
+
+SystemTab:CreateToggle({Name = "Debug Mode (Verbose Console Output)", CurrentValue = S.DebugMode, Flag = "DebugMode", Callback = function(v) S.DebugMode = v end})
+
+SystemTab:CreateKeybind({
+    Name           = "Global Panic Keybind",
+    CurrentKeybind = S.PanicKeybind or "Delete",
+    HoldToInteract = false,
+    CallOnChange   = true,
+    Flag           = "PanicKeybind",
+    Callback       = function(key)
+        local validKey = SanitizeKeyName(key)
+        if validKey then
+            S.PanicKeybind = validKey
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Keybind",
+                    Content  = "Panic key set to [" .. tostring(validKey) .. "]",
+                    Duration = 2,
+                    Image    = "keyboard"
+                })
+            end
+        end
+    end
+})
+
+SystemTab:CreateButton({
+    Name     = "Execute Panic Protocol",
+    Callback = function()
+        if S.TriggerPanic then S.TriggerPanic() end
+    end
+})
+
+SystemTab:CreateButton({
+    Name     = "Factory Reset (Restore All Defaults)",
+    Callback = function()
+        -- Exhaustive reset to prevent "frankenstein" states
+        S.MasterEnabled = false;        S.TargetingEnabled = true;      S.Mode = "Legit (Camera)"
+        S.TargetPart = "Head";          S.ActivePartName = "Head"
+        S.PriorityMode = "None";        S.VitalityMode = "None";        S.TargetNearCenter = false
+        S.Smoothness = 1.5;             S.PredictionAmount = 0.16
+        S.DistancePredictionAdjustEnabled = false; S.MaxAutoPrediction = 0.45
+        S.SilentAimEnabled = false;     S.DynamicRecoilEnabled = false
+        S.RandomizeHitboxEnabled = false
+        S.TargetSwitchDelayEnabled = false; S.SwitchDelayMs = 200
+        S.GracePeriodEnabled = false;   S.GracePeriodMs = 150
+        S.AimbotRenderDistance = 1000;  S.StickyAimEnabled = false;     S.AutoADSEnabled = false
+        S.VisualMode = "Single";        S.UseHighlight = true;          S.UseNPCHighlight = true
+        S.FocusMode = false;            S.StreamProofESP = true;        S.VisibilityColorsEnabled = false
+        S.ESPRenderDistance = 1000;     S.ChamsEnabled = false;         S.ChamsOpacity = 10
+        S.BoxModeEnabled = false;       S.SkeletonModeEnabled = false
+        S.SnaplinesEnabled = false;     S.SnaplineOrigin = "Bottom"
+        S.OOFArrowsEnabled = false;     S.OOFArrowRadius = 150;         S.OOFArrowsPriorityOnly = false
+        S.UseInfoTag = true;            S.UseNPCInfoTag = true
+        S.ShowDisplayName = false;      S.ShowToolCheck = false
+        S.ShowFOV = false;              S.InvisibleFOV = false;         S.FOVSize = 100
+        S.AimReferenceMode = "Screen Center"
+        S.EnableCrosshair = false;      S.CrosshairStyle = "Plus";      S.CrosshairSize = 10
+        S.ManualCalibrationEnabled = false; S.CalibrationOffsetX = 0;   S.CalibrationOffsetY = 0
+        S.AutoClickEnabled = false;     S.TriggerbotClickMode = "Virtual"; S.ClickMethod = "Mash"
+        S.ClickInterval = 100;          S.ThirdPersonTriggerbot = false
+        S.KeyTriggerbotEnabled = false; S.KeyTriggerMode = "Single Press"
+        S.MeleeModeEnabled = false;     S.MeleeDetectionRange = 5;      S.MeleeClickInterval = 100
+        S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
+        S.BlacklistExpiredThreats = false
+        S.OtherPlayersDamageTracking = true; S.ExpertInstinctsEnabled = false
+        S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
+        S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
+        S.IgnoreThreatVictims = true
+        S.ClickToMarkEnabled = false;   S.MarkMethod = "Both"
+        S.StrictPrioritize = false;     S.WallCheck = true
+        S.NoCollisionCheck = false;     S.TransparencyCheck = false;    S.TransparencyThreshold = 0.5
+        S.DecalsCheck = false
+        S.TargetPlayers = true;         S.TargetNPCs = false;           S.TeamCheck = false
+        S.AutoEnableOnEquip = false;    S.IgnoreDead = true
+        S.CurrentTarget = nil
+        if S.SetADSState    then S.SetADSState(false) end
+        if S.ClearVisuals   then S.ClearVisuals()     end
+        if S.ClearCrosshair then S.ClearCrosshair()   end
+        if S.Notify then S.Notify({Title = "TASFF System", Content = "Factory Reset complete. All modules restored to default.", Duration = 3, Image = "list-restart"}) end
+    end
+})
+
+SystemTab:CreateButton({
+    Name     = "Restart Script & Reload Interface",
+    Callback = function()
+        if S.RestartScript then
+            S.RestartScript()
+        elseif getgenv and getgenv().TASFF and getgenv().TASFF.RestartScript then
+            getgenv().TASFF.RestartScript()
+        else
+            if S.Notify then S.Notify({Title = "TASFF System", Content = "Restart function unavailable. Re-execute via executor.", Duration = 3, Image = "alert-triangle"}) end
+        end
+    end
+})
+
+SystemTab:CreateButton({
+    Name     = "Terminate Script & Unload Interface",
+    Callback = function()
+        if S.UnloadScript then S.UnloadScript() end
+    end
+})
+
 
 
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
@@ -2425,19 +2459,19 @@ UpdateLogTab:CreateSection("Recent Releases & Updates")
 
 UpdateLogTab:CreateParagraph({
     Title   = "Version 2.2.5 (Threat Intelligence & Humanized Legit Aim Engine)",
-    Content = "• Enhanced Threat Intelligence Engine: multi-tier killer attribution with deep 22-tag/13-attribute scans and leaderstats delta correlation for zero-tag games.\n" ..
+    Content = "• Ambush Latency Fix: real-time visibility fallback for close (<120 studs) and threat targets completely eliminates background raycast loop delay.\n" ..
+              "• Distance-Based Auto Prediction: dynamically scales velocity lead with target distance, preventing crosshair trailing and missed shots at range.\n" ..
+              "• Universal Player Damage Tracking: tracks non-lethal damage between any players in the server, automatically labeling aggressors as Threats.\n" ..
+              "• Expert Instincts: instant camera counter-snap and target lock when attacked, immediately eliminating ambush reaction delays.\n" ..
+              "• Calibrated Hand Tremor & Sway: re-tuned physiological micro-tremor and breathing sway to produce organic, visually perceptible movement in Camera and Mouse aiming.\n" ..
+              "• Dedicated Misc & System Tab Separation: clean separation of Notification controls, Utilities, and Cloaking (Misc) from Performance, Security, and Failsafes (System).\n" ..
+              "• Enhanced Threat Intelligence Engine: multi-tier killer attribution with deep 22-tag/13-attribute scans and leaderstats delta correlation for zero-tag games.\n" ..
               "• Proximity Attributor Filter: leaderstats kill correlations filtered within proximity radius to eliminate false positives.\n" ..
               "• Threat Victim Kill Protection: optional toggle ensures killing an existing threat does not credit the killer towards threat streaks or nemesis triggers.\n" ..
               "• Detailed Neutralization Killfeed: displays contextual intel registry reasons in killfeed notifications (e.g. 'Killer neutralized Victim (nemesis/threat/click to mark)').\n" ..
               "• Priority-Filtered OOF Indicators: toggle to isolate off-screen arrow indicators to only point towards priority/intel targets.\n" ..
               "• High-Compatibility Status Display Icons: replaced unrendered box Unicode symbols with clean universal [V] and [X] indicators across all status monitors.\n" ..
-              "• Humanized Legit Dynamics: anti-spectator organic aiming mimicking realistic human biomechanics.\n" ..
-              "• Aim Path Wrist Curvature: crosshair and camera travel in organic parabolic arcs rather than robotic straight vectors.\n" ..
-              "• Target Deadzone Slack: relaxes magnetic pull when crosshair is already resting on target, preventing glued-crosshair spectator giveaways.\n" ..
-              "• Physiological Muscle Tremor & Sway: dual-frequency sinusoidal hand micro-tremors (9-13 Hz) and breathing sway (0.7 Hz) replace synthetic white noise.\n" ..
-              "• Human Reaction Inertia: realistic ~120ms inertia dampens impossible 0ms snap reversals against rapid AD-AD strafers.\n" ..
-              "• Hitbox Surface Drift: smoothly wanders across bone volume rather than locking to the geometric origin point.\n" ..
-              "• Memory Leak Safeguards: automated periodic garbage collection for stat delta tables and thread lifecycle tracking."
+              "• Humanized Legit Dynamics: anti-spectator organic aiming mimicking realistic human biomechanics (Aim Arc Curvature, Target Deadzone Slack, Reaction Inertia, Hitbox Volume Surface Drift)."
 })
 
 UpdateLogTab:CreateParagraph({
@@ -2514,6 +2548,7 @@ local booleanSettings = {
     "DeepThreatScanEnabled", "StatCorrelatorEnabled", "HumanizedAimEnabled",
     "HumanTremorEnabled", "TargetInertiaTracking", "HitboxOffsetDrift",
     "IgnoreThreatVictims", "OOFArrowsPriorityOnly",
+    "DistancePredictionAdjustEnabled", "OtherPlayersDamageTracking", "ExpertInstinctsEnabled",
 }
 for _, key in ipairs(booleanSettings) do
     if type(S[key]) ~= "boolean" then
@@ -2524,6 +2559,7 @@ end
 
 local numericRanges = {
     FOVSize = {10, 2000}, SwitchDelayMs = {0, 2000}, PredictionAmount = {0, 5},
+    MaxAutoPrediction = {0.16, 2},
     Smoothness = {0.1, 100}, SmoothnessX = {0.1, 100}, SmoothnessY = {0.1, 100},
     BlatantSnapSpeed = {1, 100}, TransparencyThreshold = {0, 1},
     GracePeriodMs = {0, 2000}, AimbotRenderDistance = {1, 10000},

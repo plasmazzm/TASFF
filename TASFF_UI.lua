@@ -323,7 +323,7 @@ HomeTab:CreateParagraph({
     Title   = "TASFF v2.2.5 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 91) .. " Toggles | " .. tostring(S.SliderCount or 34) .. " Sliders | " .. tostring(S.DropdownCount or 39) .. " Dropdowns | " .. tostring(S.ButtonCount or 25) .. " Buttons | " .. tostring(S.StatusDisplayCount or 7) .. " Status Displays\n"
+           .. "Controls: " .. tostring(S.ToggleCount or 92) .. " Toggles | " .. tostring(S.SliderCount or 34) .. " Sliders | " .. tostring(S.DropdownCount or 41) .. " Dropdowns | " .. tostring(S.ButtonCount or 29) .. " Buttons | " .. tostring(S.StatusDisplayCount or 7) .. " Status Displays\n"
            .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
 })
 
@@ -1008,6 +1008,115 @@ end})
 IntelTab:CreateSlider({Name = "Expert Instincts Lock Speed", Range = {5, 100}, Increment = 5, CurrentValue = S.ExpertInstinctsIntensity or 60, Flag = "ExpertInstinctsIntensity", Callback = function(v)
     S.ExpertInstinctsIntensity = v
 end})
+IntelTab:CreateToggle({Name = "Expert Instincts Weapon Check (Flee When Unarmed)", CurrentValue = S.InstinctsInventoryCheck, Flag = "InstinctsInventoryCheck", Callback = function(v)
+    S.InstinctsInventoryCheck = v
+end})
+
+local SelectedInstinctsBlacklistTool = nil
+local InstinctsBlacklistDropdownRef = nil
+
+IntelTab:CreateButton({
+    Name = "Blacklist Currently Held Tool from Instincts",
+    Callback = function()
+        local char = Player and Player.Character
+        local tool = char and char:FindFirstChildOfClass("Tool")
+        if tool then
+            if not table.find(S.InstinctsBlacklist, tool.Name) then
+                table.insert(S.InstinctsBlacklist, tool.Name)
+                if InstinctsBlacklistDropdownRef and InstinctsBlacklistDropdownRef.Refresh then
+                    pcall(function() InstinctsBlacklistDropdownRef:Refresh(#S.InstinctsBlacklist > 0 and S.InstinctsBlacklist or {"No Items Blacklisted"}, true) end)
+                end
+                if S.SaveInstinctsLists then S.SaveInstinctsLists() end
+                if S.Notify then S.Notify({Title = "TASFF Instincts", Content = "Blacklisted from instincts: " .. tool.Name .. " (seen as non-weapon)", Duration = 3, Image = "shield-off"}) end
+            else
+                if S.Notify then S.Notify({Title = "TASFF Instincts", Content = tool.Name .. " is already blacklisted.", Duration = 2, Image = "alert-circle"}) end
+            end
+        else
+            if S.Notify then S.Notify({Title = "TASFF Instincts", Content = "Equip a tool first to blacklist it.", Duration = 2, Image = "alert-circle"}) end
+        end
+    end
+})
+
+InstinctsBlacklistDropdownRef = IntelTab:CreateDropdown({
+    Name = "Instincts Blacklist (Seen as Non-Weapons)",
+    Options = #S.InstinctsBlacklist > 0 and S.InstinctsBlacklist or {"No Items Blacklisted"},
+    CurrentOption = {"No Items Blacklisted"},
+    Flag = "InstinctsBlacklistDropdown",
+    Callback = function(v)
+        SelectedInstinctsBlacklistTool = type(v) == "table" and v[1] or v
+    end
+})
+S.InstinctsBlacklistDropdownRef = InstinctsBlacklistDropdownRef
+
+IntelTab:CreateButton({
+    Name = "Remove Selected from Instincts Blacklist",
+    Callback = function()
+        if SelectedInstinctsBlacklistTool and SelectedInstinctsBlacklistTool ~= "No Items Blacklisted" then
+            local idx = table.find(S.InstinctsBlacklist, SelectedInstinctsBlacklistTool)
+            if idx then
+                table.remove(S.InstinctsBlacklist, idx)
+                if InstinctsBlacklistDropdownRef and InstinctsBlacklistDropdownRef.Refresh then
+                    pcall(function() InstinctsBlacklistDropdownRef:Refresh(#S.InstinctsBlacklist > 0 and S.InstinctsBlacklist or {"No Items Blacklisted"}, true) end)
+                end
+                if S.SaveInstinctsLists then S.SaveInstinctsLists() end
+                if S.Notify then S.Notify({Title = "TASFF Instincts", Content = "Removed: " .. SelectedInstinctsBlacklistTool, Duration = 2, Image = "check"}) end
+            end
+        end
+    end
+})
+
+local SelectedInstinctsPriorityTool = nil
+local InstinctsPriorityDropdownRef = nil
+
+IntelTab:CreateButton({
+    Name = "Prioritize Currently Held Tool for Instincts",
+    Callback = function()
+        local char = Player and Player.Character
+        local tool = char and char:FindFirstChildOfClass("Tool")
+        if tool then
+            if not table.find(S.InstinctsPrioritizedTools, tool.Name) then
+                table.insert(S.InstinctsPrioritizedTools, tool.Name)
+                if InstinctsPriorityDropdownRef and InstinctsPriorityDropdownRef.Refresh then
+                    pcall(function() InstinctsPriorityDropdownRef:Refresh(#S.InstinctsPrioritizedTools > 0 and S.InstinctsPrioritizedTools or {"No Items Prioritized"}, true) end)
+                end
+                if S.SaveInstinctsLists then S.SaveInstinctsLists() end
+                if S.Notify then S.Notify({Title = "TASFF Instincts", Content = "Prioritized for instincts: " .. tool.Name .. " (immediate engage)", Duration = 3, Image = "zap"}) end
+            else
+                if S.Notify then S.Notify({Title = "TASFF Instincts", Content = tool.Name .. " is already prioritized.", Duration = 2, Image = "alert-circle"}) end
+            end
+        else
+            if S.Notify then S.Notify({Title = "TASFF Instincts", Content = "Equip a tool first to prioritize it.", Duration = 2, Image = "alert-circle"}) end
+        end
+    end
+})
+
+InstinctsPriorityDropdownRef = IntelTab:CreateDropdown({
+    Name = "Instincts Priority Tools (Immediate Engage)",
+    Options = #S.InstinctsPrioritizedTools > 0 and S.InstinctsPrioritizedTools or {"No Items Prioritized"},
+    CurrentOption = {"No Items Prioritized"},
+    Flag = "InstinctsPriorityDropdown",
+    Callback = function(v)
+        SelectedInstinctsPriorityTool = type(v) == "table" and v[1] or v
+    end
+})
+S.InstinctsPriorityDropdownRef = InstinctsPriorityDropdownRef
+
+IntelTab:CreateButton({
+    Name = "Remove Selected from Instincts Priority",
+    Callback = function()
+        if SelectedInstinctsPriorityTool and SelectedInstinctsPriorityTool ~= "No Items Prioritized" then
+            local idx = table.find(S.InstinctsPrioritizedTools, SelectedInstinctsPriorityTool)
+            if idx then
+                table.remove(S.InstinctsPrioritizedTools, idx)
+                if InstinctsPriorityDropdownRef and InstinctsPriorityDropdownRef.Refresh then
+                    pcall(function() InstinctsPriorityDropdownRef:Refresh(#S.InstinctsPrioritizedTools > 0 and S.InstinctsPrioritizedTools or {"No Items Prioritized"}, true) end)
+                end
+                if S.SaveInstinctsLists then S.SaveInstinctsLists() end
+                if S.Notify then S.Notify({Title = "TASFF Instincts", Content = "Removed: " .. SelectedInstinctsPriorityTool, Duration = 2, Image = "check"}) end
+            end
+        end
+    end
+})
 IntelTab:CreateToggle({Name = "Threat Neutralization (Auto-expire on kill)", CurrentValue = S.ThreatNeutralizationEnabled, Flag = "ThreatNeutralization", Callback = function(v)
     S.ThreatNeutralizationEnabled = v
 end})
@@ -1362,6 +1471,7 @@ PresetsTab:CreateButton({
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
+                InstinctsInventoryCheck = S.InstinctsInventoryCheck,
                 AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
@@ -1434,7 +1544,8 @@ local STO_FLAG = {
     TargetInertiaTracking = "TargetInertia", HitboxOffsetDrift = "HitboxDrift",
     DistancePredictionAdjustEnabled = "DistancePredictionAdjustEnabled", MaxAutoPrediction = "MaxAutoPrediction",
     OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled",
-    ExpertInstinctsIntensity = "ExpertInstinctsIntensity", AutoUpdateCheckerEnabled = "AutoUpdateChecker"
+    ExpertInstinctsIntensity = "ExpertInstinctsIntensity", InstinctsInventoryCheck = "InstinctsInventoryCheck",
+    AutoUpdateCheckerEnabled = "AutoUpdateChecker"
 }
 
 PresetsTab:CreateButton({
@@ -1550,6 +1661,7 @@ PresetsTab:CreateButton({
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
+                InstinctsInventoryCheck = S.InstinctsInventoryCheck,
                 AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
@@ -2417,6 +2529,7 @@ SystemTab:CreateButton({
         S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
         S.BlacklistExpiredThreats = false
         S.OtherPlayersDamageTracking = true; S.ExpertInstinctsEnabled = false; S.ExpertInstinctsIntensity = 60
+        S.InstinctsInventoryCheck = false; S.InstinctsBlacklist = {}; S.InstinctsPrioritizedTools = {}
         S.AutoUpdateCheckerEnabled = true
         S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
         S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
@@ -2509,7 +2622,9 @@ UpdateLogTab:CreateParagraph({
               "• High-Compatibility Status Display Icons: replaced unrendered box Unicode symbols with clean universal [V] and [X] indicators across all status monitors.\n" ..
               "• Humanized Legit Dynamics: anti-spectator organic aiming mimicking realistic human biomechanics (Aim Arc Curvature, Target Deadzone Slack, Reaction Inertia, Hitbox Volume Surface Drift).\n" ..
               "• Auto-Update Checker & Repository Sync: background watcher and manual repository polling checks for committed updates and notifies when new builds are live.\n" ..
-              "• Legacy Releases Changelog Archive: interactive version dropdown allowing users to explore full changelogs for builds v1.2.0 through v1.5.5."
+              "• Legacy Releases Changelog Archive: interactive version dropdown allowing users to explore full changelogs for builds v1.2.0 through v1.5.5.\n" ..
+              "• Expert Instincts Pursuit & Defense Check: scans inventory for defense weapons when attacked, suppressing instincts if unarmed/fleeing with dedicated blacklist and priority registries.\n" ..
+              "• Smart Weapon Keyword Classifier: word-boundary filtering and compound keyword resolution eliminating false positives across extensive Roblox weapon and consumable libraries."
 })
 
 UpdateLogTab:CreateParagraph({
@@ -2685,7 +2800,7 @@ local booleanSettings = {
     "HumanTremorEnabled", "TargetInertiaTracking", "HitboxOffsetDrift",
     "IgnoreThreatVictims", "OOFArrowsPriorityOnly",
     "DistancePredictionAdjustEnabled", "OtherPlayersDamageTracking", "ExpertInstinctsEnabled",
-    "AutoUpdateCheckerEnabled",
+    "AutoUpdateCheckerEnabled", "InstinctsInventoryCheck",
 }
 for _, key in ipairs(booleanSettings) do
     if type(S[key]) ~= "boolean" then
@@ -2750,7 +2865,7 @@ for key, default in pairs(ConfigDefaults) do
         correctedSettings = true
     end
 end
-for _, key in ipairs({"BlacklistedPlayers", "PriorityPlayers", "ToolBlacklist", "VOSPriorityParts"}) do
+for _, key in ipairs({"BlacklistedPlayers", "PriorityPlayers", "ToolBlacklist", "VOSPriorityParts", "InstinctsBlacklist", "InstinctsPrioritizedTools"}) do
     local current = S[key]
     if type(current) ~= "table" then
         S[key] = {}

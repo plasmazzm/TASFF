@@ -1194,6 +1194,50 @@ local function ResolveKiller(victimPlayer, victimChar, victimHum, onResolved)
     end)
 end
 
+local function HasDefendingWeapon()
+    if not Player then return true end
+    local backpack = Player:FindFirstChildOfClass("Backpack")
+    local char = Player.Character
+    local tools = {}
+    if char then
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") then table.insert(tools, item) end
+        end
+    end
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then table.insert(tools, item) end
+        end
+    end
+
+    if #tools == 0 then
+        -- Completely unarmed (no tools in hands or backpack)
+        return false
+    end
+
+    -- Priority check: if any tool is in InstinctsPrioritizedTools, immediately engage!
+    for _, tool in ipairs(tools) do
+        if table.find(S.InstinctsPrioritizedTools or {}, tool.Name) then
+            return true
+        end
+    end
+
+    -- General check: is there at least one tool that is NOT blacklisted and qualifies as Weapon or Melee?
+    for _, tool in ipairs(tools) do
+        local isBlacklisted = (table.find(S.InstinctsBlacklist or {}, tool.Name) ~= nil)
+            or (table.find(S.ToolBlacklist or {}, tool.Name) ~= nil)
+        if not isBlacklisted then
+            local classification = S.ClassifyTool and S.ClassifyTool(tool.Name) or "Unknown"
+            if classification == "Weapon" or classification == "Melee" then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+S.HasDefendingWeapon = HasDefendingWeapon
+
 local function HookThreatHealth(char)
     if not char then return end
     local humanoid = char:WaitForChild("Humanoid", 3)
@@ -1274,6 +1318,13 @@ local function HookThreatHealth(char)
 
                 -- v2.2.5 Expert Instincts: Instant counter-reaction camera snap & lock-on
                 if S.ExpertInstinctsEnabled and attackerObj and attackerObj.Character then
+                    -- Instincts Inventory Defense Check: suppress lock if unarmed/fleeing
+                    if S.InstinctsInventoryCheck and not HasDefendingWeapon() then
+                        if S.DebugMode then
+                            print("[TASFF Instincts] Suppressed counter-lock: No defending weapon found in inventory (fleeing).")
+                        end
+                        return
+                    end
                     local aChar = attackerObj.Character
                     local aRoot = aChar:FindFirstChild("HumanoidRootPart")
                     local aHum = aChar:FindFirstChildOfClass("Humanoid")
@@ -1678,6 +1729,58 @@ end
 S.SaveToolBlacklist = SaveToolBlacklist
 S.LoadToolBlacklist = LoadToolBlacklist
 pcall(LoadToolBlacklist)   -- load on startup
+
+-- // ── Instincts Defense Blacklist & Priority Save/Load ─────────── // --
+local IBLFILE = S.InstinctsBlacklistFileName or "TASFF_InstinctsBlacklist.json"
+local IPRIFILE = S.InstinctsPriorityFileName or "TASFF_InstinctsPriority.json"
+
+local function SaveInstinctsLists()
+    local env = GetTASFFEnv()
+    if not (env and env.Capabilities and env.Capabilities.FileWrite) or type(writefile) ~= "function" then
+        return false
+    end
+    pcall(function()
+        writefile(IBLFILE, HttpService:JSONEncode(S.InstinctsBlacklist or {}))
+        writefile(IPRIFILE, HttpService:JSONEncode(S.InstinctsPrioritizedTools or {}))
+    end)
+    return true
+end
+
+local function LoadInstinctsLists()
+    local env = GetTASFFEnv()
+    if not (env and env.Capabilities and env.Capabilities.FileRead) or type(isfile) ~= "function" or type(readfile) ~= "function" then
+        return false
+    end
+    pcall(function()
+        if isfile and isfile(IBLFILE) then
+            local raw = readfile(IBLFILE)
+            local ok, tbl = pcall(function() return HttpService:JSONDecode(raw) end)
+            if ok and type(tbl) == "table" then
+                S.InstinctsBlacklist = tbl
+                if S.InstinctsBlacklistDropdownRef and S.InstinctsBlacklistDropdownRef.Refresh then
+                    local lst = #tbl > 0 and tbl or {"No Items Blacklisted"}
+                    pcall(function() S.InstinctsBlacklistDropdownRef:Refresh(lst, true) end)
+                end
+            end
+        end
+        if isfile and isfile(IPRIFILE) then
+            local raw = readfile(IPRIFILE)
+            local ok, tbl = pcall(function() return HttpService:JSONDecode(raw) end)
+            if ok and type(tbl) == "table" then
+                S.InstinctsPrioritizedTools = tbl
+                if S.InstinctsPriorityDropdownRef and S.InstinctsPriorityDropdownRef.Refresh then
+                    local lst = #tbl > 0 and tbl or {"No Items Prioritized"}
+                    pcall(function() S.InstinctsPriorityDropdownRef:Refresh(lst, true) end)
+                end
+            end
+        end
+    end)
+    return true
+end
+
+S.SaveInstinctsLists = SaveInstinctsLists
+S.LoadInstinctsLists = LoadInstinctsLists
+pcall(LoadInstinctsLists)
 
 -- // ── v2.1.0 Feature 8: Focus-Loss Panic ──────────────────────── // --
 table.insert(getgenv().TASFF.Connections, game:GetService("UserInputService").WindowFocusReleased:Connect(function()
@@ -2229,15 +2332,38 @@ local function HookNeutralization(p)
                 local creator = (S.DeepThreatScanEnabled ~= false and ScanForKillerTag(char, hum))
                     or hum:FindFirstChild("creator") or hum:FindFirstChild("creatorTag")
                 local attacker = ExtractPlayerFromValue(creator)
+                if not attacker then
+                    local victimRoot = char:FindFirstChild("HumanoidRootPart")
+                    local victimPos = victimRoot and victimRoot.Position
+                    if victimPos then
+                        local nearestDist = S.ThreatProximityRadius or 80
+                        local nearestObj = nil
+                        for _, otherP in ipairs(Players:GetPlayers()) do
+                            if otherP ~= p and otherP ~= Player and otherP.Character and otherP.Character:FindFirstChild("HumanoidRootPart") then
+                                local root = otherP.Character.HumanoidRootPart
+                                local d = (root.Position - victimPos).Magnitude
+                                if d < nearestDist then
+                                    local vel = root.AssemblyLinearVelocity
+                                    local dirToVictim = (victimPos - root.Position).Unit
+                                    local lookDir = root.CFrame.LookVector
+                                    if lookDir:Dot(dirToVictim) > 0.35 or vel.Magnitude < 5 or vel.Unit:Dot(dirToVictim) > 0.3 then
+                                        nearestDist = d; nearestObj = otherP
+                                    end
+                                end
+                            end
+                        end
+                        if nearestObj then
+                            attacker = nearestObj
+                        end
+                    end
+                end
                 if attacker and attacker ~= p and attacker ~= Player then
                     local victimIntel = S.IntelPlayers and S.IntelPlayers[p.Name]
                     local victimIsPrio = table.find(S.PriorityPlayers or {}, p.Name) ~= nil
                     local isThreatVictim = (victimIntel ~= nil) or victimIsPrio
                     local skipThreat = (S.IgnoreThreatVictims ~= false and isThreatVictim)
                     if not skipThreat then
-                        if S.AddToIntel then
-                            S.AddToIntel(attacker.Name, "Threat", 10)
-                        end
+                        RegisterThreat(attacker.Name, false)
                     end
                 end
             end
@@ -3211,6 +3337,40 @@ local function FetchRemoteText(url)
     return nil
 end
 
+local function ParseVersionParts(vStr)
+    if not vStr or type(vStr) ~= "string" then return nil end
+    local clean = vStr:match("([%d]+%.[%d%.]+)")
+    if not clean then return nil end
+    local parts = {}
+    for num in clean:gmatch("(%d+)") do
+        table.insert(parts, tonumber(num) or 0)
+    end
+    return (#parts >= 2) and parts or nil
+end
+
+local function IsVersionNewer(remote, current)
+    local rParts = ParseVersionParts(remote)
+    local cParts = ParseVersionParts(current)
+    if not rParts or not cParts then return false end
+    local maxLen = math.max(#rParts, #cParts)
+    for i = 1, maxLen do
+        local r = rParts[i] or 0
+        local c = cParts[i] or 0
+        if r > c then return true end
+        if r < c then return false end
+    end
+    return false
+end
+
+local function CleanRemoteText(text)
+    if not text or type(text) ~= "string" or #text == 0 then return nil end
+    local lower = text:lower()
+    if lower:find("404") or lower:find("not found") or lower:find("<html") or lower:find("<!doctype") then
+        return nil
+    end
+    return text
+end
+
 local lastNotifiedUpdateVer = nil
 function S.CheckForUpdates(manual)
     local repoBase = "https://raw.githubusercontent.com/plasmazzm/TASFF/refs/heads/main/"
@@ -3219,31 +3379,32 @@ function S.CheckForUpdates(manual)
 
     -- Step 1: Query version.txt
     local remoteVer = nil
-    local vText = FetchRemoteText(repoBase .. "version.txt" .. cacheBust)
+    local vText = CleanRemoteText(FetchRemoteText(repoBase .. "version.txt" .. cacheBust))
     if not vText then
-        vText = FetchRemoteText(repoBase .. "version.txt")
+        vText = CleanRemoteText(FetchRemoteText(repoBase .. "version.txt"))
     end
     if vText then
-        remoteVer = vText:match("([%d%.]+)")
+        local candidate = vText:match("([%d]+%.[%d%.]+)")
+        if candidate and ParseVersionParts(candidate) then
+            remoteVer = candidate
+        end
     end
 
-    -- Step 2: Fallback query to TASFF_State.lua if version.txt not found or empty
+    -- Step 2: Fallback query to TASFF_State.lua if version.txt not found or invalid
     if not remoteVer then
-        local stateText = FetchRemoteText(repoBase .. "TASFF_State.lua" .. cacheBust)
+        local stateText = CleanRemoteText(FetchRemoteText(repoBase .. "TASFF_State.lua" .. cacheBust))
         if not stateText then
-            stateText = FetchRemoteText(repoBase .. "TASFF_State.lua")
+            stateText = CleanRemoteText(FetchRemoteText(repoBase .. "TASFF_State.lua"))
         end
         if stateText then
-            remoteVer = stateText:match('CurrentVersion%s*=%s*"([^"]+)"')
+            local candidate = stateText:match('CurrentVersion%s*=%s*"([^"]+)"')
+            if candidate and ParseVersionParts(candidate) then
+                remoteVer = candidate
+            end
         end
     end
 
-    local isNewer = false
-    if remoteVer and remoteVer ~= "" then
-        if remoteVer ~= currentVer then
-            isNewer = true
-        end
-    end
+    local isNewer = (remoteVer ~= nil) and IsVersionNewer(remoteVer, currentVer)
 
     if isNewer then
         S.UpdateAvailable = true

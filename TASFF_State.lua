@@ -72,6 +72,11 @@ _G.TASFF_State = {
     OtherPlayersDamageTracking  = true,          -- tracks non-lethal damage between any players; flags aggressors as Threats
     ExpertInstinctsEnabled      = false,         -- instant counter-snap and target lock when attacked
     ExpertInstinctsIntensity    = 60,            -- counter-lock rotation intensity/speed (5-100, 100 = instant snap)
+    InstinctsInventoryCheck     = false,         -- scan inventory for defending weapons; suppress instincts if unarmed/fleeing
+    InstinctsBlacklist          = {},            -- list of tool names treated as non-weapons (ignored by instincts scan)
+    InstinctsPrioritizedTools   = {},            -- list of tool names that immediately engage instincts
+    InstinctsBlacklistFileName  = "TASFF_InstinctsBlacklist.json",
+    InstinctsPriorityFileName   = "TASFF_InstinctsPriority.json",
     
     -- // -- Intel System Features (v2.0.5) --------------------------- // --
     KillCountThreatEnabled      = false,

@@ -680,7 +680,9 @@ S.RebuildIntelMonitor = RebuildIntelMonitor
 local function AddToIntel(name, source, extraPoints)
     if not name or name == "" or name == Player.Name then return end
     local pts = (IntelPointValues[source] or 0) + (extraPoints or 0)
-    local srcPriority = {Nemesis=4, Registry=3, Threat=2, Marked=1}
+    -- Priority hierarchy: Manual/Explicit actions supersede auto-detections.
+    -- Nemesis (4) > Marked (3) > Registry (2) > Threat (1)
+    local srcPriority = {Nemesis=4, Marked=3, Registry=2, Threat=1}
     if S.IntelPlayers[name] then
         local curSrc = S.IntelPlayers[name].source or "Marked"
         if (srcPriority[source] or 0) > (srcPriority[curSrc] or 0) then
@@ -689,8 +691,13 @@ local function AddToIntel(name, source, extraPoints)
         S.IntelPlayers[name].points = (S.IntelPlayers[name].points or 0) + pts
         if source == "Nemesis" then S.IntelPlayers[name].nemesis = true end
     else
-        S.IntelPlayers[name] = { source=source, points=pts, nemesis=(source=="Nemesis") }
-        if source ~= "Nemesis" and not table.find(S.PriorityPlayers, name) then
+        local isAlreadyPriority = table.find(S.PriorityPlayers or {}, name) ~= nil
+        local effectiveSource = source
+        if isAlreadyPriority and source == "Threat" then
+            effectiveSource = "Registry"
+        end
+        S.IntelPlayers[name] = { source=effectiveSource, points=pts, nemesis=(source=="Nemesis") }
+        if source ~= "Nemesis" and not isAlreadyPriority then
             table.insert(S.PriorityPlayers, name)
             SyncPriorityUI()
         end
@@ -934,10 +941,11 @@ local function RegisterThreat(attackerName, isKill)
         _lastFP[attackerName] = tick()
 
         ThreatMemory[attackerName] = tick()
-        local isNew = not table.find(S.PriorityPlayers, attackerName)
+        local intelEntry = S.IntelPlayers and S.IntelPlayers[attackerName]
+        local isAlreadyPrioritized = (intelEntry ~= nil) or (table.find(S.PriorityPlayers or {}, attackerName) ~= nil)
         S.SessionThreatsAdded = (S.SessionThreatsAdded or 0) + 1
         if S.AddToIntel then S.AddToIntel(attackerName, "Threat", 5) end
-        if isNew then
+        if not isAlreadyPrioritized then
             Notify({Title="TASFF Threat",Content="Registered Threat: "..attackerName,Duration=2,Image="alert-circle"})
         end
     end
@@ -1274,7 +1282,17 @@ local function HookThreatHealth(char)
                         if S.DeadTargetsCache then S.DeadTargetsCache[aChar] = nil end
                         local targetPart = aChar:FindFirstChild(S.TargetPart) or aChar:FindFirstChild("Head") or aRoot
                         local aimPos = targetPart.Position
-                        Camera.CFrame = CFrame.new(Camera.CFrame.Position, aimPos)
+                        local intensity = math.clamp(S.ExpertInstinctsIntensity or 60, 5, 100)
+                        if intensity >= 100 then
+                            Camera.CFrame = CFrame.new(Camera.CFrame.Position, aimPos)
+                        else
+                            local targetCF = CFrame.new(Camera.CFrame.Position, aimPos)
+                            local initialFraction = math.clamp((intensity / 100) * 0.4, 0.05, 0.5)
+                            Camera.CFrame = Camera.CFrame:Lerp(targetCF, initialFraction)
+                            S._ExpertInstinctsActive = true
+                            S._ExpertInstinctsExpiry = tick() + 0.45
+                            S._ExpertInstinctsIntensity = intensity
+                        end
                         S.CurrentTarget = {
                             Instance = aChar,
                             Root = aRoot,
@@ -2172,10 +2190,12 @@ local function HookNeutralization(p)
                         S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
                         if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
                             local kData = S.IntelPlayers and S.IntelPlayers[killerName]
-                            local isTracked = kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry")
+                            local isTracked = (kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry" or kData.source == "Marked")) or (table.find(S.PriorityPlayers or {}, killerName) ~= nil)
                             if not isTracked then
                                 if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
                                 Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
+                            else
+                                if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
                             end
                         end
                     end
@@ -2891,6 +2911,14 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local sp,os=Camera:WorldToViewportPoint(TWP)
                 local tsp=os and ApplyScreenCalibration(Vector2.new(sp.X,sp.Y)) or nil
                 local Sm=S.Smoothness
+                local instinctAlpha = nil
+                if S._ExpertInstinctsActive then
+                    if tick() < (S._ExpertInstinctsExpiry or 0) then
+                        instinctAlpha = math.clamp(deltaTime * ((S._ExpertInstinctsIntensity or 60) * 0.15), 0.08, 0.9)
+                    else
+                        S._ExpertInstinctsActive = false
+                    end
+                end
                 if Mode=="Legit (Camera)" then
                     if S.HumanizedAimEnabled and tsp then
                         local screenCenter = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
@@ -2916,6 +2944,9 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                         -- Natural Smoothstep Ease (acceleration and deceleration curve)
                         local ease = math.clamp(dist / 140, 0.06, 1.0)
                         local alpha = math.clamp(deltaTime * (5.5 / math.max(0.1, Sm)) * ease * deadzoneFactor, 0.002, 0.75)
+                        if instinctAlpha then
+                            alpha = math.max(alpha, instinctAlpha)
+                        end
 
                         -- Reconstruct curved world point for CFrame interpolation (with screen-space tremor)
                         local curvedScreen = tsp + arcOffset + tremor
@@ -2926,7 +2957,11 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                         local targetCF = CFrame.new(Camera.CFrame.Position, humanAimPoint) * CFrame.Angles(tremorAngleX, tremorAngleY, 0)
                         Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
                     else
-                        Camera.CFrame=Camera.CFrame:Lerp(tcf,math.clamp(deltaTime*(6/math.max(0.1,Sm)),0.01,1))
+                        local camLerpAlpha = math.clamp(deltaTime*(6/math.max(0.1,Sm)),0.01,1)
+                        if instinctAlpha then
+                            camLerpAlpha = math.max(camLerpAlpha, instinctAlpha)
+                        end
+                        Camera.CFrame=Camera.CFrame:Lerp(tcf, camLerpAlpha)
                     end
                 elseif Mode=="Advanced Legit (Mouse)" then
                     -- v2.2.5 Humanized dynamics: curved wrist arc + deadzone slack + organic tremor
@@ -2944,7 +2979,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                                 local curveFactor = S.AimPathCurvature or 0.45
                                 local perp = Vector2.new(-diff.Y, diff.X)
                                 if perp.Magnitude > 0.001 then perp = perp.Unit else perp = Vector2.new(0, 0) end
-                                local progress = math.clamp(d2 / 200, 0, 1) * math.clamp((420 - d2) / 200, 0, 1)
+                                progress = math.clamp(d2 / 200, 0, 1) * math.clamp((420 - d2) / 200, 0, 1)
                                 local arcOffset = perp * (d2 * 0.16 * curveFactor * progress)
 
                                 -- Organic Physiological Tremor
@@ -2954,6 +2989,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                                 local ease = math.clamp(d2 / 140, 0.06, 1.0)
                                 local stepX = math.clamp(deltaTime * (20 / Sx) * ease * deadzoneFactor, 0.003, 0.7)
                                 local stepY = math.clamp(deltaTime * (20 / Sy) * ease * deadzoneFactor, 0.003, 0.7)
+                                if instinctAlpha then
+                                    stepX = math.max(stepX, instinctAlpha)
+                                    stepY = math.max(stepY, instinctAlpha)
+                                end
 
                                 local effectiveDiff = diff + arcOffset
                                 local mvX = (effectiveDiff.X * stepX) + (tremor.X * 0.85)
@@ -2967,6 +3006,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                                 local ease=math.clamp(d2/150, 0.05, 1.0)
                                 local stepX=math.clamp(deltaTime*(20/Sx)*ease, 0.005, 0.7)
                                 local stepY=math.clamp(deltaTime*(20/Sy)*ease, 0.005, 0.7)
+                                if instinctAlpha then
+                                    stepX = math.max(stepX, instinctAlpha)
+                                    stepY = math.max(stepY, instinctAlpha)
+                                end
                                 local microX=d2>10 and (math.random()-0.5)*2.0 or 0
                                 local microY=d2>10 and (math.random()-0.5)*2.0 or 0
                                 local mvX=(diff.X+microX)*stepX

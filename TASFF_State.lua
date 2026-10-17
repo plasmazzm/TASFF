@@ -40,6 +40,8 @@ _G.TASFF_State = {
     TargetInertiaTracking       = true,          -- reaction inertia: dampens impossible 0ms strafe reaction snaps
     TargetReactionRate          = 14,           -- reaction rate speed (lower = more human inertia, higher = faster response)
     HitboxOffsetDrift           = true,          -- wanders smoothly within hitbox boundary instead of locking center point
+    CoverAnticipationEnabled    = true,          -- maintains aim on target's cover point like a human expecting a peek
+    CoverAnticipationDuration   = 0.8,           -- seconds to hold pre-aim on cover before gracefully releasing
 
     -- // ── v1.5.0 Combat Upgrades ─────────────────────────────── // --
     TargetSwitchDelayEnabled    = false,
@@ -82,6 +84,7 @@ _G.TASFF_State = {
     KillCountThreatEnabled      = false,
     KillFeedEnabled             = false,
     KillsBeforeThreat           = 3,
+    ContinuousKillsPermanent    = 5,             -- continuous kills required to make a threat permanent until neutralized
     PlayerKillCounts            = {},
     KillsBeforeNemesis          = 3,
     PlayerNemesisStrikes        = {},
@@ -101,6 +104,7 @@ _G.TASFF_State = {
 
     -- // ── Mouse Triggerbot ───────────────────────────────────── // --
     AutoClickEnabled            = false,
+    TriggerbotPriorityOnly      = false,
     ClickInterval               = 100,
     ClickMethod                 = "Mash",
     TriggerbotClickMode         = "Virtual",
@@ -125,6 +129,7 @@ _G.TASFF_State = {
     TransparencyCheck           = false,
     TransparencyThreshold       = 0.5,
     DecalsCheck                 = false,
+    FoliageConcealmentCheck     = true,          -- prevents aiming through bushes, foliage, or opaque non-collidable cover
 
     -- // ── Target Lists & Active State ────────────────────────── // --
     BlacklistedPlayers          = {},
@@ -178,6 +183,12 @@ _G.TASFF_State = {
     OOFArrowsEnabled            = false,
     OOFArrowsPriorityOnly       = false,         -- if true, OOF arrows only render for priority/intel targets
     OOFArrowRadius              = 150,
+    EnvironmentalESPEnabled     = false,         -- highlights surrounding props and environment near players
+    EnvironmentalESPPriorityOnly= false,         -- restricts environmental ESP to priority/intel targets only
+    EnvironmentalESPRange       = 15,            -- radius around players to highlight environment
+    EnvironmentalESPColor       = Color3.fromRGB(0, 200, 255),
+    EnvironmentalESPTransparency= 0.82,          -- subtle non-obstructive surface transparency
+    EnvironmentalESPAdornments  = {},            -- runtime pool of adornment objects
     HighlightColor              = Color3.fromRGB(240, 240, 240),
     FOVColor                    = Color3.fromRGB(240, 240, 240),
     CrosshairColor              = Color3.fromRGB(240, 240, 240),
@@ -232,11 +243,14 @@ _G.TASFF_State = {
     PresetFileName              = "TASFF_V1.5.5_Presets.json",
     ColorSettingsFileName       = "TASFF_ColorSettings.json",
     ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
-    CurrentVersion              = "2.2.5",
+    CurrentVersion              = "2.2.6",
     AutoUpdateCheckerEnabled    = true,      -- automatically check repository for updates
     UpdateAvailable             = false,     -- set true when a newer version or commit is detected
     RemoteVersion               = nil,       -- remote version string if detected
     UpdateCheckInterval         = 180,       -- periodic check interval in seconds (3 minutes)
+    LoadedCommitSha             = "",        -- commit SHA at session load
+    LatestRemoteCommitSha       = "",        -- latest commit SHA detected from GitHub API
+    _LoadedModuleLengths        = {},        -- runtime length of loaded module sources for revision diffing
 
     -- // ── Session Statistics (v2.1.0) ─────────────────────────── // --
     SessionStartTime            = 0,

@@ -1005,6 +1005,9 @@ end})
 IntelTab:CreateToggle({Name = "Expert Instincts (Instant Counter-Lock)", CurrentValue = S.ExpertInstinctsEnabled, Flag = "ExpertInstinctsEnabled", Callback = function(v)
     S.ExpertInstinctsEnabled = v
 end})
+IntelTab:CreateSlider({Name = "Expert Instincts Lock Speed", Range = {5, 100}, Increment = 5, CurrentValue = S.ExpertInstinctsIntensity or 60, Flag = "ExpertInstinctsIntensity", Callback = function(v)
+    S.ExpertInstinctsIntensity = v
+end})
 IntelTab:CreateToggle({Name = "Threat Neutralization (Auto-expire on kill)", CurrentValue = S.ThreatNeutralizationEnabled, Flag = "ThreatNeutralization", Callback = function(v)
     S.ThreatNeutralizationEnabled = v
 end})
@@ -1358,7 +1361,7 @@ PresetsTab:CreateButton({
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
-                OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled,
+                OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1429,7 +1432,8 @@ local STO_FLAG = {
     HumanTremorEnabled = "HumanTremor", HumanTremorIntensity = "TremorIntensity",
     TargetInertiaTracking = "TargetInertia", HitboxOffsetDrift = "HitboxDrift",
     DistancePredictionAdjustEnabled = "DistancePredictionAdjustEnabled", MaxAutoPrediction = "MaxAutoPrediction",
-    OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled"
+    OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled",
+    ExpertInstinctsIntensity = "ExpertInstinctsIntensity"
 }
 
 PresetsTab:CreateButton({
@@ -1544,7 +1548,7 @@ PresetsTab:CreateButton({
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
-                OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled,
+                OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -2410,7 +2414,7 @@ SystemTab:CreateButton({
         S.MeleeModeEnabled = false;     S.MeleeDetectionRange = 5;      S.MeleeClickInterval = 100
         S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
         S.BlacklistExpiredThreats = false
-        S.OtherPlayersDamageTracking = true; S.ExpertInstinctsEnabled = false
+        S.OtherPlayersDamageTracking = true; S.ExpertInstinctsEnabled = false; S.ExpertInstinctsIntensity = 60
         S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
         S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
         S.IgnoreThreatVictims = true
@@ -2462,7 +2466,8 @@ UpdateLogTab:CreateParagraph({
     Content = "• Ambush Latency Fix: real-time visibility fallback for close (<120 studs) and threat targets completely eliminates background raycast loop delay.\n" ..
               "• Distance-Based Auto Prediction: dynamically scales velocity lead with target distance, preventing crosshair trailing and missed shots at range.\n" ..
               "• Universal Player Damage Tracking: tracks non-lethal damage between any players in the server, automatically labeling aggressors as Threats.\n" ..
-              "• Expert Instincts: instant camera counter-snap and target lock when attacked, immediately eliminating ambush reaction delays.\n" ..
+              "• Expert Instincts & Configurable Lock Speed: counter-reacts and locks onto attackers with configurable swivel speed slider (5-100) and smooth active lerp acquisition.\n" ..
+              "• Threat Priority Integrity: manual Marked and Registry priorities are strictly preserved and never overwritten by automatic threat damage/kill detections.\n" ..
               "• Calibrated Hand Tremor & Sway: re-tuned physiological micro-tremor and breathing sway to produce organic, visually perceptible movement in Camera and Mouse aiming.\n" ..
               "• Dedicated Misc & System Tab Separation: clean separation of Notification controls, Utilities, and Cloaking (Misc) from Performance, Security, and Failsafes (System).\n" ..
               "• Enhanced Threat Intelligence Engine: multi-tier killer attribution with deep 22-tag/13-attribute scans and leaderstats delta correlation for zero-tag games.\n" ..
@@ -2559,7 +2564,7 @@ end
 
 local numericRanges = {
     FOVSize = {10, 2000}, SwitchDelayMs = {0, 2000}, PredictionAmount = {0, 5},
-    MaxAutoPrediction = {0.16, 2},
+    MaxAutoPrediction = {0.16, 2}, ExpertInstinctsIntensity = {5, 100},
     Smoothness = {0.1, 100}, SmoothnessX = {0.1, 100}, SmoothnessY = {0.1, 100},
     BlatantSnapSpeed = {1, 100}, TransparencyThreshold = {0, 1},
     GracePeriodMs = {0, 2000}, AimbotRenderDistance = {1, 10000},

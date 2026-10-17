@@ -321,29 +321,50 @@ local function PrepareDrawing(obj)
 end
 S.PrepareDrawing = PrepareDrawing
 
-local EnvAdornmentPool = {}
-local function GetEnvAdornment(index)
-    if not EnvAdornmentPool[index] then
+local EnvOutlinePool = {}
+local function GetEnvOutline(index)
+    if not EnvOutlinePool[index] then
+        local box = Instance.new("SelectionBox")
+        box.Name = "TASFF_EnvOutline_" .. index
+        box.AlwaysOnTop = false
+        box.LineThickness = 0.04
+        box.SurfaceTransparency = 0.96
+        local parentObj = nil
+        pcall(function() parentObj = CoreGui end)
+        if not parentObj then parentObj = Camera end
+        box.Parent = parentObj
+        EnvOutlinePool[index] = box
+    end
+    return EnvOutlinePool[index]
+end
+
+local EnvSlicePool = {}
+local function GetEnvSlice(index)
+    if not EnvSlicePool[index] then
         local adorn = Instance.new("BoxHandleAdornment")
-        adorn.Name = "TASFF_EnvAdornment_" .. index
-        adorn.AlwaysOnTop = true
+        adorn.Name = "TASFF_EnvSlice_" .. index
+        adorn.AlwaysOnTop = false
         adorn.ZIndex = 1
-        adorn.Color3 = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
-        adorn.Transparency = S.EnvironmentalESPTransparency or 0.65
         local parentObj = nil
         pcall(function() parentObj = CoreGui end)
         if not parentObj then parentObj = Camera end
         adorn.Parent = parentObj
-        EnvAdornmentPool[index] = adorn
+        EnvSlicePool[index] = adorn
     end
-    return EnvAdornmentPool[index]
+    return EnvSlicePool[index]
 end
 
 local function ClearEnvironmentalESP()
-    for _, adorn in ipairs(EnvAdornmentPool) do
-        if adorn then
-            adorn.Visible = false
-            adorn.Adornee = nil
+    for _, box in ipairs(EnvOutlinePool) do
+        if box then
+            box.Visible = false
+            box.Adornee = nil
+        end
+    end
+    for _, slice in ipairs(EnvSlicePool) do
+        if slice then
+            slice.Visible = false
+            slice.Adornee = nil
         end
     end
 end
@@ -354,7 +375,7 @@ envOverlap.FilterType = Enum.RaycastFilterType.Exclude
 
 local function UpdateEnvironmentalESP()
     if not (S.MasterEnabled and S.EnvironmentalESPEnabled) then
-        if #EnvAdornmentPool > 0 then ClearEnvironmentalESP() end
+        if #EnvOutlinePool > 0 or #EnvSlicePool > 0 then ClearEnvironmentalESP() end
         return
     end
 
@@ -362,11 +383,40 @@ local function UpdateEnvironmentalESP()
     local targets = {}
     local PP = S.PriorityPlayers or {}
 
-    for _, t in ipairs(S.LastVisualList or {}) do
-        if t.Instance and t.Root and t.Health and t.Health > 0 then
-            local isPrio = table.find(PP, t.Name) ~= nil or (S.IntelPlayers and S.IntelPlayers[t.Name] ~= nil)
-            if not S.EnvironmentalESPPriorityOnly or isPrio then
-                table.insert(targets, t)
+    if S.EnvironmentalESPPriorityOnly then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= Player and p.Character then
+                local char = p.Character
+                local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                local isPrio = table.find(PP, p.Name) ~= nil
+                    or (S.IntelPlayers and S.IntelPlayers[p.Name] ~= nil)
+                    or (NemesisMemory and NemesisMemory[p.Name] ~= nil)
+                if isPrio and root and hum and hum.Health > 0 then
+                    table.insert(targets, { Instance = char, Root = root, Name = p.Name })
+                end
+            end
+        end
+    else
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= Player and p.Character then
+                local char = p.Character
+                local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    table.insert(targets, { Instance = char, Root = root, Name = p.Name })
+                end
+            end
+        end
+        if S.TargetNPCs and S.CachedNPCs then
+            for _, npc in ipairs(S.CachedNPCs) do
+                if npc and npc.Parent then
+                    local root = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Torso")
+                    local hum = npc:FindFirstChildOfClass("Humanoid")
+                    if root and hum and hum.Health > 0 then
+                        table.insert(targets, { Instance = npc, Root = root, Name = npc.Name })
+                    end
+                end
             end
         end
     end
@@ -389,12 +439,14 @@ local function UpdateEnvironmentalESP()
     end
     envOverlap.FilterDescendantsInstances = excludeList
 
-    local usedCount = 0
-    local maxAdornments = 120
+    local usedOutlineCount = 0
+    local usedSliceCount = 0
+    local maxOutlines = 100
+    local maxSlices = 50
     local processedParts = {}
 
     local baseColor = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
-    local trans = S.EnvironmentalESPTransparency or 0.65
+    local sliceTrans = S.EnvironmentalESPTransparency or 0.82
 
     for _, t in ipairs(targets) do
         local pPos = t.Root.Position
@@ -403,46 +455,95 @@ local function UpdateEnvironmentalESP()
         end)
         if ok and parts then
             for _, part in ipairs(parts) do
-                if usedCount >= maxAdornments then break end
+                if (usedOutlineCount >= maxOutlines) and (usedSliceCount >= maxSlices) then break end
                 if part:IsA("BasePart") and not processedParts[part] then
                     processedParts[part] = true
                     local pSize = part.Size
-                    local isLarge = (pSize.X > 20 or pSize.Y > 20 or pSize.Z > 20)
-                    usedCount = usedCount + 1
-                    local adorn = GetEnvAdornment(usedCount)
-                    adorn.Color3 = baseColor
-                    adorn.Transparency = trans
-                    adorn.Adornee = part
+                    local isLarge = (pSize.X > 18 or pSize.Y > 18 or pSize.Z > 18) or (pSize.X * pSize.Z > 200)
 
                     if isLarge then
-                        local localPos = part.CFrame:PointToObjectSpace(pPos)
-                        local halfSize = pSize * 0.5
-                        local clampedX = math.clamp(localPos.X, -halfSize.X, halfSize.X)
-                        local clampedY = math.clamp(localPos.Y, -halfSize.Y, halfSize.Y)
-                        local clampedZ = math.clamp(localPos.Z, -halfSize.Z, halfSize.Z)
+                        if usedSliceCount < maxSlices then
+                            usedSliceCount = usedSliceCount + 1
+                            local slice = GetEnvSlice(usedSliceCount)
+                            slice.Color3 = baseColor
+                            slice.Transparency = sliceTrans
+                            slice.Adornee = part
 
-                        local sliceX = (pSize.X > 20) and math.min(pSize.X, radius * 1.4) or (pSize.X + 0.1)
-                        local sliceY = (pSize.Y > 20) and math.min(pSize.Y, radius * 1.4) or (pSize.Y + 0.1)
-                        local sliceZ = (pSize.Z > 20) and math.min(pSize.Z, radius * 1.4) or (pSize.Z + 0.1)
+                            local localPos = part.CFrame:PointToObjectSpace(pPos)
+                            local halfSize = pSize * 0.5
+                            local clampedX = math.clamp(localPos.X, -halfSize.X, halfSize.X)
+                            local clampedY = math.clamp(localPos.Y, -halfSize.Y, halfSize.Y)
+                            local clampedZ = math.clamp(localPos.Z, -halfSize.Z, halfSize.Z)
 
-                        adorn.CFrame = CFrame.new(clampedX, clampedY, clampedZ)
-                        adorn.Size = Vector3.new(sliceX, sliceY, sliceZ)
+                            -- Detect surface orientation (Floor/Ceiling, Z-Wall, or X-Wall)
+                            local isFloorCeil = (pSize.Y <= pSize.X and pSize.Y <= pSize.Z) or (pSize.Y <= 6)
+                            local isZWall     = (pSize.Z <= pSize.X and pSize.Z <= pSize.Y) or (pSize.Z <= 6)
+                            local isXWall     = (pSize.X <= pSize.Y and pSize.X <= pSize.Z) or (pSize.X <= 6)
+
+                            if not isFloorCeil and not isZWall and not isXWall then
+                                -- Thick block: determine closest face to player
+                                local distY = math.abs(halfSize.Y - math.abs(localPos.Y))
+                                local distZ = math.abs(halfSize.Z - math.abs(localPos.Z))
+                                local distX = math.abs(halfSize.X - math.abs(localPos.X))
+                                if distY <= distX and distY <= distZ then
+                                    isFloorCeil = true
+                                elseif distZ <= distX then
+                                    isZWall = true
+                                else
+                                    isXWall = true
+                                end
+                            end
+
+                            if isFloorCeil then
+                                local faceY = (localPos.Y >= 0 and (halfSize.Y + 0.02) or (-halfSize.Y - 0.02))
+                                local sliceW = math.min(pSize.X, radius * 1.5)
+                                local sliceL = math.min(pSize.Z, radius * 1.5)
+                                slice.CFrame = CFrame.new(clampedX, faceY, clampedZ)
+                                slice.Size = Vector3.new(sliceW, 0.04, sliceL)
+                            elseif isZWall then
+                                local faceZ = (localPos.Z >= 0 and (halfSize.Z + 0.02) or (-halfSize.Z - 0.02))
+                                local sliceW = math.min(pSize.X, radius * 1.5)
+                                local sliceH = math.min(pSize.Y, radius * 1.5)
+                                slice.CFrame = CFrame.new(clampedX, clampedY, faceZ)
+                                slice.Size = Vector3.new(sliceW, sliceH, 0.04)
+                            else
+                                local faceX = (localPos.X >= 0 and (halfSize.X + 0.02) or (-halfSize.X - 0.02))
+                                local sliceH = math.min(pSize.Y, radius * 1.5)
+                                local sliceL = math.min(pSize.Z, radius * 1.5)
+                                slice.CFrame = CFrame.new(faceX, clampedY, clampedZ)
+                                slice.Size = Vector3.new(0.04, sliceH, sliceL)
+                            end
+                            slice.Visible = true
+                        end
                     else
-                        adorn.CFrame = CFrame.new(0, 0, 0)
-                        adorn.Size = pSize + Vector3.new(0.08, 0.08, 0.08)
+                        if usedOutlineCount < maxOutlines then
+                            usedOutlineCount = usedOutlineCount + 1
+                            local outline = GetEnvOutline(usedOutlineCount)
+                            outline.Color3 = baseColor
+                            outline.SurfaceColor3 = baseColor
+                            outline.SurfaceTransparency = 0.96
+                            outline.Adornee = part
+                            outline.Visible = true
+                        end
                     end
-                    adorn.Visible = true
                 end
             end
         end
-        if usedCount >= maxAdornments then break end
+        if (usedOutlineCount >= maxOutlines) and (usedSliceCount >= maxSlices) then break end
     end
 
-    for i = usedCount + 1, #EnvAdornmentPool do
-        local adorn = EnvAdornmentPool[i]
-        if adorn and adorn.Visible then
-            adorn.Visible = false
-            adorn.Adornee = nil
+    for i = usedOutlineCount + 1, #EnvOutlinePool do
+        local box = EnvOutlinePool[i]
+        if box and box.Visible then
+            box.Visible = false
+            box.Adornee = nil
+        end
+    end
+    for i = usedSliceCount + 1, #EnvSlicePool do
+        local slice = EnvSlicePool[i]
+        if slice and slice.Visible then
+            slice.Visible = false
+            slice.Adornee = nil
         end
     end
 end
@@ -2664,7 +2765,7 @@ end))
 task.defer(function()
     -- Render loop remains idle until UI loading sequence completes and explicitly sets S.ScriptInitialized = true
     S.CurrentTarget = nil
-    print("[TASFF v2.2.5] Core function slots registered. Awaiting UI sequence...")
+    print("[TASFF v2.2.6] Core function slots registered. Awaiting UI sequence...")
 end)
 
 -- // ══════════════════════════════════════════════════════════════ // --
@@ -3500,7 +3601,14 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         local CI=S.ClickInterval; local MCI=S.MeleeClickInterval
         -- v2.1.0 Weapon-Type Gating: triggerbot blocked for melee tools; melee blocked for ranged
         local wgEnabled = S.WeaponTypeGating and heldToolClass ~= "Unknown"
-        local triggerAllowed = (not wgEnabled or (heldToolClass ~= "Melee")) and not S._IsHoldingCover
+        local ct2Name = CT2 and CT2.Name
+        local isCT2Priority = ct2Name and (
+            (table.find(S.PriorityPlayers or {}, ct2Name) ~= nil) or
+            (S.IntelPlayers and S.IntelPlayers[ct2Name] ~= nil) or
+            (NemesisMemory and NemesisMemory[ct2Name] ~= nil)
+        )
+        local priorityTriggerAllowed = not S.TriggerbotPriorityOnly or isCT2Priority
+        local triggerAllowed = (not wgEnabled or (heldToolClass ~= "Melee")) and not S._IsHoldingCover and priorityTriggerAllowed
         local meleeAllowed   = not wgEnabled or (heldToolClass ~= "Weapon")
         local tbA=S.AutoClickEnabled and CT2~=nil and TargetingEnabled and AimbotActive and canAimWithTool and triggerAllowed
         local mA=MME and eMR and meleeAllowed
@@ -3529,7 +3637,14 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             end
         end
         local CT3=S.CurrentTarget
-        if S.KeyTriggerbotEnabled and CT3~=nil and TargetingEnabled and AimbotActive and canAimWithTool then
+        local ct3Name = CT3 and CT3.Name
+        local isCT3Priority = ct3Name and (
+            (table.find(S.PriorityPlayers or {}, ct3Name) ~= nil) or
+            (S.IntelPlayers and S.IntelPlayers[ct3Name] ~= nil) or
+            (NemesisMemory and NemesisMemory[ct3Name] ~= nil)
+        )
+        local keyPriorityAllowed = not S.TriggerbotPriorityOnly or isCT3Priority
+        if S.KeyTriggerbotEnabled and CT3~=nil and TargetingEnabled and AimbotActive and canAimWithTool and keyPriorityAllowed and not S._IsHoldingCover then
             pcall(function()
                 local key=GetKeyCode(S.KeyTriggerbotKey); local KTM=S.KeyTriggerMode
                 if key then
@@ -3696,7 +3811,7 @@ end
 local lastNotifiedUpdateVer = nil
 function S.CheckForUpdates(manual)
     local repoBase = "https://raw.githubusercontent.com/plasmazzm/TASFF/refs/heads/main/"
-    local currentVer = S.CurrentVersion or "2.2.5"
+    local currentVer = S.CurrentVersion or "2.2.6"
     local cacheBust = "?t=" .. tostring(tick())
 
     -- Step 1: Query version.txt
@@ -3726,31 +3841,98 @@ function S.CheckForUpdates(manual)
         end
     end
 
-    local isNewer = (remoteVer ~= nil) and IsVersionNewer(remoteVer, currentVer)
+    -- Option A: Semantic Version Check
+    local isNewerVersion = (remoteVer ~= nil) and IsVersionNewer(remoteVer, currentVer)
 
-    if isNewer then
+    -- Option B: Commit & Module Revision Check (detects additions, toggles, buttons without version bump)
+    local isCommitUpdate = false
+    local commitUpdateReason = nil
+
+    -- Check 1 of Option B: Query GitHub Commits API for latest commit SHA on main
+    local apiOk, apiRes = pcall(function()
+        return FetchRemoteText("https://api.github.com/repos/plasmazzm/TASFF/commits/main" .. cacheBust)
+    end)
+    if apiOk and apiRes and #apiRes > 0 then
+        local remoteSha = apiRes:match('"sha"%s*:%s*"([%w]+)"')
+        if remoteSha and #remoteSha >= 7 then
+            local shortSha = remoteSha:sub(1, 7)
+            if S.LoadedCommitSha and S.LoadedCommitSha ~= "" and S.LoadedCommitSha ~= shortSha then
+                isCommitUpdate = true
+                commitUpdateReason = "Commit " .. shortSha
+            end
+            S.LatestRemoteCommitSha = shortSha
+        end
+    end
+
+    -- Check 2 of Option B: Module Metric & Content Signature Check
+    -- Even if commit API is rate-limited or unauthenticated, check remote TASFF_Lists.lua for feature/toggle changes
+    if not isNewerVersion and not isCommitUpdate then
+        local listsText = CleanRemoteText(FetchRemoteText(repoBase .. "TASFF_Lists.lua" .. cacheBust))
+        if not listsText then
+            listsText = CleanRemoteText(FetchRemoteText(repoBase .. "TASFF_Lists.lua"))
+        end
+        if listsText then
+            local remToggles = tonumber(listsText:match('ToggleCount%s*=%s*(%d+)'))
+            local remSliders = tonumber(listsText:match('SliderCount%s*=%s*(%d+)'))
+            local curToggles = S.ToggleCount or 97
+            local curSliders = S.SliderCount or 37
+            if remToggles and remToggles > curToggles then
+                isCommitUpdate = true
+                commitUpdateReason = "New UI toggles (" .. remToggles .. " vs " .. curToggles .. ")"
+            elseif remSliders and remSliders > curSliders then
+                isCommitUpdate = true
+                commitUpdateReason = "New UI sliders (" .. remSliders .. " vs " .. curSliders .. ")"
+            end
+
+            -- Content signature fallback: compare length against session-loaded modules
+            if not isCommitUpdate and S._LoadedModuleLengths and S._LoadedModuleLengths["TASFF_Lists.lua"] then
+                local loadedLen = S._LoadedModuleLengths["TASFF_Lists.lua"]
+                if math.abs(#listsText - loadedLen) > 10 then
+                    isCommitUpdate = true
+                    commitUpdateReason = "Module revision (TASFF_Lists.lua)"
+                end
+            end
+        end
+
+        if not isCommitUpdate and S._LoadedModuleLengths and S._LoadedModuleLengths["TASFF_Core.lua"] then
+            local coreText = CleanRemoteText(FetchRemoteText(repoBase .. "TASFF_Core.lua" .. cacheBust))
+            if coreText and math.abs(#coreText - S._LoadedModuleLengths["TASFF_Core.lua"]) > 20 then
+                isCommitUpdate = true
+                commitUpdateReason = "Module revision (TASFF_Core.lua)"
+            end
+        end
+    end
+
+    local isUpdateFound = isNewerVersion or isCommitUpdate
+    local displayVer = isNewerVersion and remoteVer or (currentVer .. (commitUpdateReason and (" (" .. commitUpdateReason .. ")") or " (New Commits)"))
+
+    if isUpdateFound then
         S.UpdateAvailable = true
-        S.RemoteVersion = remoteVer
+        S.RemoteVersion = displayVer
         if S.UpdateStatusDisplay and S.UpdateStatusDisplay.Set then
             pcall(function()
                 S.UpdateStatusDisplay:Set({
-                    Title = "Update Available: v" .. remoteVer,
-                    Content = "A new update has been detected in the repository.\nClick 'Restart Script & Reload Interface' below to apply changes."
+                    Title = isNewerVersion and ("Update Available: v" .. remoteVer) or ("Repository Update Available: " .. displayVer),
+                    Content = isNewerVersion
+                        and ("A new release has been detected in the repository.\nClick 'Restart Script & Reload Interface' below to apply changes.")
+                        or ("New module commitments/additions were detected in repository (" .. (commitUpdateReason or "revision update") .. ").\nClick 'Restart Script & Reload Interface' below to apply changes.")
                 })
             end)
         end
-        if manual or (lastNotifiedUpdateVer ~= remoteVer) then
-            lastNotifiedUpdateVer = remoteVer
+        if manual or (lastNotifiedUpdateVer ~= displayVer) then
+            lastNotifiedUpdateVer = displayVer
             if S.Notify then
                 S.Notify({
                     Title    = "TASFF Update Checker",
-                    Content  = "Update available (v" .. remoteVer .. "), restart for it to take changes.",
+                    Content  = isNewerVersion
+                        and ("Update available (v" .. remoteVer .. "), restart for it to take changes.")
+                        or ("Repository update available (" .. (commitUpdateReason or "new commits") .. "), restart for it to take changes."),
                     Duration = 8,
                     Image    = "arrow-up-circle"
                 })
             end
         end
-        return true, remoteVer
+        return true, displayVer
     else
         S.UpdateAvailable = false
         if S.UpdateStatusDisplay and S.UpdateStatusDisplay.Set then

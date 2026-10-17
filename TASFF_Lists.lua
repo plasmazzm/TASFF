@@ -130,16 +130,17 @@ local FeatureList = {
     "Expert Instincts (Instant Counter-Lock)",
     "Configurable Expert Instincts Intensity",
     "Dedicated Misc & System Tab Separation",
+    "Legacy Changelog Archive",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 90   -- +3 (Distance Prediction, Universal Damage Tracking, Expert Instincts)
+S.ToggleCount         = 91   -- +4 (Distance Prediction, Universal Damage Tracking, Expert Instincts, AutoUpdateChecker)
 S.SliderCount         = 34   -- +2 (Maximum Auto Prediction, Expert Instincts Lock Speed)
-S.DropdownCount       = 38
-S.ButtonCount         = 24
+S.DropdownCount       = 39   -- +1 (Legacy Changelog Version)
+S.ButtonCount         = 25   -- +1 (Check for Updates Now)
 S.KeybindCount        = 5
-S.StatusDisplayCount  = 6    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status
+S.StatusDisplayCount  = 7    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status, Repository Status
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --
 -- Applied via the Presets tab "Quick-Load Game Config" dropdown.

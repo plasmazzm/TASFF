@@ -323,7 +323,7 @@ HomeTab:CreateParagraph({
     Title   = "TASFF v2.2.5 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 87) .. " Toggles | " .. tostring(S.SliderCount or 32) .. " Sliders | " .. tostring(S.DropdownCount or 38) .. " Dropdowns | " .. tostring(S.ButtonCount or 24) .. " Buttons | " .. tostring(S.StatusDisplayCount or 6) .. " Status Displays\n"
+           .. "Controls: " .. tostring(S.ToggleCount or 91) .. " Toggles | " .. tostring(S.SliderCount or 34) .. " Sliders | " .. tostring(S.DropdownCount or 39) .. " Dropdowns | " .. tostring(S.ButtonCount or 25) .. " Buttons | " .. tostring(S.StatusDisplayCount or 7) .. " Status Displays\n"
            .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
 })
 
@@ -1362,6 +1362,7 @@ PresetsTab:CreateButton({
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
+                AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -1433,7 +1434,7 @@ local STO_FLAG = {
     TargetInertiaTracking = "TargetInertia", HitboxOffsetDrift = "HitboxDrift",
     DistancePredictionAdjustEnabled = "DistancePredictionAdjustEnabled", MaxAutoPrediction = "MaxAutoPrediction",
     OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled",
-    ExpertInstinctsIntensity = "ExpertInstinctsIntensity"
+    ExpertInstinctsIntensity = "ExpertInstinctsIntensity", AutoUpdateCheckerEnabled = "AutoUpdateChecker"
 }
 
 PresetsTab:CreateButton({
@@ -1549,6 +1550,7 @@ PresetsTab:CreateButton({
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
+                AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
@@ -2415,6 +2417,7 @@ SystemTab:CreateButton({
         S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
         S.BlacklistExpiredThreats = false
         S.OtherPlayersDamageTracking = true; S.ExpertInstinctsEnabled = false; S.ExpertInstinctsIntensity = 60
+        S.AutoUpdateCheckerEnabled = true
         S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
         S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
         S.IgnoreThreatVictims = true
@@ -2429,6 +2432,34 @@ SystemTab:CreateButton({
         if S.ClearVisuals   then S.ClearVisuals()     end
         if S.ClearCrosshair then S.ClearCrosshair()   end
         if S.Notify then S.Notify({Title = "TASFF System", Content = "Factory Reset complete. All modules restored to default.", Duration = 3, Image = "list-restart"}) end
+    end
+})
+
+SystemTab:CreateSection("Repository & Updates")
+
+local UpdateStatusDisplay = SystemTab:CreateParagraph({
+    Title   = "Repository Status",
+    Content = "Running TASFF v" .. (S.CurrentVersion or "2.2.5") .. ".\nClick 'Check for Updates' to verify repository sync."
+})
+S.UpdateStatusDisplay = UpdateStatusDisplay
+
+SystemTab:CreateToggle({
+    Name = "Auto-Check for Updates (Repository Sync)",
+    CurrentValue = S.AutoUpdateCheckerEnabled ~= false,
+    Flag = "AutoUpdateChecker",
+    Callback = function(v)
+        S.AutoUpdateCheckerEnabled = v
+    end
+})
+
+SystemTab:CreateButton({
+    Name     = "Check for Updates Now",
+    Callback = function()
+        if S.CheckForUpdates then
+            S.CheckForUpdates(true)
+        else
+            if S.Notify then S.Notify({Title = "TASFF Update Checker", Content = "Update checker engine initializing...", Duration = 2, Image = "loader"}) end
+        end
     end
 })
 
@@ -2476,7 +2507,9 @@ UpdateLogTab:CreateParagraph({
               "• Detailed Neutralization Killfeed: displays contextual intel registry reasons in killfeed notifications (e.g. 'Killer neutralized Victim (nemesis/threat/click to mark)').\n" ..
               "• Priority-Filtered OOF Indicators: toggle to isolate off-screen arrow indicators to only point towards priority/intel targets.\n" ..
               "• High-Compatibility Status Display Icons: replaced unrendered box Unicode symbols with clean universal [V] and [X] indicators across all status monitors.\n" ..
-              "• Humanized Legit Dynamics: anti-spectator organic aiming mimicking realistic human biomechanics (Aim Arc Curvature, Target Deadzone Slack, Reaction Inertia, Hitbox Volume Surface Drift)."
+              "• Humanized Legit Dynamics: anti-spectator organic aiming mimicking realistic human biomechanics (Aim Arc Curvature, Target Deadzone Slack, Reaction Inertia, Hitbox Volume Surface Drift).\n" ..
+              "• Auto-Update Checker & Repository Sync: background watcher and manual repository polling checks for committed updates and notifies when new builds are live.\n" ..
+              "• Legacy Releases Changelog Archive: interactive version dropdown allowing users to explore full changelogs for builds v1.2.0 through v1.5.5."
 })
 
 UpdateLogTab:CreateParagraph({
@@ -2510,11 +2543,109 @@ UpdateLogTab:CreateParagraph({
               "• 15-hop penetrative wallcheck and frustum-culled OOF arrows."
 })
 
-UpdateLogTab:CreateParagraph({
-    Title   = "Historical Releases (v1.2.0 - v2.0.0)",
-    Content = "• Modular refactor across 4 files (State, Lists, Core, UI) overcoming Lua local limit.\n" ..
-              "• Advanced Legit Bezier curve smoothing, Universal Silent Aim, Dynamic Recoil (DRC).\n" ..
-              "• Autoclicker with Hold/Mash triggers, Melee Mode, and Profile Presets manager."
+UpdateLogTab:CreateSection("Legacy Releases Archive (v1.2.0 - v1.5.5)")
+
+local LegacyReleaseLogs = {
+    ["Version 1.5.5"] = "• Version bump to V1.5.5 — hardening, bug fixes, and UI polish pass\n" ..
+                        "• Fixed TargetFirstSeenTimestamps cleanup using pcall-guarded IsModelValid to prevent destroyed-model errors\n" ..
+                        "• Added independent Snapline & OOF Arrow color control to the Theming tab\n" ..
+                        "• Branded all notification titles under TASFF namespace (removed bare Error titles)\n" ..
+                        "• Corrected ConfigurationSaving folder path to match current version",
+
+    ["Version 1.5.0"] = "• Completely overhauled the UI layout into professional, structured categories (HUD, Tactical Overlays, etc.)\n" ..
+                        "• Fixed a critical metamethod inversion that broke Silent Aim for native weapons and ruined wallchecks\n" ..
+                        "• Fixed a math bug where 'Distance Priority' sorted by 2D screen distance instead of true 3D world distance\n" ..
+                        "• Fixed drawing persistence glitches (Invisible FOV) by bypassing backend geometry updates when hidden\n" ..
+                        "• Fixed missing variable serialization in the Preset Configuration Saver and Factory Reset protocols\n" ..
+                        "• Fixed rendering invisibility issues across all ESP geometries (Drawing API transparency mappings)\n" ..
+                        "• Added a missing 'Remove Tool' registry function to the Weapon & Inventory Automation section\n" ..
+                        "• Patched multiple global scope leaks and a potential fatal crash in the Skeletal Mapping routine",
+
+    ["Version 1.4.5"] = "• Added Advanced Legit Mode utilizing Bezier curves for humanized camera smoothing\n" ..
+                        "• Added Dynamic Recoil Control (DRC) to mimic natural human recoil compensation\n" ..
+                        "• Added Virtual Flickbot (Cursor Aim) to instantly teleport the invisible mouse cursor\n" ..
+                        "• Implemented Universal Silent Aim (Namecall Hooking) to redirect bullets silently\n" ..
+                        "• Added Target Switch Delay to pause target acquisition after kills (prevents robotic snapping)\n" ..
+                        "• Added Randomized Hitboxes to bypass statistical anti-cheats in Legit mode\n" ..
+                        "• Implemented The Nemesis System for tiered death tracking and targeted retaliation\n" ..
+                        "• Added Marking Input Modes (Mouse, Keybind, or Both) to prevent accidental priority marking\n" ..
+                        "• Added Dynamic Visibility Colors (Green=Visible, Red=Hidden) to ESP geometries\n" ..
+                        "• Upgraded all Info Tags to Drawing API for complete Stream-Proofing (OBS bypass)\n" ..
+                        "• Added Off-Screen Indicators (OOF Arrows) to track targets located behind the camera\n" ..
+                        "• Added ESP Snaplines (Tracers) with configurable origin point positioning\n" ..
+                        "• Added Clipboard Preset Import & Export (JSON) for easy configuration sharing\n" ..
+                        "• Added Auto-Save Configuration protocol to preserve settings upon script unload",
+
+    ["Version 1.4.0"] = "• Added Threat Detector & Threat Memory subsystem with configurable timeout\n" ..
+                        "• Implemented Strict Prioritize targeting mode\n" ..
+                        "• Added Invisible FOV mode (maintains lock boundary without rendering circle)\n" ..
+                        "• Added Penetrative Wallchecks (No Collision, Transparency Threshold & Decals)\n" ..
+                        "• Implemented Auto ADS (Aim Down Sights) automatic holding\n" ..
+                        "• Added Click-to-Mark / Keybind-to-Mark and Focus Mode ESP filtering\n" ..
+                        "• Added Triggerbot Click Modes (Virtual vs Physical) & 3rd Person coordinate support\n" ..
+                        "• Added Key Triggerbot with Single Press, Mash, and Hold modes\n" ..
+                        "• Added Dedicated Advanced Settings Tab and Misc utilities (Panic, Reset, Clean Unload)\n" ..
+                        "• Full frame-skipping Performance engine with runtime mode indicator",
+
+    ["Version 1.3.5"] = "• Added Aimbot & ESP Render Distance culling sliders (100-1000 studs)\n" ..
+                        "• Implemented Target Grace Period delay timer before locking onto targets\n" ..
+                        "• Added Chams ESP mode featuring dynamic transparency/opacity controls\n" ..
+                        "• Added 2D Box ESP visual overlay\n" ..
+                        "• Added Skeleton ESP rendering with full support for R6 & R15 avatar joint structures\n" ..
+                        "• Fixed table reference mutation corruption on cached ignore list raycasts\n" ..
+                        "• Fixed Melee Mode execution structure to operate independently of Aimbot lock states\n" ..
+                        "• Added a brand new 'Presets' Tab featuring profile saving, loading, renaming, and deletion\n" ..
+                        "• Fixed FOV Circle persistence bug when auto-disable suspends aimbot on unequipped tools\n" ..
+                        "• Fixed Sticky Aim over-attachment issue by validating target FOV and render distance bounds",
+
+    ["Version 1.3.0"] = "• Added Target Near Center crosshair prioritization to Combat options\n" ..
+                        "• Added Inventory Auto-Activation trigger system upon tool equipping features\n" ..
+                        "• Added Instant Tool-Instance Blacklist registration action buttons to Settings\n" ..
+                        "• Implemented advanced vector-rendered screen center Crosshairs (Plus, Square, Circle)\n" ..
+                        "• Implemented relative line tracking offsets for Plus style crosshair dimensions\n" ..
+                        "• Added Crosshair color mapping configurations straight to Customization presets\n" ..
+                        "• Added character text extensions: Show Display Name and structural Tool Check tags",
+
+    ["Version 1.2.5"] = "• Added full-screen targeting mechanics automatically when FOV visual elements are disabled\n" ..
+                        "• Added complete Autoclicker Tab featuring customizable speed interval mechanics\n" ..
+                        "• Implemented input options: Repeated rapid 'Mash' triggers vs continuous input 'Hold' states\n" ..
+                        "• Added Combat Melee Mode subsystem with independent range and interval calculations\n" ..
+                        "• Added fully separated 'Highlight NPCs' and 'Show NPC Info' toggle parameters\n" ..
+                        "• Added persistent Sticky Aim mechanics with automatic target validation filters\n" ..
+                        "• Fixed Sticky Aim wall clipping bugs by routing locks directly into visibility raycasts\n" ..
+                        "• Fixed target acquisition memory retention anomalies on active system or configuration switches",
+
+    ["Version 1.2.0"] = "• Added a brand new Customization Tab with color presets\n" ..
+                        "• Fixed the respawn bug where player highlights would vanish\n" ..
+                        "• Linked the Show Target Info text color directly to custom themes\n" ..
+                        "• Removed the broken dynamic interface theme reloader for stability\n" ..
+                        "• Added Visible On Screen, located in target bodypart dropdown"
+}
+
+local legacyVersionList = {
+    "Version 1.5.5", "Version 1.5.0", "Version 1.4.5", "Version 1.4.0",
+    "Version 1.3.5", "Version 1.3.0", "Version 1.2.5", "Version 1.2.0"
+}
+
+local LegacyLogDisplay = UpdateLogTab:CreateParagraph({
+    Title   = "Legacy Changelog — Version 1.5.5",
+    Content = LegacyReleaseLogs["Version 1.5.5"]
+})
+
+UpdateLogTab:CreateDropdown({
+    Name            = "Select Legacy Version",
+    Options         = legacyVersionList,
+    CurrentOption   = {"Version 1.5.5"},
+    Flag            = "LegacyVersionDropdown",
+    Callback        = function(selected)
+        local ver = (type(selected) == "table" and selected[1]) or selected
+        if ver and LegacyReleaseLogs[ver] then
+            LegacyLogDisplay:Set({
+                Title   = "Legacy Changelog — " .. ver,
+                Content = LegacyReleaseLogs[ver]
+            })
+        end
+    end
 })
 
 -- // â”€â”€ Load Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ // --
@@ -2554,6 +2685,7 @@ local booleanSettings = {
     "HumanTremorEnabled", "TargetInertiaTracking", "HitboxOffsetDrift",
     "IgnoreThreatVictims", "OOFArrowsPriorityOnly",
     "DistancePredictionAdjustEnabled", "OtherPlayersDamageTracking", "ExpertInstinctsEnabled",
+    "AutoUpdateCheckerEnabled",
 }
 for _, key in ipairs(booleanSettings) do
     if type(S[key]) ~= "boolean" then

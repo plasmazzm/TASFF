@@ -71,6 +71,7 @@ _G.TASFF_State = {
     StatCorrelatorEnabled       = true,
     OtherPlayersDamageTracking  = true,          -- tracks non-lethal damage between any players; flags aggressors as Threats
     ExpertInstinctsEnabled      = false,         -- instant counter-snap and target lock when attacked
+    ExpertInstinctsIntensity    = 60,            -- counter-lock rotation intensity/speed (5-100, 100 = instant snap)
     
     -- // -- Intel System Features (v2.0.5) --------------------------- // --
     KillCountThreatEnabled      = false,

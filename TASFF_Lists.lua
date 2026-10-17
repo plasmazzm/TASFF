@@ -194,11 +194,13 @@ local FeatureList = {
     "Concealment & Foliage Check",
     "Humanized Cover Anticipation",
     "Environmental Awareness ESP",
+    "Triggerbot Priority Target Filter",
+    "Hybrid Repository Commit & Signature Sync",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 96   -- +4 (CoverAnticipationEnabled, FoliageConcealmentCheck, EnvironmentalESPEnabled, EnvironmentalESPPriorityOnly)
+S.ToggleCount         = 97   -- +1 (TriggerbotPriorityOnly)
 S.SliderCount         = 37   -- +2 (CoverAnticipationDuration, EnvironmentalESPRange)
 S.DropdownCount       = 41   -- +3 (Legacy Changelog Version, InstinctsBlacklist, InstinctsPriority)
 S.ButtonCount         = 29   -- +5 (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)

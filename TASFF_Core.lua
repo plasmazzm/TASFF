@@ -3189,6 +3189,120 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     return oldNamecall(self,...)
 end)
 
+-- // ── Feature 24: Repository Update Checker ────────────────────────────── // --
+local function FetchRemoteText(url)
+    local ok, res = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if ok and type(res) == "string" and #res > 0 then
+        return res
+    end
+    local req = (type(request) == "function" and request)
+        or (type(http_request) == "function" and http_request)
+        or (type(syn) == "table" and type(syn.request) == "function" and syn.request)
+    if req then
+        local ok2, res2 = pcall(function()
+            return req({Url = url, Method = "GET"})
+        end)
+        if ok2 and type(res2) == "table" and res2.Body and #res2.Body > 0 then
+            return res2.Body
+        end
+    end
+    return nil
+end
+
+local lastNotifiedUpdateVer = nil
+function S.CheckForUpdates(manual)
+    local repoBase = "https://raw.githubusercontent.com/plasmazzm/TASFF/refs/heads/main/"
+    local currentVer = S.CurrentVersion or "2.2.5"
+    local cacheBust = "?t=" .. tostring(tick())
+
+    -- Step 1: Query version.txt
+    local remoteVer = nil
+    local vText = FetchRemoteText(repoBase .. "version.txt" .. cacheBust)
+    if not vText then
+        vText = FetchRemoteText(repoBase .. "version.txt")
+    end
+    if vText then
+        remoteVer = vText:match("([%d%.]+)")
+    end
+
+    -- Step 2: Fallback query to TASFF_State.lua if version.txt not found or empty
+    if not remoteVer then
+        local stateText = FetchRemoteText(repoBase .. "TASFF_State.lua" .. cacheBust)
+        if not stateText then
+            stateText = FetchRemoteText(repoBase .. "TASFF_State.lua")
+        end
+        if stateText then
+            remoteVer = stateText:match('CurrentVersion%s*=%s*"([^"]+)"')
+        end
+    end
+
+    local isNewer = false
+    if remoteVer and remoteVer ~= "" then
+        if remoteVer ~= currentVer then
+            isNewer = true
+        end
+    end
+
+    if isNewer then
+        S.UpdateAvailable = true
+        S.RemoteVersion = remoteVer
+        if S.UpdateStatusDisplay and S.UpdateStatusDisplay.Set then
+            pcall(function()
+                S.UpdateStatusDisplay:Set({
+                    Title = "Update Available: v" .. remoteVer,
+                    Content = "A new update has been detected in the repository.\nClick 'Restart Script & Reload Interface' below to apply changes."
+                })
+            end)
+        end
+        if manual or (lastNotifiedUpdateVer ~= remoteVer) then
+            lastNotifiedUpdateVer = remoteVer
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Update Checker",
+                    Content  = "Update available (v" .. remoteVer .. "), restart for it to take changes.",
+                    Duration = 8,
+                    Image    = "arrow-up-circle"
+                })
+            end
+        end
+        return true, remoteVer
+    else
+        S.UpdateAvailable = false
+        if S.UpdateStatusDisplay and S.UpdateStatusDisplay.Set then
+            pcall(function()
+                S.UpdateStatusDisplay:Set({
+                    Title = "Update Status — Up to Date",
+                    Content = "Running TASFF v" .. currentVer .. ".\nRepository is fully in sync."
+                })
+            end)
+        end
+        if manual and S.Notify then
+            S.Notify({
+                Title    = "TASFF Update Checker",
+                Content  = "You are up to date! (v" .. currentVer .. ")",
+                Duration = 4,
+                Image    = "check-circle"
+            })
+        end
+        return false, currentVer
+    end
+end
+
+-- Periodic Background Update Checker Worker
+task.spawn(function()
+    task.wait(6)
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        if S.AutoUpdateCheckerEnabled then
+            pcall(function()
+                S.CheckForUpdates(false)
+            end)
+        end
+        task.wait(math.clamp(S.UpdateCheckInterval or 180, 30, 3600))
+    end
+end)
+
 getgenv().TASFF.Cleanup = function()
     pcall(function() hookmetamethod(game,"__index",oldIndex) end)
     pcall(function() hookmetamethod(game,"__namecall",oldNamecall) end)

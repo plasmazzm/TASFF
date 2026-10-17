@@ -241,6 +241,12 @@ local function LoadModule(filename)
         error("[TASFF Loader] Runtime error in " .. filename .. ":\n" .. tostring(runErr))
     end
 
+    local S = _G.TASFF_State
+    if S then
+        if not S._LoadedModuleLengths then S._LoadedModuleLengths = {} end
+        S._LoadedModuleLengths[filename] = #source
+    end
+
     print("[TASFF Loader] OK: " .. filename)
 end
 
@@ -300,14 +306,14 @@ local function StartLoadingSequence()
     task.delay(0.2, function()
         if S and S.Notify then
             S.Notify({
-                Title    = "TASFF v2.2.5 Ready",
+                Title    = "TASFF v2.2.6 Ready",
                 Content  = "All modules loaded stably! Master Switch to begin.",
                 Duration = 4,
                 Image    = "shield-check"
             })
         elseif Rayfield and Rayfield.Notify then
             Rayfield:Notify({
-                Title    = "TASFF v2.2.5 Ready",
+                Title    = "TASFF v2.2.6 Ready",
                 Content  = "All modules loaded stably! Master Switch to begin.",
                 Duration = 4,
                 Image    = "shield-check"
@@ -392,4 +398,4 @@ task.spawn(function()
     end
 end)
 
-print("[TASFF Loader] ══ All modules loaded. TASFF v2.2.5 is running. ══")
+print("[TASFF Loader] ══ All modules loaded. TASFF v2.2.6 is running. ══")

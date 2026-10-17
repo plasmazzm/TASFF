@@ -8,48 +8,104 @@
 local S = _G.TASFF_State
 
 -- // ── Weapon Classification Keywords ───────────────────────────── // --
--- Add your own keywords to any list. Matching is case-insensitive
--- substring search against the tool's Name property.
+-- Smart case-insensitive matching. Short abbreviations (<= 3 chars) use word-boundary
+-- checks to prevent false positives (e.g. "ar" will not match "star fruit").
+-- Specific compound weapons (e.g. "sawblade", "chainsaw") are protected from tool keywords ("saw").
 
 local WeaponKeywords = {
-    "gun","rifle","pistol","sniper","shotgun","smg","ak","m4","mp5","awp",
-    "deagle","revolver","cannon","blaster","laser","musket","carbine","uzi",
-    "minigun","railgun","ar","lmg","dmr","burst","auto","semi","shoot",
-    "fire","bullet","ammo","mag","clip","reload","scope","silencer",
-    "suppressor","glock","p90","mp40","sten","bren","nade","grenade",
+    -- Assault Rifles / Carbines / Battle Rifles
+    "assault rifle","rifle","carbine","ar-15","m4a1","m16","scar","galil","tar-21","aug",
+    "famas","g36","hk416","ak47","ak-47","ak74","ak-74","ak12","fal","acr","badger",
+    "g3","val","an-94","groza","sa-58","m14","socom","m1 garand","stg","stg44",
+    -- Submachine Guns
+    "submachine","smg","mp5","mp7","mp9","ump","p90","vector","kriss","mac-10","mac-11",
+    "uzi","ppsh","scorp","bizon","sten","mp40","thompson","tommy gun","grease gun",
+    -- Shotguns
+    "shotgun","spas","remington","mossberg","saiga","benelli","striker","trench gun",
+    "sawed-off","sawed off","sawnoff","double barrel","pump action","blunderbuss","super shorty",
+    "aa-12","origin-12","coach gun","scattergun",
+    -- Snipers & DMRs
+    "sniper","awp","awm","barrett","mosin","kar98","kar98k","springfield","dragunov","svd",
+    "scout","dmr","marksman","hunting rifle","railgun","intervention","hecate","wa2000",
+    -- Handguns / Pistols / Revolvers
+    "pistol","handgun","glock","deagle","desert eagle","beretta","m1911","colt","luger",
+    "usp","p250","p226","p320","revolver","magnum","derringer","python","anaconda","peacekeeper",
+    "flintlock","zip 22","tec-9","five-seven","makarov","tokarev",
+    -- Heavy & Machine Guns
+    "minigun","gatling","lmg","rpk","m249","negev","mg42","bren","lewis","m60","pkm","dp-27",
+    "chaingun","vulcan",
+    -- Launchers, Projectiles & Special
+    "rocket launcher","rpg","bazooka","grenade launcher","cannon","mortar","blaster","laser",
+    "plasma","raygun","crossbow","longbow","compound bow","blowpipe","slingshot",
+    -- Short identifiers (evaluated strictly via word-boundaries)
+    "ar","ak","m4","awp","dmr","lmg","rpg","gun","bow",
 }
 
 local MeleeKeywords = {
-    "sword","knife","blade","katana","dagger","axe","bat","club","fist",
-    "punch","slash","saber","machete","spear","lance","scythe","hammer",
-    "mace","whip","claws","claw","melee","stab","shiv","cleave","bludgeon",
-    "staff","wand","stick","bonk","slap","swing","hit","kunai","shuriken",
+    -- Swords & Blades
+    "sword","katana","broadsword","longsword","claymore","rapier","scimitar","cutlass",
+    "saber","sabre","blade","greatsword","zweihander","falchion","machete","nodachi",
+    "wakizashi","tanto","gladius","shortsword","bastard sword","excalibur","dao","jian",
+    -- Knives & Daggers
+    "knife","dagger","karambit","kunai","butterfly knife","balisong","bowie","hunting knife",
+    "shiv","switchblade","push dagger","trench knife","stiletto","dirk","kris","cleaver",
+    -- Axes, Saws & Polearms
+    "axe","battleaxe","hatchet","tomahawk","halberd","bardiche","chainsaw","sawblade",
+    "buzzsaw","bonesaw","scythe","spear","lance","pike","trident","javelin","glaive","naginata",
+    -- Blunt, Impact & Brawling
+    "hammer","warhammer","mace","club","baseball bat","bat","flail","morningstar","crowbar",
+    "pipe","lead pipe","brass knuckles","knuckles","fist","cestus","gauntlet","sledgehammer",
+    "blackjack","cudgel","baton","nightstick","tonfa",
+    -- Martial Arts & Thrown
+    "staff","quarterstaff","bo staff","nunchaku","nunchuck","shuriken","kama","sai","whip",
+    "claws","claw",
 }
 
 local NonWeaponKeywords = {
-    "potion","food","medkit","heal","bandage","apple","pizza","tool",
-    "pickaxe","shovel","build","place","rod","fishing","flashlight","torch",
-    "key","book","map","bag","backpack","drink","water","juice","mushroom",
-    "berry","fruit","vegetable","carrot","bread","coin","money","gold",
-    "shield","detector","scanner","camera","paint","brush","wrench","saw",
+    -- Consumables & Food
+    "potion","elixir","flask","food","apple","banana","pizza","bread","burger","cake",
+    "cookie","donut","sandwich","pie","meat","steak","chicken","star fruit","fruit",
+    "berry","mushroom","carrot","potato","vegetable","candy","chocolate","taco",
+    "drink","water","soda","juice","bottle","cup","mug","coffee","tea","milk",
+    -- Medical & Healing
+    "medkit","first aid","bandage","gauze","heal","syringe","pill","injection","splint",
+    "adrenaline","defibrillator","health pack","blood bag",
+    -- Building, Utilities, Tools & Mining
+    "pickaxe","shovel","hoe","rake","fishing rod","rod","flashlight","torch","lantern",
+    "lighter","match","compass","map","radio","walkie","camera","binoculars","telescope",
+    "detector","scanner","key","keycard","lockpick","briefcase","backpack","bag","umbrella",
+    "paint","paintbrush","brush","spray","spray can","build","placemat","wrench","saw",
+    "coin","money","gold","cash","card","ticket","balloon","popper","confetti",
 }
 
--- // ── Classifier ───────────────────────────────────────────────── // --
+-- // ── Classifier Helper ────────────────────────────────────────── // --
+
+local function MatchesKeyword(str, kw)
+    if #kw <= 3 then
+        if kw:match("^%a+$") then
+            return str:match("%f[%a]" .. kw .. "%f[%A]") ~= nil
+        else
+            return (str:match("%f[%w]" .. kw .. "%f[%W]") ~= nil) or (str:match("%f[%a]" .. kw) ~= nil)
+        end
+    else
+        return str:find(kw, 1, true) ~= nil
+    end
+end
 
 local function ClassifyTool(toolName)
     if type(toolName) ~= "string" or toolName == "" then return "Unknown" end
     local lower = toolName:lower()
-    -- Melee checked before weapon (more specific)
+    -- Melee checked before weapon (more specific, e.g. "chainsaw", "sawblade", "knife")
     for _, kw in ipairs(MeleeKeywords) do
-        if lower:find(kw, 1, true) then return "Melee" end
+        if MatchesKeyword(lower, kw) then return "Melee" end
     end
-    -- Non-weapon before weapon (food/tools should never activate aimbot)
+    -- Non-weapon before weapon (food/medical/utility should never trigger weapon engagement)
     for _, kw in ipairs(NonWeaponKeywords) do
-        if lower:find(kw, 1, true) then return "NonWeapon" end
+        if MatchesKeyword(lower, kw) then return "NonWeapon" end
     end
-    -- Weapon last — broadest match
+    -- Weapon last — broadest match with smart word boundary checks for short abbreviations
     for _, kw in ipairs(WeaponKeywords) do
-        if lower:find(kw, 1, true) then return "Weapon" end
+        if MatchesKeyword(lower, kw) then return "Weapon" end
     end
     return "Unknown"
 end
@@ -129,16 +185,18 @@ local FeatureList = {
     "Universal Player Damage Tracking",
     "Expert Instincts (Instant Counter-Lock)",
     "Configurable Expert Instincts Intensity",
+    "Expert Instincts Inventory Defense Check",
+    "Smart Weapon Keyword Classifier",
     "Dedicated Misc & System Tab Separation",
     "Legacy Changelog Archive",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 91   -- +4 (Distance Prediction, Universal Damage Tracking, Expert Instincts, AutoUpdateChecker)
+S.ToggleCount         = 92   -- +5 (Distance Prediction, Universal Damage Tracking, Expert Instincts, AutoUpdateChecker, InstinctsInventoryCheck)
 S.SliderCount         = 34   -- +2 (Maximum Auto Prediction, Expert Instincts Lock Speed)
-S.DropdownCount       = 39   -- +1 (Legacy Changelog Version)
-S.ButtonCount         = 25   -- +1 (Check for Updates Now)
+S.DropdownCount       = 41   -- +3 (Legacy Changelog Version, InstinctsBlacklist, InstinctsPriority)
+S.ButtonCount         = 29   -- +5 (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)
 S.KeybindCount        = 5
 S.StatusDisplayCount  = 7    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status, Repository Status
 

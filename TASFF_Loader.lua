@@ -385,16 +385,23 @@ local S = _G.TASFF_State
 -- Feature 24: Auto-Update Version Checker
 task.spawn(function()
     task.wait(2)  -- let game fully settle
-    local ok, result = pcall(function()
-        return game:GetService("HttpService"):GetAsync(
-            "https://raw.githubusercontent.com/plasmazzm/TASFF/refs/heads/main/version.txt", true)
-    end)
-    if ok and result then
-        local remote = result:match("([%d%.]+)")
-        local current = S.CurrentVersion or "2.2.5"
-        if remote and remote ~= current then
-            if S.Notify then
-                S.Notify({Title="TASFF Update", Content="v"..remote.." available! Re-execute to update.", Duration=8, Image="arrow-up-circle"})
+    if S and S.CheckForUpdates then
+        pcall(function()
+            S.CheckForUpdates(false)
+        end)
+    else
+        local ok, result = pcall(function()
+            return SafeHttpGet("https://raw.githubusercontent.com/plasmazzm/TASFF/refs/heads/main/version.txt", "version.txt")
+        end)
+        if ok and result then
+            local remote = result:match("([%d%.]+)")
+            local current = (S and S.CurrentVersion) or "2.2.5"
+            if remote and remote ~= current then
+                if S and S.Notify then
+                    S.Notify({Title="TASFF Update", Content="Update available (v"..remote.."), restart for it to take changes.", Duration=8, Image="arrow-up-circle"})
+                elseif Rayfield and Rayfield.Notify then
+                    Rayfield:Notify({Title="TASFF Update", Content="Update available (v"..remote.."), restart for it to take changes.", Duration=8, Image="arrow-up-circle"})
+                end
             end
         end
     end

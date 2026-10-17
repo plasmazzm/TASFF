@@ -187,14 +187,19 @@ local FeatureList = {
     "Configurable Expert Instincts Intensity",
     "Expert Instincts Inventory Defense Check",
     "Smart Weapon Keyword Classifier",
+    "Continuous Kills Permanent Priority",
     "Dedicated Misc & System Tab Separation",
     "Legacy Changelog Archive",
+    "Continuous Expert Instincts Tracking",
+    "Concealment & Foliage Check",
+    "Humanized Cover Anticipation",
+    "Environmental Awareness ESP",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 92   -- +5 (Distance Prediction, Universal Damage Tracking, Expert Instincts, AutoUpdateChecker, InstinctsInventoryCheck)
-S.SliderCount         = 34   -- +2 (Maximum Auto Prediction, Expert Instincts Lock Speed)
+S.ToggleCount         = 96   -- +4 (CoverAnticipationEnabled, FoliageConcealmentCheck, EnvironmentalESPEnabled, EnvironmentalESPPriorityOnly)
+S.SliderCount         = 37   -- +2 (CoverAnticipationDuration, EnvironmentalESPRange)
 S.DropdownCount       = 41   -- +3 (Legacy Changelog Version, InstinctsBlacklist, InstinctsPriority)
 S.ButtonCount         = 29   -- +5 (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)
 S.KeybindCount        = 5

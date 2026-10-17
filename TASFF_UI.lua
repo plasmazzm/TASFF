@@ -640,6 +640,12 @@ end})
 MainTab:CreateToggle({Name = "Hitbox Volume Surface Drift", CurrentValue = S.HitboxOffsetDrift, Flag = "HitboxDrift", Callback = function(v)
     S.HitboxOffsetDrift = v
 end})
+MainTab:CreateToggle({Name = "Humanized Cover Anticipation (Corner Hold)", CurrentValue = S.CoverAnticipationEnabled, Flag = "CoverAnticipationEnabled", Callback = function(v)
+    S.CoverAnticipationEnabled = v
+end})
+MainTab:CreateSlider({Name = "Cover Anticipation Hold Duration (Seconds)", Range = {0.1, 3.0}, Increment = 0.1, CurrentValue = S.CoverAnticipationDuration or 0.8, Flag = "CoverAnticipationDuration", Callback = function(v)
+    S.CoverAnticipationDuration = v
+end})
 
 
 
@@ -708,6 +714,23 @@ end})
 VisualTab:CreateToggle({Name = "Off-Screen Indicators (OOF Arrows)", CurrentValue = S.OOFArrowsEnabled, Flag = "OOFArrowsEnabled", Callback = function(v) S.OOFArrowsEnabled = v end})
 VisualTab:CreateSlider({Name = "OOF Indicator Radius", Range = {50, 400}, Increment = 10, CurrentValue = S.OOFArrowRadius, Flag = "OOFArrowRadius", Callback = function(v) S.OOFArrowRadius = v end})
 VisualTab:CreateToggle({Name = "OOF Indicators - Priority Targets Only", CurrentValue = S.OOFArrowsPriorityOnly, Flag = "OOFArrowsPriorityOnly", Callback = function(v) S.OOFArrowsPriorityOnly = v end})
+
+VisualTab:CreateSection("Environmental Awareness (ESP)")
+VisualTab:CreateParagraph({
+    Title   = "Environmental ESP",
+    Content = "Dynamically highlights surrounding objects and terrain near players. Small props (tables, chairs, obstacles) are fully outlined, while large structures (floors, walls, ceilings) display a focused square slice directly around the player."
+})
+VisualTab:CreateToggle({Name = "Enable Environmental ESP", CurrentValue = S.EnvironmentalESPEnabled, Flag = "EnvironmentalESPEnabled", Callback = function(v)
+    S.EnvironmentalESPEnabled = v
+    if not v and S.ClearEnvironmentalESP then S.ClearEnvironmentalESP() end
+end})
+VisualTab:CreateToggle({Name = "Environmental ESP — Priority Targets Only", CurrentValue = S.EnvironmentalESPPriorityOnly, Flag = "EnvironmentalESPPriorityOnly", Callback = function(v)
+    S.EnvironmentalESPPriorityOnly = v
+    if S.ClearEnvironmentalESP then S.ClearEnvironmentalESP() end
+end})
+VisualTab:CreateSlider({Name = "Environmental ESP Radius (Studs)", Range = {5, 50}, Increment = 1, CurrentValue = S.EnvironmentalESPRange or 15, Flag = "EnvironmentalESPRange", Callback = function(v)
+    S.EnvironmentalESPRange = v
+end})
 
 VisualTab:CreateSection("Target Intelligence Tags")
 VisualTab:CreateToggle({Name = "Render Player Tags", CurrentValue = S.UseInfoTag, Flag = "UseInfoTag", Callback = function(v) S.UseInfoTag = v end})
@@ -996,6 +1019,9 @@ end})
 IntelTab:CreateSlider({Name = "Kills Before Threat Flag", Range = {1, 10}, Increment = 1, CurrentValue = S.KillsBeforeThreat, Flag = "KillsBeforeThreat", Callback = function(v)
     S.KillsBeforeThreat = v
 end})
+IntelTab:CreateSlider({Name = "Continuous Kills For Permanent Priority", Range = {2, 15}, Increment = 1, CurrentValue = S.ContinuousKillsPermanent or 5, Flag = "ContinuousKillsPermanent", Callback = function(v)
+    S.ContinuousKillsPermanent = v
+end})
 IntelTab:CreateToggle({Name = "Enable Threat Detector (Damage Tracking)", CurrentValue = S.ThreatDetectorEnabled, Flag = "ThreatDetector", Callback = function(v)
     S.ThreatDetectorEnabled = v
 end})
@@ -1228,6 +1254,7 @@ AdvancedTab:CreateSection("Target Marking (Legacy - See Intel Tab)")
 AdvancedTab:CreateSection("Environment Penetration (Wallchecks)")
 AdvancedTab:CreateToggle({Name = "Enforce Line of Sight (Wallcheck)", CurrentValue = S.WallCheck, Flag = "WallCheck", Callback = function(v) S.WallCheck = v end})
 AdvancedTab:CreateToggle({Name = "Ignore Non-Collidable Objects (CanCollide = False)", CurrentValue = S.NoCollisionCheck, Flag = "NoCollisionCheck", Callback = function(v) S.NoCollisionCheck = v end})
+AdvancedTab:CreateToggle({Name = "Concealment & Foliage Check (Block Aim Through Bushes)", CurrentValue = S.FoliageConcealmentCheck, Flag = "FoliageConcealmentCheck", Callback = function(v) S.FoliageConcealmentCheck = v end})
 AdvancedTab:CreateToggle({Name = "Ignore Transparent Objects (Glass/Tint)", CurrentValue = S.TransparencyCheck, Flag = "TransparencyCheck", Callback = function(v) S.TransparencyCheck = v end})
 AdvancedTab:CreateSlider({Name = "Minimum Transparency Threshold", Range = {0.01, 1.0}, Increment = 0.05, CurrentValue = S.TransparencyThreshold, Flag = "TransparencyThreshold", Callback = function(v)
     S.TransparencyThreshold = v
@@ -1450,12 +1477,14 @@ PresetsTab:CreateButton({
                 HumanTremorIntensity = S.HumanTremorIntensity, TargetInertiaTracking = S.TargetInertiaTracking,
                 HitboxOffsetDrift = S.HitboxOffsetDrift,
                 DistancePredictionAdjustEnabled = S.DistancePredictionAdjustEnabled, MaxAutoPrediction = S.MaxAutoPrediction,
+                CoverAnticipationEnabled = S.CoverAnticipationEnabled, CoverAnticipationDuration = S.CoverAnticipationDuration,
                 -- Visuals & Overlays
                 VisualMode = S.VisualMode, UseHighlight = S.UseHighlight, UseNPCHighlight = S.UseNPCHighlight,
                 FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
                 ESPRenderDistance = S.ESPRenderDistance, ChamsEnabled = S.ChamsEnabled, ChamsOpacity = S.ChamsOpacity,
                 BoxModeEnabled = S.BoxModeEnabled, SkeletonModeEnabled = S.SkeletonModeEnabled, SnaplinesEnabled = S.SnaplinesEnabled,
                 SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius, OOFArrowsPriorityOnly = S.OOFArrowsPriorityOnly,
+                EnvironmentalESPEnabled = S.EnvironmentalESPEnabled, EnvironmentalESPPriorityOnly = S.EnvironmentalESPPriorityOnly, EnvironmentalESPRange = S.EnvironmentalESPRange,
                 UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
                 ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
@@ -1468,12 +1497,13 @@ PresetsTab:CreateButton({
                 -- Advanced & Logic
                 ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
-                KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
+                KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, ContinuousKillsPermanent = S.ContinuousKillsPermanent, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
                 InstinctsInventoryCheck = S.InstinctsInventoryCheck,
                 AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
+                FoliageConcealmentCheck = S.FoliageConcealmentCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
                 TargetPlayers = S.TargetPlayers, TargetNPCs = S.TargetNPCs, TeamCheck = S.TeamCheck,
@@ -1534,6 +1564,8 @@ local STO_FLAG = {
     MeleeDetectionRange = "MeleeRange", MeleeClickInterval = "MeleeClickInterval", ThreatDetectorEnabled = "ThreatDetector",
     NemesisEnabled = "NemesisEnabled", ThreatTimeout = "ThreatTimeout", BlacklistExpiredThreats = "BlacklistExpiredThreats",
     ClickToMarkEnabled = "ClickToMark", MarkMethod = "MarkMethod", StrictPrioritize = "StrictPrioritize", WallCheck = "WallCheck",
+    KillCountThreatEnabled = "KillCountThreat", KillFeedEnabled = "KillFeedEnabled", KillsBeforeThreat = "KillsBeforeThreat",
+    ContinuousKillsPermanent = "ContinuousKillsPermanent", KillsBeforeNemesis = "KillsBeforeNemesis", ThreatNeutralizationEnabled = "ThreatNeutralization",
     NoCollisionCheck = "NoCollisionCheck", TransparencyCheck = "TransparencyCheck", TransparencyThreshold = "TransparencyThreshold",
     DecalsCheck = "DecalsCheck", TargetPlayers = "TargetPlayers", TargetNPCs = "TargetNPCs", TeamCheck = "TeamCheck",
     AutoEnableOnEquip = "AutoEquipAim", IgnoreDead = "IgnoreDead",
@@ -1543,6 +1575,9 @@ local STO_FLAG = {
     HumanTremorEnabled = "HumanTremor", HumanTremorIntensity = "TremorIntensity",
     TargetInertiaTracking = "TargetInertia", HitboxOffsetDrift = "HitboxDrift",
     DistancePredictionAdjustEnabled = "DistancePredictionAdjustEnabled", MaxAutoPrediction = "MaxAutoPrediction",
+    CoverAnticipationEnabled = "CoverAnticipationEnabled", CoverAnticipationDuration = "CoverAnticipationDuration",
+    EnvironmentalESPEnabled = "EnvironmentalESPEnabled", EnvironmentalESPPriorityOnly = "EnvironmentalESPPriorityOnly",
+    EnvironmentalESPRange = "EnvironmentalESPRange", FoliageConcealmentCheck = "FoliageConcealmentCheck",
     OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled",
     ExpertInstinctsIntensity = "ExpertInstinctsIntensity", InstinctsInventoryCheck = "InstinctsInventoryCheck",
     AutoUpdateCheckerEnabled = "AutoUpdateChecker"
@@ -1640,12 +1675,14 @@ PresetsTab:CreateButton({
                 HumanTremorIntensity = S.HumanTremorIntensity, TargetInertiaTracking = S.TargetInertiaTracking,
                 HitboxOffsetDrift = S.HitboxOffsetDrift,
                 DistancePredictionAdjustEnabled = S.DistancePredictionAdjustEnabled, MaxAutoPrediction = S.MaxAutoPrediction,
+                CoverAnticipationEnabled = S.CoverAnticipationEnabled, CoverAnticipationDuration = S.CoverAnticipationDuration,
                 -- Visuals & Overlays
                 VisualMode = S.VisualMode, UseHighlight = S.UseHighlight, UseNPCHighlight = S.UseNPCHighlight,
                 FocusMode = S.FocusMode, StreamProofESP = S.StreamProofESP, VisibilityColorsEnabled = S.VisibilityColorsEnabled,
                 ESPRenderDistance = S.ESPRenderDistance, ChamsEnabled = S.ChamsEnabled, ChamsOpacity = S.ChamsOpacity,
                 BoxModeEnabled = S.BoxModeEnabled, SkeletonModeEnabled = S.SkeletonModeEnabled, SnaplinesEnabled = S.SnaplinesEnabled,
                 SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius, OOFArrowsPriorityOnly = S.OOFArrowsPriorityOnly,
+                EnvironmentalESPEnabled = S.EnvironmentalESPEnabled, EnvironmentalESPPriorityOnly = S.EnvironmentalESPPriorityOnly, EnvironmentalESPRange = S.EnvironmentalESPRange,
                 UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
                 ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
@@ -1658,12 +1695,13 @@ PresetsTab:CreateButton({
                 -- Advanced & Logic
                 ThreatDetectorEnabled = S.ThreatDetectorEnabled, NemesisEnabled = S.NemesisEnabled, ThreatTimeout = S.ThreatTimeout,
                 BlacklistExpiredThreats = S.BlacklistExpiredThreats, ClickToMarkEnabled = S.ClickToMarkEnabled, MarkMethod = S.MarkMethod,
-                KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
+                KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, ContinuousKillsPermanent = S.ContinuousKillsPermanent, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
                 InstinctsInventoryCheck = S.InstinctsInventoryCheck,
                 AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
+                FoliageConcealmentCheck = S.FoliageConcealmentCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
                 -- Settings & Entities
                 TargetPlayers = S.TargetPlayers, TargetNPCs = S.TargetNPCs, TeamCheck = S.TeamCheck,
@@ -2531,16 +2569,19 @@ SystemTab:CreateButton({
         S.OtherPlayersDamageTracking = true; S.ExpertInstinctsEnabled = false; S.ExpertInstinctsIntensity = 60
         S.InstinctsInventoryCheck = false; S.InstinctsBlacklist = {}; S.InstinctsPrioritizedTools = {}
         S.AutoUpdateCheckerEnabled = true
-        S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.KillsBeforeNemesis = 3
+        S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.ContinuousKillsPermanent = 5; S.KillsBeforeNemesis = 3
         S.ThreatNeutralizationEnabled = false; S.AutoExpireOnDisconnect = false
         S.IgnoreThreatVictims = true
         S.ClickToMarkEnabled = false;   S.MarkMethod = "Both"
         S.StrictPrioritize = false;     S.WallCheck = true
-        S.NoCollisionCheck = false;     S.TransparencyCheck = false;    S.TransparencyThreshold = 0.5
+        S.NoCollisionCheck = false;     S.FoliageConcealmentCheck = true; S.TransparencyCheck = false;    S.TransparencyThreshold = 0.5
         S.DecalsCheck = false
+        S.CoverAnticipationEnabled = true; S.CoverAnticipationDuration = 0.8
+        S.EnvironmentalESPEnabled = false; S.EnvironmentalESPPriorityOnly = false; S.EnvironmentalESPRange = 15
         S.TargetPlayers = true;         S.TargetNPCs = false;           S.TeamCheck = false
         S.AutoEnableOnEquip = false;    S.IgnoreDead = true
         S.CurrentTarget = nil
+        if S.ClearEnvironmentalESP then S.ClearEnvironmentalESP() end
         if S.SetADSState    then S.SetADSState(false) end
         if S.ClearVisuals   then S.ClearVisuals()     end
         if S.ClearCrosshair then S.ClearCrosshair()   end
@@ -2624,7 +2665,14 @@ UpdateLogTab:CreateParagraph({
               "• Auto-Update Checker & Repository Sync: background watcher and manual repository polling checks for committed updates and notifies when new builds are live.\n" ..
               "• Legacy Releases Changelog Archive: interactive version dropdown allowing users to explore full changelogs for builds v1.2.0 through v1.5.5.\n" ..
               "• Expert Instincts Pursuit & Defense Check: scans inventory for defense weapons when attacked, suppressing instincts if unarmed/fleeing with dedicated blacklist and priority registries.\n" ..
-              "• Smart Weapon Keyword Classifier: word-boundary filtering and compound keyword resolution eliminating false positives across extensive Roblox weapon and consumable libraries."
+              "• Smart Weapon Keyword Classifier: word-boundary filtering and compound keyword resolution eliminating false positives across extensive Roblox weapon and consumable libraries.\n" ..
+              "• Threat Expiry & Monitor Clean-up: Expired threats are cleanly pruned from the Intel Monitor; click-to-mark toggle logic restored for prioritized targets.\n" ..
+              "• Continuous Kills For Permanent Priority: Configurable slider (2-15) permanently locks killers on the Intel Monitor and priority targeting until neutralized.\n" ..
+              "• Crowd Attributor & Damage Tracking Hardening: Replaced flawed velocity proximity heuristics with weapon classification, directional aim alignment, and raycast line-of-sight checks, eliminating crowd false positives.\n" ..
+              "• Continuous Expert Instincts Tracking: Continuously swivels camera towards the attacker every frame damage is sustained, pinning aimbot lock onto the attacker.\n" ..
+              "• Concealment & Foliage Check (Anti-Bush Snapping): Intelligent foliage and obstacle detector prevents aimbot and triggerbot from locking onto enemies hidden in non-collidable foliage/bushes.\n" ..
+              "• Humanized Cover Anticipation (Corner Hold): Maintains crosshair on cover edges and corners when a target breaks line-of-sight for a configurable duration (0.1-3.0s), holding triggerbot fire until re-peek.\n" ..
+              "• Environmental Awareness ESP: Highlights surrounding objects and obstacles near players with configurable radius (5-50 studs), fully outlining small props and rendering bounding square slices on large floors, walls, and ceilings with priority-only filter."
 })
 
 UpdateLogTab:CreateParagraph({
@@ -2801,6 +2849,8 @@ local booleanSettings = {
     "IgnoreThreatVictims", "OOFArrowsPriorityOnly",
     "DistancePredictionAdjustEnabled", "OtherPlayersDamageTracking", "ExpertInstinctsEnabled",
     "AutoUpdateCheckerEnabled", "InstinctsInventoryCheck",
+    "CoverAnticipationEnabled", "FoliageConcealmentCheck",
+    "EnvironmentalESPEnabled", "EnvironmentalESPPriorityOnly",
 }
 for _, key in ipairs(booleanSettings) do
     if type(S[key]) ~= "boolean" then
@@ -2812,6 +2862,8 @@ end
 local numericRanges = {
     FOVSize = {10, 2000}, SwitchDelayMs = {0, 2000}, PredictionAmount = {0, 5},
     MaxAutoPrediction = {0.16, 2}, ExpertInstinctsIntensity = {5, 100},
+    ContinuousKillsPermanent = {2, 15}, KillsBeforeThreat = {1, 10},
+    CoverAnticipationDuration = {0.1, 3}, EnvironmentalESPRange = {5, 50},
     Smoothness = {0.1, 100}, SmoothnessX = {0.1, 100}, SmoothnessY = {0.1, 100},
     BlatantSnapSpeed = {1, 100}, TransparencyThreshold = {0, 1},
     GracePeriodMs = {0, 2000}, AimbotRenderDistance = {1, 10000},

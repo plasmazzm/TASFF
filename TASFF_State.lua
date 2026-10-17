@@ -228,6 +228,10 @@ _G.TASFF_State = {
     ColorSettingsFileName       = "TASFF_ColorSettings.json",
     ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
     CurrentVersion              = "2.2.5",
+    AutoUpdateCheckerEnabled    = true,      -- automatically check repository for updates
+    UpdateAvailable             = false,     -- set true when a newer version or commit is detected
+    RemoteVersion               = nil,       -- remote version string if detected
+    UpdateCheckInterval         = 180,       -- periodic check interval in seconds (3 minutes)
 
     -- // ── Session Statistics (v2.1.0) ─────────────────────────── // --
     SessionStartTime            = 0,

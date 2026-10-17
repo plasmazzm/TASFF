@@ -321,6 +321,133 @@ local function PrepareDrawing(obj)
 end
 S.PrepareDrawing = PrepareDrawing
 
+local EnvAdornmentPool = {}
+local function GetEnvAdornment(index)
+    if not EnvAdornmentPool[index] then
+        local adorn = Instance.new("BoxHandleAdornment")
+        adorn.Name = "TASFF_EnvAdornment_" .. index
+        adorn.AlwaysOnTop = true
+        adorn.ZIndex = 1
+        adorn.Color3 = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
+        adorn.Transparency = S.EnvironmentalESPTransparency or 0.65
+        local parentObj = nil
+        pcall(function() parentObj = CoreGui end)
+        if not parentObj then parentObj = Camera end
+        adorn.Parent = parentObj
+        EnvAdornmentPool[index] = adorn
+    end
+    return EnvAdornmentPool[index]
+end
+
+local function ClearEnvironmentalESP()
+    for _, adorn in ipairs(EnvAdornmentPool) do
+        if adorn then
+            adorn.Visible = false
+            adorn.Adornee = nil
+        end
+    end
+end
+S.ClearEnvironmentalESP = ClearEnvironmentalESP
+
+local envOverlap = OverlapParams.new()
+envOverlap.FilterType = Enum.RaycastFilterType.Exclude
+
+local function UpdateEnvironmentalESP()
+    if not (S.MasterEnabled and S.EnvironmentalESPEnabled) then
+        if #EnvAdornmentPool > 0 then ClearEnvironmentalESP() end
+        return
+    end
+
+    local radius = S.EnvironmentalESPRange or 15
+    local targets = {}
+    local PP = S.PriorityPlayers or {}
+
+    for _, t in ipairs(S.LastVisualList or {}) do
+        if t.Instance and t.Root and t.Health and t.Health > 0 then
+            local isPrio = table.find(PP, t.Name) ~= nil or (S.IntelPlayers and S.IntelPlayers[t.Name] ~= nil)
+            if not S.EnvironmentalESPPriorityOnly or isPrio then
+                table.insert(targets, t)
+            end
+        end
+    end
+
+    if #targets == 0 then
+        ClearEnvironmentalESP()
+        return
+    end
+
+    local excludeList = {Camera}
+    if Player and Player.Character then table.insert(excludeList, Player.Character) end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then table.insert(excludeList, p.Character) end
+    end
+    for _, npc in ipairs(S.CachedNPCs or {}) do
+        table.insert(excludeList, npc)
+    end
+    for _, item in ipairs(S.CachedWorkspaceIgnores or {}) do
+        table.insert(excludeList, item)
+    end
+    envOverlap.FilterDescendantsInstances = excludeList
+
+    local usedCount = 0
+    local maxAdornments = 120
+    local processedParts = {}
+
+    local baseColor = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
+    local trans = S.EnvironmentalESPTransparency or 0.65
+
+    for _, t in ipairs(targets) do
+        local pPos = t.Root.Position
+        local ok, parts = pcall(function()
+            return workspace:GetPartBoundsInRadius(pPos, radius, envOverlap)
+        end)
+        if ok and parts then
+            for _, part in ipairs(parts) do
+                if usedCount >= maxAdornments then break end
+                if part:IsA("BasePart") and not processedParts[part] then
+                    processedParts[part] = true
+                    local pSize = part.Size
+                    local isLarge = (pSize.X > 20 or pSize.Y > 20 or pSize.Z > 20)
+                    usedCount = usedCount + 1
+                    local adorn = GetEnvAdornment(usedCount)
+                    adorn.Color3 = baseColor
+                    adorn.Transparency = trans
+                    adorn.Adornee = part
+
+                    if isLarge then
+                        local localPos = part.CFrame:PointToObjectSpace(pPos)
+                        local halfSize = pSize * 0.5
+                        local clampedX = math.clamp(localPos.X, -halfSize.X, halfSize.X)
+                        local clampedY = math.clamp(localPos.Y, -halfSize.Y, halfSize.Y)
+                        local clampedZ = math.clamp(localPos.Z, -halfSize.Z, halfSize.Z)
+
+                        local sliceX = (pSize.X > 20) and math.min(pSize.X, radius * 1.4) or (pSize.X + 0.1)
+                        local sliceY = (pSize.Y > 20) and math.min(pSize.Y, radius * 1.4) or (pSize.Y + 0.1)
+                        local sliceZ = (pSize.Z > 20) and math.min(pSize.Z, radius * 1.4) or (pSize.Z + 0.1)
+
+                        adorn.CFrame = CFrame.new(clampedX, clampedY, clampedZ)
+                        adorn.Size = Vector3.new(sliceX, sliceY, sliceZ)
+                    else
+                        adorn.CFrame = CFrame.new(0, 0, 0)
+                        adorn.Size = pSize + Vector3.new(0.08, 0.08, 0.08)
+                    end
+                    adorn.Visible = true
+                end
+            end
+        end
+        if usedCount >= maxAdornments then break end
+    end
+
+    for i = usedCount + 1, #EnvAdornmentPool do
+        local adorn = EnvAdornmentPool[i]
+        if adorn and adorn.Visible then
+            adorn.Visible = false
+            adorn.Adornee = nil
+        end
+    end
+end
+S.UpdateEnvironmentalESP = UpdateEnvironmentalESP
+
 local function ClearVisuals()
     for _, h in pairs(HighlightCache) do
         if h and typeof(h) == "Instance" and h.Parent then h.Enabled = false end
@@ -344,6 +471,7 @@ local function ClearVisuals()
     end
     for _, line in pairs(SnaplineCache) do if line then pcall(function() line.Visible = false end) end end
     for _, arrow in pairs(OOFArrowCache) do if arrow then pcall(function() arrow.Visible = false end) end end
+    ClearEnvironmentalESP()
 end
 S.ClearVisuals = ClearVisuals
 
@@ -663,7 +791,8 @@ local function RebuildIntelMonitor()
         -- Show recorded kill count for this intel player
         local pkills = (S.PriorityPlayerKills or {})[name]
         local killSuffix = pkills and pkills > 0 and ("  ☠ " .. pkills .. "k") or ""
-        table.insert(lines, name .. displaySuffix .. "  [" .. src .. "]  " .. pts .. " pts" .. killSuffix .. selected)
+        local permSuffix = data.permanent and " [PERM]" or ""
+        table.insert(lines, name .. displaySuffix .. "  [" .. src .. "]" .. permSuffix .. "  " .. pts .. " pts" .. killSuffix .. selected)
         if pts > mostDangerousPts then mostDangerousPts = pts; mostDangerousName = name end
     end
     local heatmap = ""
@@ -690,6 +819,10 @@ local function AddToIntel(name, source, extraPoints)
         end
         S.IntelPlayers[name].points = (S.IntelPlayers[name].points or 0) + pts
         if source == "Nemesis" then S.IntelPlayers[name].nemesis = true end
+        if source ~= "Nemesis" and not table.find(S.PriorityPlayers or {}, name) then
+            table.insert(S.PriorityPlayers, name)
+            SyncPriorityUI()
+        end
     else
         local isAlreadyPriority = table.find(S.PriorityPlayers or {}, name) ~= nil
         local effectiveSource = source
@@ -718,6 +851,7 @@ local function RemoveFromIntel(name, forceRemoveNemesis)
     end
     S.ThreatMemory[name] = nil
     S.NemesisMemory[name] = nil
+    if S.PlayerKillCounts then S.PlayerKillCounts[name] = 0 end
     local idx = table.find(S.PriorityPlayers, name)
     if idx then table.remove(S.PriorityPlayers, idx) end
     SyncPriorityUI()
@@ -830,10 +964,41 @@ IsVisibleWallcheck = function(model, partName, customIgnoreList)
         if not result then return true end
         local hit = result.Instance
         if hit == targetPart or hit:IsDescendantOf(model) then return true end
+
+        -- Foliage & Concealment Check:
+        -- Prevents targeting through bushes, foliage, leaves, shrubs, hedges, or opaque non-collidable cover
+        local isFoliage = false
+        if S.FoliageConcealmentCheck ~= false then
+            local mat = hit.Material
+            if mat == Enum.Material.Leaves or mat == Enum.Material.Grass then
+                isFoliage = true
+            else
+                local hn = hit.Name:lower()
+                if hn:find("bush") or hn:find("leaf") or hn:find("leaves") or hn:find("foliage")
+                    or hn:find("shrub") or hn:find("hedge") or hn:find("grass") or hn:find("tree")
+                    or hn:find("plant") or hn:find("vine") or hn:find("branch") then
+                    isFoliage = true
+                end
+            end
+        end
+
+        if isFoliage then
+            -- Opaque foliage/bush blocks visual sight even if CanCollide is false!
+            return false
+        end
+
         local canPass = false
-        if S.NoCollisionCheck and not hit.CanCollide then canPass = true
-        elseif S.TransparencyCheck and hit.Transparency >= S.TransparencyThreshold then canPass = true
-        elseif S.DecalsCheck and (hit:FindFirstChildOfClass("Decal") or hit:FindFirstChildOfClass("Texture")) then canPass = true
+        if S.NoCollisionCheck and not hit.CanCollide then
+            -- If non-collidable part is visually opaque (< threshold), human eyes cannot see through it
+            if S.FoliageConcealmentCheck ~= false and (hit.Transparency < (S.TransparencyThreshold or 0.5)) then
+                canPass = false
+            else
+                canPass = true
+            end
+        elseif S.TransparencyCheck and hit.Transparency >= S.TransparencyThreshold then
+            canPass = true
+        elseif S.DecalsCheck and (hit:FindFirstChildOfClass("Decal") or hit:FindFirstChildOfClass("Texture")) then
+            canPass = true
         end
         if canPass then
             if not hasClonedList then
@@ -940,8 +1105,13 @@ local function RegisterThreat(attackerName, isKill)
         if tick() - (_lastFP[attackerName] or 0) < cd then return end
         _lastFP[attackerName] = tick()
 
-        ThreatMemory[attackerName] = tick()
         local intelEntry = S.IntelPlayers and S.IntelPlayers[attackerName]
+        local isManualOrRegistry = (intelEntry and (intelEntry.source == "Marked" or intelEntry.source == "Registry" or intelEntry.permanent))
+            or (not intelEntry and table.find(S.PriorityPlayers or {}, attackerName) ~= nil)
+
+        if not isManualOrRegistry then
+            ThreatMemory[attackerName] = tick()
+        end
         local isAlreadyPrioritized = (intelEntry ~= nil) or (table.find(S.PriorityPlayers or {}, attackerName) ~= nil)
         S.SessionThreatsAdded = (S.SessionThreatsAdded or 0) + 1
         if S.AddToIntel then S.AddToIntel(attackerName, "Threat", 5) end
@@ -1238,6 +1408,103 @@ local function HasDefendingWeapon()
 end
 S.HasDefendingWeapon = HasDefendingWeapon
 
+local function FindLikelyAttacker(victimChar, victimPlayer)
+    if not victimChar then return nil end
+    local victimRoot = victimChar:FindFirstChild("HumanoidRootPart") or victimChar:FindFirstChild("Torso") or victimChar:FindFirstChild("UpperTorso")
+    if not victimRoot then return nil end
+    local victimPos = victimRoot.Position
+    local maxScanRadius = S.ThreatProximityRadius or 80
+
+    local bestCandidate = nil
+    local bestScore = 0
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local ignoreList = {victimChar}
+    if Camera then table.insert(ignoreList, Camera) end
+    raycastParams.FilterDescendantsInstances = ignoreList
+    raycastParams.IgnoreWater = true
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= victimPlayer and p.Character then
+            local pChar = p.Character
+            local pHum = pChar:FindFirstChildOfClass("Humanoid")
+            local pRoot = pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("Torso")
+            if pHum and pHum.Health > 0 and pRoot then
+                local dist = (pRoot.Position - victimPos).Magnitude
+                if dist <= maxScanRadius and dist > 0.1 then
+                    local heldTool = pChar:FindFirstChildOfClass("Tool")
+                    local hasWeapon = false
+                    local isRanged = false
+                    local isMelee = false
+                    if heldTool then
+                        local toolName = heldTool.Name
+                        local classification = S.ClassifyTool and S.ClassifyTool(toolName) or "Unknown"
+                        if classification == "Weapon" then
+                            hasWeapon = true
+                            isRanged = true
+                        elseif classification == "Melee" then
+                            hasWeapon = true
+                            isMelee = true
+                        elseif classification ~= "NonWeapon" then
+                            if heldTool:FindFirstChild("Handle") or heldTool:FindFirstChildWhichIsA("BasePart") then
+                                hasWeapon = true
+                            end
+                        end
+                    end
+
+                    local lookDir = pRoot.CFrame.LookVector
+                    local dirToVictim = (victimPos - pRoot.Position).Unit
+                    local dotAim = lookDir:Dot(dirToVictim)
+
+                    local isPlausible = false
+                    if isRanged and dist <= maxScanRadius then
+                        isPlausible = (dotAim >= 0.55)
+                    elseif isMelee and dist <= 22 then
+                        isPlausible = (dotAim >= 0.35)
+                    elseif hasWeapon and dist <= maxScanRadius then
+                        isPlausible = (dotAim >= 0.55)
+                    elseif not hasWeapon and dist <= 10 then
+                        isPlausible = (dotAim >= 0.45)
+                    end
+
+                    if isPlausible then
+                        local pHead = pChar:FindFirstChild("Head") or pRoot
+                        local rayOrigin = pHead.Position
+                        local rayDir = (victimPos - rayOrigin)
+                        local rayResult = workspace:Raycast(rayOrigin, rayDir, raycastParams)
+                        local losClear = false
+                        if not rayResult then
+                            losClear = true
+                        else
+                            local hitInstance = rayResult.Instance
+                            if hitInstance:IsDescendantOf(victimChar) or hitInstance:IsDescendantOf(pChar) or hitInstance.Transparency > 0.7 or not hitInstance.CanCollide then
+                                losClear = true
+                            end
+                        end
+
+                        if losClear then
+                            local score = 0
+                            score = score + math.clamp(dotAim * 50, 0, 50)
+                            score = score + math.clamp((1 - (dist / maxScanRadius)) * 40, 0, 40)
+                            if hasWeapon then score = score + 40 end
+                            if isMelee and dist <= 14 then score = score + 30 end
+
+                            if score >= 60 and score > bestScore then
+                                bestScore = score
+                                bestCandidate = p
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return bestCandidate
+end
+S.FindLikelyAttacker = FindLikelyAttacker
+
 local function HookThreatHealth(char)
     if not char then return end
     local humanoid = char:WaitForChild("Humanoid", 3)
@@ -1252,22 +1519,9 @@ local function HookThreatHealth(char)
             if killer then
                 RegisterThreat(killer.Name, true)
             else
-                local myPos = char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart.Position
-                if myPos then
-                    local nearestAttacker, nearestDist = nil, S.ThreatProximityRadius or 80
-                    for _, p in ipairs(Players:GetPlayers()) do
-                        if p ~= Player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                            local root = p.Character.HumanoidRootPart
-                            local d = (root.Position - myPos).Magnitude
-                            if d < nearestDist then
-                                local vel = root.AssemblyLinearVelocity
-                                if vel.Magnitude < 5 or vel.Unit:Dot((myPos - root.Position).Unit) > 0.3 then
-                                    nearestDist = d; nearestAttacker = p.Name
-                                end
-                            end
-                        end
-                    end
-                    if nearestAttacker then RegisterThreat(nearestAttacker, true) end
+                local likelyAttacker = FindLikelyAttacker(char, Player)
+                if likelyAttacker then
+                    RegisterThreat(likelyAttacker.Name, true)
                 end
             end
         end)
@@ -1290,28 +1544,12 @@ local function HookThreatHealth(char)
                         RegisterThreat(pObj.Name, false)
                     end
                 else
-                    local myPos = char:FindFirstChild("HumanoidRootPart") and char.HumanoidRootPart.Position
-                    if myPos then
-                        local nearestAttacker, nearestDist = nil, S.ThreatProximityRadius or 80
-                        local nearestObj = nil
-                        for _, p in ipairs(Players:GetPlayers()) do
-                            if p ~= Player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                                local root = p.Character.HumanoidRootPart
-                                local d = (root.Position - myPos).Magnitude
-                                if d < nearestDist then
-                                    local vel = root.AssemblyLinearVelocity
-                                    if vel.Magnitude < 5 or vel.Unit:Dot((myPos - root.Position).Unit) > 0.3 then
-                                        nearestDist = d; nearestAttacker = p.Name; nearestObj = p
-                                    end
-                                end
-                            end
-                        end
-                        if nearestAttacker then
-                            attackerName = nearestAttacker
-                            attackerObj = nearestObj
-                            if S.ThreatDetectorEnabled then
-                                RegisterThreat(nearestAttacker, false)
-                            end
+                    local likelyAttacker = FindLikelyAttacker(char, Player)
+                    if likelyAttacker then
+                        attackerName = likelyAttacker.Name
+                        attackerObj = likelyAttacker
+                        if S.ThreatDetectorEnabled then
+                            RegisterThreat(likelyAttacker.Name, false)
                         end
                     end
                 end
@@ -1334,15 +1572,17 @@ local function HookThreatHealth(char)
                         local targetPart = aChar:FindFirstChild(S.TargetPart) or aChar:FindFirstChild("Head") or aRoot
                         local aimPos = targetPart.Position
                         local intensity = math.clamp(S.ExpertInstinctsIntensity or 60, 5, 100)
+                        S._ExpertInstinctsActive = true
+                        S._ExpertInstinctsExpiry = tick() + 0.75
+                        S._ExpertInstinctsAttacker = attackerObj
+                        S._ExpertInstinctsTargetChar = aChar
+                        S._ExpertInstinctsIntensity = intensity
                         if intensity >= 100 then
                             Camera.CFrame = CFrame.new(Camera.CFrame.Position, aimPos)
                         else
                             local targetCF = CFrame.new(Camera.CFrame.Position, aimPos)
-                            local initialFraction = math.clamp((intensity / 100) * 0.4, 0.05, 0.5)
+                            local initialFraction = math.clamp((intensity / 100) * 0.45, 0.15, 0.75)
                             Camera.CFrame = Camera.CFrame:Lerp(targetCF, initialFraction)
-                            S._ExpertInstinctsActive = true
-                            S._ExpertInstinctsExpiry = tick() + 0.45
-                            S._ExpertInstinctsIntensity = intensity
                         end
                         S.CurrentTarget = {
                             Instance = aChar,
@@ -1380,10 +1620,19 @@ task.spawn(function()
         task.wait(0.5)
         local now = tick(); local changed = false
         for name, timestamp in pairs(ThreatMemory) do
-            if now - timestamp >= S.ThreatTimeout then
+            local intelEntry = S.IntelPlayers and S.IntelPlayers[name]
+            if intelEntry and intelEntry.permanent then
+                ThreatMemory[name] = now -- keep permanent threats alive until neutralized
+            elseif intelEntry and (intelEntry.source == "Marked" or intelEntry.source == "Registry") then
+                ThreatMemory[name] = nil -- preserve manual marks without expiry
+            elseif now - timestamp >= S.ThreatTimeout then
                 ThreatMemory[name] = nil
                 local idx = table.find(S.PriorityPlayers, name)
                 if idx then table.remove(S.PriorityPlayers, idx); changed = true end
+                if intelEntry and intelEntry.source == "Threat" then
+                    S.IntelPlayers[name] = nil
+                    changed = true
+                end
                 if S.BlacklistExpiredThreats and not table.find(S.BlacklistedPlayers, name) then
                     table.insert(S.BlacklistedPlayers, name)
                     Notify({Title="TASFF Threat Memory",Content=name.." expired -> Moved to Blacklist",Duration=2,Image="ban"})
@@ -1392,7 +1641,10 @@ task.spawn(function()
                 end
             end
         end
-        if changed then SyncPriorityUI() end
+        if changed then
+            SyncPriorityUI()
+            RebuildIntelMonitor()
+        end
 
         -- Feature 18: Nemesis Strike Decay
         for name, timestamp in pairs(S.PlayerNemesisStrikeTimes or {}) do
@@ -1422,8 +1674,13 @@ task.spawn(function()
         task.wait(1)
         local now = tick(); local text = ""
         for name, ts in pairs(ThreatMemory) do
-            local rem = math.max(0, math.floor(S.ThreatTimeout - (now - ts)))
-            text = text .. "* " .. name .. " (" .. rem .. "s remaining)\n"
+            local intelEntry = S.IntelPlayers and S.IntelPlayers[name]
+            if intelEntry and intelEntry.permanent then
+                text = text .. "* " .. name .. " [PERMANENT until neutralized]\n"
+            else
+                local rem = math.max(0, math.floor(S.ThreatTimeout - (now - ts)))
+                text = text .. "* " .. name .. " (" .. rem .. "s remaining)\n"
+            end
         end
         if text == "" then text = "No active threats detected." end
         if S.ThreatListLabel then
@@ -1479,14 +1736,25 @@ local function HandleClickToMark()
         end
     end
     if targetName then
-        local idx = table.find(S.PriorityPlayers or {}, targetName)
-        if idx then
-            if S.RemoveFromIntel then S.RemoveFromIntel(targetName, false)
-            else table.remove(S.PriorityPlayers, idx); SyncPriorityUI() end
+        local isPriority = table.find(S.PriorityPlayers or {}, targetName) ~= nil
+        local hasIntel = (S.IntelPlayers and S.IntelPlayers[targetName] ~= nil)
+        if isPriority or hasIntel then
+            if S.RemoveFromIntel then
+                S.RemoveFromIntel(targetName, false)
+            else
+                local idx = table.find(S.PriorityPlayers or {}, targetName)
+                if idx then table.remove(S.PriorityPlayers, idx) end
+                if S.IntelPlayers then S.IntelPlayers[targetName] = nil end
+                SyncPriorityUI()
+            end
             Notify({Title="TASFF Mark",Content="Unmarked "..targetName.." from Intel.",Duration=2,Image="minus-circle"})
         else
-            if S.AddToIntel then S.AddToIntel(targetName, "Marked", 0)
-            else table.insert(S.PriorityPlayers, targetName); SyncPriorityUI() end
+            if S.AddToIntel then
+                S.AddToIntel(targetName, "Marked", 0)
+            else
+                table.insert(S.PriorityPlayers, targetName)
+                SyncPriorityUI()
+            end
             Notify({Title="TASFF Mark",Content="Marked "..targetName.." as Priority!",Duration=2,Image="crosshair"})
         end
     else
@@ -2291,12 +2559,22 @@ local function HookNeutralization(p)
                     -- Add to global kill count for auto-flagging
                     if S.KillCountThreatEnabled then
                         S.PlayerKillCounts[killerName] = (S.PlayerKillCounts[killerName] or 0) + 1
-                        if S.PlayerKillCounts[killerName] >= (S.KillsBeforeThreat or 3) then
-                            local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+                        local streak = S.PlayerKillCounts[killerName]
+                        local permReq = S.ContinuousKillsPermanent or 5
+                        local threatReq = S.KillsBeforeThreat or 3
+                        local kData = S.IntelPlayers and S.IntelPlayers[killerName]
+
+                        if streak >= permReq then
+                            if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
+                            if S.IntelPlayers and S.IntelPlayers[killerName] then
+                                S.IntelPlayers[killerName].permanent = true
+                            end
+                            Notify({Title="TASFF Threat", Content="💀 " .. killerName .. " is now PERMANENT (Streak: " .. streak .. ") until neutralized!", Duration=3, Image="alert-triangle"})
+                        elseif streak >= threatReq then
                             local isTracked = (kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry" or kData.source == "Marked")) or (table.find(S.PriorityPlayers or {}, killerName) ~= nil)
                             if not isTracked then
                                 if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
-                                Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak).", Duration=2, Image="alert-circle"})
+                                Notify({Title="TASFF Threat", Content=killerName.." flagged as Threat (Kill Streak: "..streak..").", Duration=2, Image="alert-circle"})
                             else
                                 if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
                             end
@@ -2311,6 +2589,15 @@ local function HookNeutralization(p)
                         S.PriorityPlayerKills[killerName] = (S.PriorityPlayerKills[killerName] or 0) + 1
                         if S.AddToIntel then S.AddToIntel(killerName, (kData and kData.source) or "Registry", 15) end
                     end
+                end
+
+                -- Reset kill streak upon death/neutralization
+                S.PlayerKillCounts[p.Name] = 0
+                if S.PriorityPlayerKills and S.PriorityPlayerKills[p.Name] then
+                    S.PriorityPlayerKills[p.Name] = 0
+                end
+                if S.IntelPlayers and S.IntelPlayers[p.Name] then
+                    S.IntelPlayers[p.Name].permanent = nil
                 end
 
                 if not S.ThreatNeutralizationEnabled then return end
@@ -2333,29 +2620,7 @@ local function HookNeutralization(p)
                     or hum:FindFirstChild("creator") or hum:FindFirstChild("creatorTag")
                 local attacker = ExtractPlayerFromValue(creator)
                 if not attacker then
-                    local victimRoot = char:FindFirstChild("HumanoidRootPart")
-                    local victimPos = victimRoot and victimRoot.Position
-                    if victimPos then
-                        local nearestDist = S.ThreatProximityRadius or 80
-                        local nearestObj = nil
-                        for _, otherP in ipairs(Players:GetPlayers()) do
-                            if otherP ~= p and otherP ~= Player and otherP.Character and otherP.Character:FindFirstChild("HumanoidRootPart") then
-                                local root = otherP.Character.HumanoidRootPart
-                                local d = (root.Position - victimPos).Magnitude
-                                if d < nearestDist then
-                                    local vel = root.AssemblyLinearVelocity
-                                    local dirToVictim = (victimPos - root.Position).Unit
-                                    local lookDir = root.CFrame.LookVector
-                                    if lookDir:Dot(dirToVictim) > 0.35 or vel.Magnitude < 5 or vel.Unit:Dot(dirToVictim) > 0.3 then
-                                        nearestDist = d; nearestObj = otherP
-                                    end
-                                end
-                            end
-                        end
-                        if nearestObj then
-                            attacker = nearestObj
-                        end
-                    end
+                    attacker = FindLikelyAttacker(char, p)
                 end
                 if attacker and attacker ~= p and attacker ~= Player then
                     local victimIntel = S.IntelPlayers and S.IntelPlayers[p.Name]
@@ -2712,7 +2977,33 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end)
                 -- v2.1.0: track new target lock for session stats
                 local prev = S.CurrentTarget
-                S.CurrentTarget = filtered[1]
+                if S._ExpertInstinctsActive and (now < (S._ExpertInstinctsExpiry or 0)) and S._ExpertInstinctsTargetChar and S._ExpertInstinctsTargetChar.Parent then
+                    local aChar = S._ExpertInstinctsTargetChar
+                    local aHum = aChar:FindFirstChildOfClass("Humanoid")
+                    local aRoot = aChar:FindFirstChild("HumanoidRootPart")
+                    if aHum and aHum.Health > 0 and aRoot then
+                        local aimPos = (aChar:FindFirstChild(TargetPart) or aChar:FindFirstChild("Head") or aRoot).Position
+                        S.CurrentTarget = {
+                            Instance = aChar,
+                            Root = aRoot,
+                            Name = S._ExpertInstinctsAttacker and S._ExpertInstinctsAttacker.Name or aChar.Name,
+                            IsPlayer = true,
+                            Player = S._ExpertInstinctsAttacker,
+                            ScreenAnchor = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2),
+                            DistFromCenter = 0,
+                            Distance = (aimPos - Camera.CFrame.Position).Magnitude,
+                            Position = aimPos,
+                            ScreenPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2),
+                            Health = aHum.Health,
+                            TeamColor = S._ExpertInstinctsAttacker and S._ExpertInstinctsAttacker.TeamColor and S._ExpertInstinctsAttacker.TeamColor.Color or Color3.fromRGB(255, 60, 60)
+                        }
+                    else
+                        S._ExpertInstinctsActive = false
+                        S.CurrentTarget = filtered[1]
+                    end
+                else
+                    S.CurrentTarget = filtered[1]
+                end
                 if S.CurrentTarget and (not prev or prev.Instance ~= S.CurrentTarget.Instance) then
                     if TargetPart == "Visible On Screen" then
                         local part = FindVisibleOnScreenPart(S.CurrentTarget.Instance, cachedIgnoreList)
@@ -2960,6 +3251,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             end
         end
     end
+    UpdateEnvironmentalESP()
     if MasterEnabled then
         local CT=S.CurrentTarget; local TP=S.TargetPart
         if CT and TargetingEnabled and AimbotActive and canAimWithTool then
@@ -3027,7 +3319,33 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             end
             if TWP and S.WallCheck and TP~="Visible On Screen" then
                 local ti={}; for _,v in ipairs(cachedIgnoreList) do table.insert(ti,v) end; table.insert(ti,CT.Instance)
-                if not IsVisibleCachedWrapper(CT.Instance,S.ActivePartName,ti) then TWP=nil end
+                local isVisible = IsVisibleCachedWrapper(CT.Instance,S.ActivePartName,ti)
+                if not isVisible then
+                    if S.CoverAnticipationEnabled and CT and CT.Instance then
+                        local nowHold = tick()
+                        if not S._CoverHoldData or S._CoverHoldData.target ~= CT.Instance then
+                            S._CoverHoldData = { target = CT.Instance, startTime = nowHold, lastPos = TWP }
+                        end
+                        local holdTime = nowHold - S._CoverHoldData.startTime
+                        local maxHold = S.CoverAnticipationDuration or 0.8
+                        if holdTime <= maxHold then
+                            TWP = S._CoverHoldData.lastPos
+                            S._IsHoldingCover = true
+                        else
+                            S._CoverHoldData = nil
+                            S._IsHoldingCover = false
+                            TWP = nil
+                        end
+                    else
+                        TWP = nil
+                        S._IsHoldingCover = false
+                    end
+                else
+                    S._CoverHoldData = nil
+                    S._IsHoldingCover = false
+                end
+            else
+                S._IsHoldingCover = false
             end
             -- v2.1.0: Silent Aim — only block MOUSE movement (mousemoverel/abs).
             -- Camera CFrame writes still happen so the engine doesn't freeze the camera.
@@ -3040,9 +3358,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local instinctAlpha = nil
                 if S._ExpertInstinctsActive then
                     if tick() < (S._ExpertInstinctsExpiry or 0) then
-                        instinctAlpha = math.clamp(deltaTime * ((S._ExpertInstinctsIntensity or 60) * 0.15), 0.08, 0.9)
+                        local intensity = S._ExpertInstinctsIntensity or 60
+                        instinctAlpha = math.clamp(deltaTime * (intensity * 0.22), 0.15, 0.95)
+                        Camera.CFrame = Camera.CFrame:Lerp(tcf, instinctAlpha)
                     else
                         S._ExpertInstinctsActive = false
+                        S._ExpertInstinctsAttacker = nil
+                        S._ExpertInstinctsTargetChar = nil
                     end
                 end
                 if Mode=="Legit (Camera)" then
@@ -3178,7 +3500,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         local CI=S.ClickInterval; local MCI=S.MeleeClickInterval
         -- v2.1.0 Weapon-Type Gating: triggerbot blocked for melee tools; melee blocked for ranged
         local wgEnabled = S.WeaponTypeGating and heldToolClass ~= "Unknown"
-        local triggerAllowed = not wgEnabled or (heldToolClass ~= "Melee")
+        local triggerAllowed = (not wgEnabled or (heldToolClass ~= "Melee")) and not S._IsHoldingCover
         local meleeAllowed   = not wgEnabled or (heldToolClass ~= "Weapon")
         local tbA=S.AutoClickEnabled and CT2~=nil and TargetingEnabled and AimbotActive and canAimWithTool and triggerAllowed
         local mA=MME and eMR and meleeAllowed

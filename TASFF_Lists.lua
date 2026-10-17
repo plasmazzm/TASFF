@@ -128,13 +128,14 @@ local FeatureList = {
     "Distance-Based Auto Prediction",
     "Universal Player Damage Tracking",
     "Expert Instincts (Instant Counter-Lock)",
+    "Configurable Expert Instincts Intensity",
     "Dedicated Misc & System Tab Separation",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
 S.ToggleCount         = 90   -- +3 (Distance Prediction, Universal Damage Tracking, Expert Instincts)
-S.SliderCount         = 33   -- +1 (Maximum Auto Prediction)
+S.SliderCount         = 34   -- +2 (Maximum Auto Prediction, Expert Instincts Lock Speed)
 S.DropdownCount       = 38
 S.ButtonCount         = 24
 S.KeybindCount        = 5

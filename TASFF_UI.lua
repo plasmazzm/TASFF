@@ -265,7 +265,7 @@ end
 -- // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• // --
 
 local Window = Rayfield:CreateWindow({
-    Name            = "TASFF 2.2.5 " .. selectedGlobalTheme,
+    Name            = "TASFF 2.2.6 " .. selectedGlobalTheme,
     Icon            = 7488932264,
     LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
@@ -304,7 +304,7 @@ local Window = Rayfield:CreateWindow({
     },
     ConfigurationSaving = {
         Enabled    = true,
-        FolderName = "TASFF V2.2.5",
+        FolderName = "TASFF V2.2.6",
         FileName   = "Config_Place_" .. tostring(game.PlaceId or "Global")
     }
 })
@@ -320,7 +320,7 @@ local HomeTab = Window:CreateTab("Home", "home")
 
 HomeTab:CreateSection("Welcome")
 HomeTab:CreateParagraph({
-    Title   = "TASFF v2.2.5 — The Aimbot Script Final Form",
+    Title   = "TASFF v2.2.6 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
            .. "Controls: " .. tostring(S.ToggleCount or 92) .. " Toggles | " .. tostring(S.SliderCount or 34) .. " Sliders | " .. tostring(S.DropdownCount or 41) .. " Dropdowns | " .. tostring(S.ButtonCount or 29) .. " Buttons | " .. tostring(S.StatusDisplayCount or 7) .. " Status Displays\n"
@@ -809,6 +809,9 @@ TriggerbotTab:CreateSlider({Name = "Mash Interval (ms)", Range = {1, 1000}, Incr
 end})
 TriggerbotTab:CreateToggle({Name = "3rd Person Spatial Tracking", CurrentValue = S.ThirdPersonTriggerbot, Flag = "ThirdPersonTriggerbot", Callback = function(v)
     S.ThirdPersonTriggerbot = v
+end})
+TriggerbotTab:CreateToggle({Name = "Prioritized Targets Only (Trigger Filter)", CurrentValue = S.TriggerbotPriorityOnly, Flag = "TriggerbotPriorityOnly", Callback = function(v)
+    S.TriggerbotPriorityOnly = v
 end})
 
 TriggerbotTab:CreateSection("Secondary Trigger (Keybinds)")
@@ -1490,7 +1493,7 @@ PresetsTab:CreateButton({
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
                 ManualCalibrationEnabled = S.ManualCalibrationEnabled, CalibrationOffsetX = S.CalibrationOffsetX, CalibrationOffsetY = S.CalibrationOffsetY,
                 -- Triggerbot & Automation
-                AutoClickEnabled = S.AutoClickEnabled, TriggerbotClickMode = S.TriggerbotClickMode, ClickMethod = S.ClickMethod,
+                AutoClickEnabled = S.AutoClickEnabled, TriggerbotPriorityOnly = S.TriggerbotPriorityOnly, TriggerbotClickMode = S.TriggerbotClickMode, ClickMethod = S.ClickMethod,
                 ClickInterval = S.ClickInterval, ThirdPersonTriggerbot = S.ThirdPersonTriggerbot, KeyTriggerbotEnabled = S.KeyTriggerbotEnabled,
                 KeyTriggerMode = S.KeyTriggerMode, MeleeModeEnabled = S.MeleeModeEnabled, MeleeDetectionRange = S.MeleeDetectionRange,
                 MeleeClickInterval = S.MeleeClickInterval,
@@ -1558,7 +1561,8 @@ local STO_FLAG = {
     ShowToolCheck = "UseToolCheck", ShowFOV = "ShowFOV", InvisibleFOV = "InvisibleFOV", FOVSize = "FOVSize",
     AimReferenceMode = "AimReferenceMode", EnableCrosshair = "UseCrosshair", CrosshairStyle = "CrossStyle",
     CrosshairSize = "CrossSize", ManualCalibrationEnabled = "EnableCalibration", CalibrationOffsetX = "CalibrationX",
-    CalibrationOffsetY = "CalibrationY", AutoClickEnabled = "EnableTriggerbot", TriggerbotClickMode = "TriggerbotClickMode",
+    CalibrationOffsetY = "CalibrationY", AutoClickEnabled = "EnableTriggerbot", TriggerbotPriorityOnly = "TriggerbotPriorityOnly",
+    TriggerbotClickMode = "TriggerbotClickMode",
     ClickMethod = "ClickMethod", ClickInterval = "ClickInterval", ThirdPersonTriggerbot = "ThirdPersonTriggerbot",
     KeyTriggerbotEnabled = "KeyTriggerbotToggle", KeyTriggerMode = "KeyTriggerMode", MeleeModeEnabled = "EnableMeleeMode",
     MeleeDetectionRange = "MeleeRange", MeleeClickInterval = "MeleeClickInterval", ThreatDetectorEnabled = "ThreatDetector",
@@ -1688,7 +1692,7 @@ PresetsTab:CreateButton({
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
                 ManualCalibrationEnabled = S.ManualCalibrationEnabled, CalibrationOffsetX = S.CalibrationOffsetX, CalibrationOffsetY = S.CalibrationOffsetY,
                 -- Triggerbot & Automation
-                AutoClickEnabled = S.AutoClickEnabled, TriggerbotClickMode = S.TriggerbotClickMode, ClickMethod = S.ClickMethod,
+                AutoClickEnabled = S.AutoClickEnabled, TriggerbotPriorityOnly = S.TriggerbotPriorityOnly, TriggerbotClickMode = S.TriggerbotClickMode, ClickMethod = S.ClickMethod,
                 ClickInterval = S.ClickInterval, ThirdPersonTriggerbot = S.ThirdPersonTriggerbot, KeyTriggerbotEnabled = S.KeyTriggerbotEnabled,
                 KeyTriggerMode = S.KeyTriggerMode, MeleeModeEnabled = S.MeleeModeEnabled, MeleeDetectionRange = S.MeleeDetectionRange,
                 MeleeClickInterval = S.MeleeClickInterval,
@@ -1758,6 +1762,7 @@ local function BuildPresetStatusContent(profileName, category)
         check("Target Switch Delay",    data.TargetSwitchDelayEnabled)
         check("Grace Period",           data.GracePeriodEnabled)
         check("Triggerbot",             data.AutoClickEnabled)
+        check("Triggerbot (Priority)",  data.TriggerbotPriorityOnly)
         check("Melee Mode",             data.MeleeModeEnabled)
         check("Humanized Legit Aim",    data.HumanizedAimEnabled)
         check("Physiological Tremor",   data.HumanTremorEnabled)
@@ -1932,7 +1937,7 @@ local function UpdateWindowTitle(themeName)
     local topbar = main and main:FindFirstChild("Topbar")
     local title = topbar and topbar:FindFirstChild("Title")
     if title and title:IsA("TextLabel") then
-        title.Text = "TASFF 2.2.5 " .. themeName
+        title.Text = "TASFF 2.2.6 " .. themeName
     end
 end
 local function ColorFromHex(hex)
@@ -2560,7 +2565,7 @@ SystemTab:CreateButton({
         S.AimReferenceMode = "Screen Center"
         S.EnableCrosshair = false;      S.CrosshairStyle = "Plus";      S.CrosshairSize = 10
         S.ManualCalibrationEnabled = false; S.CalibrationOffsetX = 0;   S.CalibrationOffsetY = 0
-        S.AutoClickEnabled = false;     S.TriggerbotClickMode = "Virtual"; S.ClickMethod = "Mash"
+        S.AutoClickEnabled = false;     S.TriggerbotPriorityOnly = false; S.TriggerbotClickMode = "Virtual"; S.ClickMethod = "Mash"
         S.ClickInterval = 100;          S.ThirdPersonTriggerbot = false
         S.KeyTriggerbotEnabled = false; S.KeyTriggerMode = "Single Press"
         S.MeleeModeEnabled = false;     S.MeleeDetectionRange = 5;      S.MeleeClickInterval = 100
@@ -2593,7 +2598,7 @@ SystemTab:CreateSection("Repository & Updates")
 
 local UpdateStatusDisplay = SystemTab:CreateParagraph({
     Title   = "Repository Status",
-    Content = "Running TASFF v" .. (S.CurrentVersion or "2.2.5") .. ".\nClick 'Check for Updates' to verify repository sync."
+    Content = "Running TASFF v" .. (S.CurrentVersion or "2.2.6") .. ".\nClick 'Check for Updates' to verify repository sync."
 })
 S.UpdateStatusDisplay = UpdateStatusDisplay
 
@@ -2647,6 +2652,15 @@ local UpdateLogTab = Window:CreateTab("Update Log", "history")
 UpdateLogTab:CreateSection("Recent Releases & Updates")
 
 UpdateLogTab:CreateParagraph({
+    Title   = "Version 2.2.6 (Environmental ESP Overhaul & Hybrid Repository Synchronization)",
+    Content = "• 2D Surface Environmental ESP: Completely overhauled large-part highlighting to project flat 2D bounding square slices (0.04-stud thickness) directly on contact surfaces (floors, walls, ceilings), completely eliminating floating 3D cubes.\n" ..
+              "• Wireframe Prop Outlines (Anti-Obstruction): Small props (chairs, tables, obstacles) now render with hollow SelectionBox outlines (96% transparent interior), highlighting objects without obstructing player models or ESP.\n" ..
+              "• Global Environmental ESP Target Fix: Correctly enumerates all active players across the server when 'Priority Only' is disabled, ensuring full room awareness rather than single-target confinement.\n" ..
+              "• Hybrid Update & Commit Checker (Option A + B): Combined semantic version comparison with live GitHub commit SHA querying and module content/control signature verification, instantly catching additions and hotfixes without requiring manual version bumps.\n" ..
+              "• Triggerbot Priority Target Filter: Dedicated toggle ensuring Triggerbot (both Mouse and Keybind simulation) exclusively fires when locked onto prioritized, threat, or nemesis targets."
+})
+
+UpdateLogTab:CreateParagraph({
     Title   = "Version 2.2.5 (Threat Intelligence & Humanized Legit Aim Engine)",
     Content = "• Ambush Latency Fix: real-time visibility fallback for close (<120 studs) and threat targets completely eliminates background raycast loop delay.\n" ..
               "• Distance-Based Auto Prediction: dynamically scales velocity lead with target distance, preventing crosshair trailing and missed shots at range.\n" ..
@@ -2672,7 +2686,8 @@ UpdateLogTab:CreateParagraph({
               "• Continuous Expert Instincts Tracking: Continuously swivels camera towards the attacker every frame damage is sustained, pinning aimbot lock onto the attacker.\n" ..
               "• Concealment & Foliage Check (Anti-Bush Snapping): Intelligent foliage and obstacle detector prevents aimbot and triggerbot from locking onto enemies hidden in non-collidable foliage/bushes.\n" ..
               "• Humanized Cover Anticipation (Corner Hold): Maintains crosshair on cover edges and corners when a target breaks line-of-sight for a configurable duration (0.1-3.0s), holding triggerbot fire until re-peek.\n" ..
-              "• Environmental Awareness ESP: Highlights surrounding objects and obstacles near players with configurable radius (5-50 studs), fully outlining small props and rendering bounding square slices on large floors, walls, and ceilings with priority-only filter."
+              "• Environmental Awareness ESP: Highlights surrounding objects and obstacles near players with configurable radius (5-50 studs), fully outlining small props and rendering bounding square slices on large floors, walls, and ceilings with priority-only filter.\n" ..
+              "• Triggerbot Priority Target Filter: Optional toggle ensures Triggerbot (both Mouse and Keybind simulation) exclusively engages targets labeled as Threats, Nemesis, or Marked in Intel."
 })
 
 UpdateLogTab:CreateParagraph({
@@ -2851,6 +2866,7 @@ local booleanSettings = {
     "AutoUpdateCheckerEnabled", "InstinctsInventoryCheck",
     "CoverAnticipationEnabled", "FoliageConcealmentCheck",
     "EnvironmentalESPEnabled", "EnvironmentalESPPriorityOnly",
+    "TriggerbotPriorityOnly",
 }
 for _, key in ipairs(booleanSettings) do
     if type(S[key]) ~= "boolean" then

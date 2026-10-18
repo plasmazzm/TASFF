@@ -321,7 +321,7 @@ local function PrepareDrawing(obj)
 end
 S.PrepareDrawing = PrepareDrawing
 
--- // Environmental ESP — SelectionBox pool (3D wireframe edges fixed to world geometry) // --
+-- // Environmental ESP — Highlight pool (3D depth-correct silhouette outline, same as player ESP) // --
 local EnvESPFolder = nil
 local function GetEnvESPFolder()
     if EnvESPFolder and EnvESPFolder.Parent then return EnvESPFolder end
@@ -332,56 +332,61 @@ local function GetEnvESPFolder()
     EnvESPFolder = Instance.new("Folder")
     EnvESPFolder.Name = "TASFF_EnvESP"
     EnvESPFolder.Parent = parent2
-    -- Track so UnloadScript/Cleanup destroys the folder (and all child SelectionBoxes)
+    -- Track so UnloadScript/Cleanup destroys the folder and all children
     if getgenv().TASFF and getgenv().TASFF.Drawings then
         table.insert(getgenv().TASFF.Drawings, EnvESPFolder)
     end
     return EnvESPFolder
 end
 
-local EnvBoxPool   = {}  -- pool of SelectionBox instances
-local EnvProxyPool = {}  -- pool of invisible Part proxies for large-part plane slices
+-- Highlight pool: same technique as player ESP HighlightCache.
+-- Renders a silhouette outline around parts in world-space 3D, respecting
+-- depth — parts behind the player appear behind the player ESP, parts in
+-- front can overlap it, exactly matching the user's illustration.
+local EnvHighlightPool = {}
+local EnvProxyPool     = {}  -- invisible Part proxies for large-surface plane slices
 
-local function GetEnvBox(index)
-    if not EnvBoxPool[index] then
-        local box = Instance.new("SelectionBox")
-        box.LineThickness = 0.04
-        box.SurfaceTransparency = 1   -- no face fill, edges/corners only
-        box.SurfaceColor3 = Color3.new(0, 0, 0)
-        box.Visible = false
-        box.Parent = GetEnvESPFolder()
-        EnvBoxPool[index] = box
+local function GetEnvHighlight(index)
+    if not EnvHighlightPool[index] then
+        local hl = Instance.new("Highlight")
+        hl.FillTransparency    = 1    -- no fill, silhouette outline only
+        hl.OutlineTransparency = 0
+        hl.OutlineColor        = Color3.fromRGB(0, 200, 255)
+        hl.FillColor           = Color3.fromRGB(0, 200, 255)
+        hl.Enabled             = false
+        hl.Parent              = GetEnvESPFolder()
+        EnvHighlightPool[index] = hl
     end
-    return EnvBoxPool[index]
+    return EnvHighlightPool[index]
 end
 
--- Proxy parts are fully transparent, non-collidable, non-queryable Parts used as
--- SelectionBox adornees for large-surface plane slices (floors, walls, ceilings).
--- CanQuery=false guarantees they are never returned by GetPartBoundsInRadius.
+-- Proxy parts: fully transparent, non-collidable, non-queryable.
+-- Used as the Highlight Adornee for large floors/walls/ceilings so the
+-- outline only covers a player-centred slice, not the entire huge surface.
+-- CanQuery=false ensures proxies are never returned by GetPartBoundsInRadius.
 local function GetEnvProxy(index)
     if not EnvProxyPool[index] then
         local proxy = Instance.new("Part")
-        proxy.Name          = "TASFF_EnvProxy"
-        proxy.Anchored      = true
-        proxy.CanCollide    = false
-        proxy.CanQuery      = false
-        proxy.CanTouch      = false
-        proxy.CastShadow    = false
-        proxy.Transparency  = 1
-        proxy.Size          = Vector3.new(1, 0.15, 1)
-        proxy.Parent        = GetEnvESPFolder()
+        proxy.Name         = "TASFF_EnvProxy"
+        proxy.Anchored     = true
+        proxy.CanCollide   = false
+        proxy.CanQuery     = false
+        proxy.CanTouch     = false
+        proxy.CastShadow   = false
+        proxy.Transparency = 1
+        proxy.Size         = Vector3.new(1, 0.15, 1)
+        proxy.Parent       = GetEnvESPFolder()
         EnvProxyPool[index] = proxy
     end
     return EnvProxyPool[index]
 end
 
 local function ClearEnvironmentalESP()
-    for i, box in ipairs(EnvBoxPool) do
-        if box and box.Parent then
-            box.Visible = false
-            box.Adornee = nil
+    for i, hl in ipairs(EnvHighlightPool) do
+        if hl and hl.Parent then
+            hl.Enabled = false
+            hl.Adornee = nil
         end
-        -- Reset proxy size so stale dimensions don't linger
         local proxy = EnvProxyPool[i]
         if proxy and proxy.Parent then
             proxy.Size = Vector3.new(1, 0.15, 1)
@@ -395,7 +400,7 @@ envOverlap.FilterType = Enum.RaycastFilterType.Exclude
 
 local function UpdateEnvironmentalESP()
     if not (S.MasterEnabled and S.EnvironmentalESPEnabled) then
-        if #EnvBoxPool > 0 then ClearEnvironmentalESP() end
+        if #EnvHighlightPool > 0 then ClearEnvironmentalESP() end
         return
     end
 
@@ -434,22 +439,24 @@ local function UpdateEnvironmentalESP()
     envOverlap.FilterDescendantsInstances = excludeList
 
     local usedCount        = 0
-    local maxBoxes         = 80
-    local processedAdornee = {}  -- deduplicates multi-part models (key = adornee)
+    -- Cap at 20: Roblox renders a limited number of simultaneous Highlights.
+    -- Player ESP already consumes some slots, so leave headroom.
+    local maxHighlights    = 20
+    local processedAdornee = {}  -- deduplicates multi-part models
     local baseColor        = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
-    -- Threshold above which a part dimension is considered "large"
+    -- Dimension threshold above which a part axis is considered "large"
     local LARGE_SKIP = 40
-    local THIN       = 0.15  -- thickness of the proxy plane slab
+    local THIN       = 0.15  -- slab thickness for proxy plane on large surfaces
 
     for _, t in ipairs(targets) do
-        if usedCount >= maxBoxes then break end
+        if usedCount >= maxHighlights then break end
         local pPos = t.Root.Position
         local ok, parts = pcall(function()
             return workspace:GetPartBoundsInRadius(pPos, radius, envOverlap)
         end)
         if ok and parts then
             for _, part in ipairs(parts) do
-                if usedCount >= maxBoxes then break end
+                if usedCount >= maxHighlights then break end
                 if not part:IsA("BasePart") then continue end
 
                 local sz    = part.Size
@@ -460,22 +467,22 @@ local function UpdateEnvironmentalESP()
 
                 local adornTarget
                 if isLarge then
-                    -- Large part: use a per-slot proxy slab as the SelectionBox adornee
-                    -- so that the wireframe appears as a 2D plane on the surface near the player,
-                    -- rather than a massive box enclosing the whole floor/wall/ceiling.
+                    -- Large surface: build a thin proxy slab centred at the player's
+                    -- projected position on the part so the Highlight only covers a
+                    -- radius-wide slice of the floor/wall/ceiling, not the entire part.
                     local localPos = part.CFrame:PointToObjectSpace(pPos)
                     local hx, hy, hz = sz.X * 0.5, sz.Y * 0.5, sz.Z * 0.5
                     local cx = math.clamp(localPos.X, -hx, hx)
                     local cy = math.clamp(localPos.Y, -hy, hy)
                     local cz = math.clamp(localPos.Z, -hz, hz)
                     local sliceR = radius * 1.2
-                    -- Each "large" axis is capped to sliceR; "small" axes stay their actual size.
-                    -- This naturally produces: floor → flat slab, wall → vertical panel, etc.
+                    -- Large axes → cap to sliceR; small axes → keep actual size (thin).
+                    -- Produces: floor (bigX+bigZ) → flat slab, wall (bigX+bigY) → vertical panel.
                     local px = bigX and sliceR or (sz.X + 0.1)
                     local py = bigY and sliceR or math.min(sz.Y + 0.1, THIN)
                     local pz = bigZ and sliceR or (sz.Z + 0.1)
-                    -- If none of the non-large axes are thin, make the dominant-large axis thin.
-                    -- Priority: Y thin (floor) > Z thin (wall) > X thin (pillar side)
+                    -- Ensure the slab is actually flat: make the non-large axis thin.
+                    -- Priority: Y thin (floor/ceiling) > Z thin (front wall) > X thin (side wall)
                     if not bigY then py = math.min(py, THIN)
                     elseif not bigZ then pz = math.min(pz, THIN)
                     elseif not bigX then px = math.min(px, THIN) end
@@ -487,8 +494,8 @@ local function UpdateEnvironmentalESP()
                     proxy.Size   = Vector3.new(px, py, pz)
                     adornTarget  = proxy
                 else
-                    -- Small part: walk up to top-level Model ancestor to deduplicate
-                    -- multi-part models (roof tiles, furniture, etc.)
+                    -- Small part: walk up to the top-level Model ancestor so multi-part
+                    -- models (furniture, props) share one Highlight instead of one each.
                     adornTarget = part
                     local anc = part.Parent
                     while anc and anc ~= workspace do
@@ -497,29 +504,27 @@ local function UpdateEnvironmentalESP()
                     end
                     if processedAdornee[adornTarget] then continue end
                     processedAdornee[adornTarget] = true
-
                     usedCount = usedCount + 1
                 end
 
-                local box = GetEnvBox(usedCount)
-                if box then
-                    box.Color3              = baseColor
-                    box.LineThickness       = 0.04
-                    box.SurfaceTransparency = 1
-                    box.Adornee             = adornTarget
-                    box.Visible             = true
+                local hl = GetEnvHighlight(usedCount)
+                if hl then
+                    hl.OutlineColor = baseColor
+                    hl.FillColor    = baseColor
+                    hl.Adornee      = adornTarget
+                    hl.Enabled      = true
                 end
             end
         end
-        if usedCount >= maxBoxes then break end
+        if usedCount >= maxHighlights then break end
     end
 
-    -- Hide unused pool entries
-    for i = usedCount + 1, #EnvBoxPool do
-        local box = EnvBoxPool[i]
-        if box and box.Visible then
-            box.Visible = false
-            box.Adornee = nil
+    -- Disable unused pool entries
+    for i = usedCount + 1, #EnvHighlightPool do
+        local hl = EnvHighlightPool[i]
+        if hl and hl.Enabled then
+            hl.Enabled = false
+            hl.Adornee = nil
         end
         local proxy = EnvProxyPool[i]
         if proxy then proxy.Size = Vector3.new(1, 0.15, 1) end

@@ -326,9 +326,10 @@ local function GetEnvDraw(index)
     if not EnvDrawPool[index] then
         local sq = NewDrawing("Square")
         if sq then
-            sq.Filled   = false
-            sq.Thickness = 1.5
-            sq.Visible  = false
+            sq.Filled      = false
+            sq.Thickness   = 2       -- UIStroke thickness
+            sq.Transparency = 1      -- 1 = fully opaque in the overlay alpha system
+            sq.Visible     = false
         end
         EnvDrawPool[index] = sq
     end
@@ -473,11 +474,14 @@ local function UpdateEnvironmentalESP()
                         usedCount = usedCount + 1
                         local sq = GetEnvDraw(usedCount)
                         if sq then
-                            sq.Color     = baseColor
-                            sq.Transparency = 0  -- outline, no fill
-                            sq.Position  = Vector2.new(minX, minY)
-                            sq.Size      = Vector2.new(maxX - minX, maxY - minY)
-                            sq.Visible   = true
+                            sq.Color        = baseColor
+                            -- In the overlay system, Transparency=1 means fully opaque stroke.
+                            -- S.EnvironmentalESPTransparency (0-1) is treated as an opacity fraction.
+                            local opac = 1 - math.clamp(S.EnvironmentalESPTransparency or 0.65, 0, 1)
+                            sq.Transparency = math.clamp(opac, 0, 1)
+                            sq.Position     = Vector2.new(minX, minY)
+                            sq.Size         = Vector2.new(maxX - minX, maxY - minY)
+                            sq.Visible      = true
                         end
                     end
                 end
@@ -1507,13 +1511,15 @@ local function FindLikelyAttacker(victimChar, victimPlayer)
 
                     local isPlausible = false
                     if isRanged and dist <= maxScanRadius then
-                        isPlausible = (dotAim >= 0.55)
-                    elseif isMelee and dist <= 22 then
-                        isPlausible = (dotAim >= 0.35)
+                        -- Require weapon + tight aim alignment for ranged attribution
+                        isPlausible = hasWeapon and (dotAim >= 0.70)
+                    elseif isMelee and dist <= 18 then
+                        isPlausible = (dotAim >= 0.50)
                     elseif hasWeapon and dist <= maxScanRadius then
-                        isPlausible = (dotAim >= 0.55)
-                    elseif not hasWeapon and dist <= 10 then
-                        isPlausible = (dotAim >= 0.45)
+                        isPlausible = (dotAim >= 0.70)
+                    elseif not hasWeapon and dist <= 7 then
+                        -- Unarmed: very tight range and high alignment required
+                        isPlausible = (dotAim >= 0.65)
                     end
 
                     if isPlausible then
@@ -1536,9 +1542,10 @@ local function FindLikelyAttacker(victimChar, victimPlayer)
                             score = score + math.clamp(dotAim * 50, 0, 50)
                             score = score + math.clamp((1 - (dist / maxScanRadius)) * 40, 0, 40)
                             if hasWeapon then score = score + 40 end
-                            if isMelee and dist <= 14 then score = score + 30 end
+                            if isMelee and dist <= 12 then score = score + 30 end
 
-                            if score >= 60 and score > bestScore then
+                            -- Raise threshold to 80 to require stronger evidence before flagging
+                            if score >= 80 and score > bestScore then
                                 bestScore = score
                                 bestCandidate = p
                             end
@@ -1619,20 +1626,25 @@ local function HookThreatHealth(char)
                         if S.DeadTargetsCache then S.DeadTargetsCache[aChar] = nil end
                         local targetPart = aChar:FindFirstChild(S.TargetPart) or aChar:FindFirstChild("Head") or aRoot
                         local aimPos = targetPart.Position
-                        local intensity = math.clamp(S.ExpertInstinctsIntensity or 60, 5, 100)
+                        local intensity = math.clamp(S.ExpertInstinctsIntensity or 60, 0, 100)
+                        local iMode = S.InstinctsMode or "Blatant"
                         S._ExpertInstinctsActive = true
                         S._ExpertInstinctsExpiry = tick() + 0.75
                         S._ExpertInstinctsAttacker = attackerObj
                         S._ExpertInstinctsTargetChar = aChar
                         S._ExpertInstinctsIntensity = intensity
                         S._ExpertInstinctsLastKnownPos = aimPos  -- persist for cover-hidden steering
-                        if intensity >= 100 then
-                            Camera.CFrame = CFrame.new(Camera.CFrame.Position, aimPos)
-                        else
-                            local targetCF = CFrame.new(Camera.CFrame.Position, aimPos)
-                            local initialFraction = math.clamp((intensity / 100) * 0.45, 0.15, 0.75)
-                            Camera.CFrame = Camera.CFrame:Lerp(targetCF, initialFraction)
+                        -- Initial trigger snap: Blatant does immediate partial snap; Legit defers to per-frame lerp
+                        if iMode == "Blatant" then
+                            if intensity >= 100 then
+                                Camera.CFrame = CFrame.new(Camera.CFrame.Position, aimPos)
+                            else
+                                local targetCF = CFrame.new(Camera.CFrame.Position, aimPos)
+                                local initialFraction = math.clamp(intensity / 100, 0.02, 0.98)
+                                Camera.CFrame = Camera.CFrame:Lerp(targetCF, initialFraction)
+                            end
                         end
+                        -- (Legit mode: no immediate snap — per-frame steering handles it smoothly)
                         S.CurrentTarget = {
                             Instance = aChar,
                             Root = aRoot,
@@ -2674,10 +2686,13 @@ local function HookNeutralization(p)
             if newHealth <= 0 then
                 handlePlayerDeath()
             elseif S.OtherPlayersDamageTracking and newHealth < lastHealth then
+                local healthDrop = lastHealth - newHealth
                 local creator = (S.DeepThreatScanEnabled ~= false and ScanForKillerTag(char, hum))
                     or hum:FindFirstChild("creator") or hum:FindFirstChild("creatorTag")
                 local attacker = ExtractPlayerFromValue(creator)
-                if not attacker then
+                -- Only fall back to heuristic scan if no creator tag exists AND damage is meaningful (≥5 HP)
+                -- to avoid false positives from chip damage, explosions, or environmental sources.
+                if not attacker and healthDrop >= 5 then
                     attacker = FindLikelyAttacker(char, p)
                 end
                 if attacker and attacker ~= p and attacker ~= Player then
@@ -3206,12 +3221,13 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local arrow=OOFArrowCache[t.Instance]
                 if arrow then
                     local center=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
-                    -- Use camera-local space direction to get stable angle without Z-sign flip twitching
-                    local camLocal = Camera.CFrame:PointToObjectSpace(rootPart.Position)
-                    -- atan2(X, -Z) maps camera-local forward (-Z) to screen up, X to screen right
-                    local angle = math.atan2(camLocal.X, -camLocal.Z)
-                    -- Flip Y to match screen-space (screen Y increases downward)
-                    angle = math.atan2(math.sin(angle), math.cos(angle))
+                    -- Project world direction onto camera right/up axes for a fully stable angle.
+                    -- Dot products never have z-sign discontinuity and work correctly whether the
+                    -- target is in front of or behind the camera.
+                    local worldDir = (rootPart.Position - Camera.CFrame.Position)
+                    local screenX = worldDir:Dot(Camera.CFrame.RightVector)
+                    local screenY = -worldDir:Dot(Camera.CFrame.UpVector) -- screen Y is inverted
+                    local angle = math.atan2(screenY, screenX)
                     local r=OOFR
                     arrow.PointA=center+Vector2.new(math.cos(angle),math.sin(angle))*r
                     arrow.PointB=center+Vector2.new(math.cos(angle-0.2),math.sin(angle-0.2))*(r-20)
@@ -3437,9 +3453,35 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 local instinctAlpha = nil
                 if S._ExpertInstinctsActive then
                     if tick() < (S._ExpertInstinctsExpiry or 0) then
-                        local intensity = S._ExpertInstinctsIntensity or 60
-                        instinctAlpha = math.clamp(deltaTime * (intensity * 0.22), 0.15, 0.95)
-                        Camera.CFrame = Camera.CFrame:Lerp(tcf, instinctAlpha)
+                        local intensity  = math.clamp(S.ExpertInstinctsIntensity or 60, 0, 100)
+                        local iMode      = S.InstinctsMode or "Blatant"
+
+                        if iMode == "Blatant" then
+                            -- Blatant: direct CFrame lerp. 100 = instant snap; 0 = very smooth.
+                            -- Map intensity 0-100 → alpha 0.02-1.0 (never quite 0 so it always moves)
+                            if intensity >= 100 then
+                                Camera.CFrame = tcf
+                                instinctAlpha = 1
+                            else
+                                local alpha = math.clamp(intensity / 100, 0.02, 0.98)
+                                Camera.CFrame = Camera.CFrame:Lerp(tcf, alpha)
+                                instinctAlpha = alpha
+                            end
+                        else
+                            -- Legit: humanized smoothstep lerp matching the aimbot legit pipeline.
+                            -- intensity 0-100 acts as a speed multiplier on top of the aimbot smoothness.
+                            local Sm = math.max(0.01, S.Smoothness or 0.5)
+                            local speedMult = 0.15 + (intensity / 100) * 2.5  -- 0.15x at 0, 2.65x at 100
+                            local sp2, os2 = Camera:WorldToViewportPoint(TWP)
+                            local tsp2 = os2 and ApplyScreenCalibration(Vector2.new(sp2.X, sp2.Y)) or nil
+                            local screenCenter = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
+                            local diff = tsp2 and (tsp2 - screenCenter) or Vector2.new(0, 0)
+                            local pixDist = diff.Magnitude
+                            local ease = math.clamp(pixDist / 140, 0.06, 1.0)
+                            local alpha = math.clamp(deltaTime * (5.5 / Sm) * ease * speedMult, 0.002, 0.92)
+                            Camera.CFrame = Camera.CFrame:Lerp(tcf, alpha)
+                            instinctAlpha = alpha
+                        end
                     else
                         S._ExpertInstinctsActive = false
                         S._ExpertInstinctsAttacker = nil

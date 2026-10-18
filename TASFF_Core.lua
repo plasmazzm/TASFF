@@ -387,6 +387,11 @@ local function GetEnvProxy(index)
     return EnvProxyPool[index]
 end
 
+local lastEnvScanTime = 0
+local lastEnvScanRadius = 0
+local lastEnvTargetPositions = {}
+local cachedSelectedItems = {}
+
 local function ClearEnvironmentalESP()
     for _, adorn in ipairs(EnvAdornmentPool) do
         if adorn then
@@ -405,11 +410,25 @@ local function ClearEnvironmentalESP()
             proxy.Size = Vector3.new(1, 0.15, 1)
         end
     end
+    cachedSelectedItems = {}
+    lastEnvTargetPositions = {}
 end
 S.ClearEnvironmentalESP = ClearEnvironmentalESP
 
 local envOverlap = OverlapParams.new()
 envOverlap.FilterType = Enum.RaycastFilterType.Exclude
+
+-- Accurate distance to the closest point on the part's surface/boundary (OBB)
+-- Ensures large parts like floors and walls calculate distance to the player's feet, NOT the part's center 100 studs away!
+local function GetDistanceToPart(pPos, part, sz)
+    local localPos = part.CFrame:PointToObjectSpace(pPos)
+    local halfSize = sz * 0.5
+    local cx = math.clamp(localPos.X, -halfSize.X, halfSize.X)
+    local cy = math.clamp(localPos.Y, -halfSize.Y, halfSize.Y)
+    local cz = math.clamp(localPos.Z, -halfSize.Z, halfSize.Z)
+    local closestPt = part.CFrame:PointToWorldSpace(Vector3.new(cx, cy, cz))
+    return (closestPt - pPos).Magnitude
+end
 
 local function UpdateEnvironmentalESP()
     if not (S.MasterEnabled and S.EnvironmentalESPEnabled) then
@@ -441,15 +460,6 @@ local function UpdateEnvironmentalESP()
         return
     end
 
-    local excludeList = {Camera}
-    if Player and Player.Character then table.insert(excludeList, Player.Character) end
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Character then table.insert(excludeList, p.Character) end
-    end
-    for _, npc in ipairs(S.CachedNPCs or {}) do table.insert(excludeList, npc) end
-    for _, item in ipairs(S.CachedWorkspaceIgnores or {}) do table.insert(excludeList, item) end
-    envOverlap.FilterDescendantsInstances = excludeList
-
     local maxAdornments = S.EnvironmentalESPMaxParts or 160
     if S.EnvironmentalESPAutoScaling then
         local scaleTable = S.EnvironmentalESPScaleTable or {
@@ -461,95 +471,135 @@ local function UpdateEnvironmentalESP()
         }
         maxAdornments = scaleTable[S.PerformanceMode or "Medium"] or maxAdornments
     end
-    local maxPartsPerTarget  = math.clamp(math.floor(maxAdornments * 0.6), 30, 200)
-    local targetPartLists    = {}
-    local baseColor          = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
-    local trans              = S.EnvironmentalESPTransparency or 0.95 -- 95% invisible chams fill
+    local maxPartsPerTarget = math.clamp(math.floor(maxAdornments * 0.7), 40, 250)
 
-    -- 1. Collect candidate parts per target sorted by proximity (closest parts prioritized)
-    for _, t in ipairs(targets) do
-        local pPos = t.Root.Position
-        local ok, parts = pcall(function()
-            return workspace:GetPartBoundsInRadius(pPos, radius, envOverlap)
-        end)
-        if ok and parts then
-            local validList = {}
-            for _, part in ipairs(parts) do
-                if part:IsA("BasePart") then
-                    -- Never highlight character models, humanoids, or accessories
-                    if not part:FindFirstAncestorOfClass("Accessory") then
-                        local modelAnc = part:FindFirstAncestorOfClass("Model")
-                        if not (modelAnc and modelAnc:FindFirstChildOfClass("Humanoid")) then
-                            local sz = part.Size
-                            local isLarge = (sz.X > 20 or sz.Y > 20 or sz.Z > 20)
-                            local dist = (part.Position - pPos).Magnitude
-                            table.insert(validList, {
-                                part = part,
-                                dist = dist,
-                                targetPos = pPos,
-                                targetPlayer = t.Player,
-                                isLarge = isLarge,
-                                sz = sz
-                            })
+    -- Throttle heavy workspace spatial queries to ~20 Hz or on player movement (eliminates FPS drop at large radius)
+    local now = tick()
+    local needScan = (now - lastEnvScanTime >= 0.05) or (#cachedSelectedItems == 0) or (lastEnvScanRadius ~= radius)
+    if not needScan then
+        for _, t in ipairs(targets) do
+            local lastPos = lastEnvTargetPositions[t.Player]
+            if not lastPos or (t.Root.Position - lastPos).Magnitude > 1.2 then
+                needScan = true
+                break
+            end
+        end
+    end
+
+    if needScan then
+        lastEnvScanTime = now
+        lastEnvScanRadius = radius
+        lastEnvTargetPositions = {}
+        for _, t in ipairs(targets) do
+            lastEnvTargetPositions[t.Player] = t.Root.Position
+        end
+
+        local excludeList = {Camera}
+        if Player and Player.Character then table.insert(excludeList, Player.Character) end
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Character then table.insert(excludeList, p.Character) end
+        end
+        for _, npc in ipairs(S.CachedNPCs or {}) do table.insert(excludeList, npc) end
+        for _, item in ipairs(S.CachedWorkspaceIgnores or {}) do table.insert(excludeList, item) end
+        envOverlap.FilterDescendantsInstances = excludeList
+
+        local targetPartLists = {}
+
+        -- 1. Collect candidate parts per target sorted by surface proximity
+        for _, t in ipairs(targets) do
+            local pPos = t.Root.Position
+            local ok, parts = pcall(function()
+                return workspace:GetPartBoundsInRadius(pPos, radius, envOverlap)
+            end)
+            if ok and parts then
+                local validList = {}
+                for _, part in ipairs(parts) do
+                    if part:IsA("BasePart") then
+                        -- Never highlight character models, humanoids, or accessories
+                        if not part:FindFirstAncestorOfClass("Accessory") then
+                            local modelAnc = part:FindFirstAncestorOfClass("Model")
+                            if not (modelAnc and modelAnc:FindFirstChildOfClass("Humanoid")) then
+                                local sz = part.Size
+                                local isLarge = (sz.X > 20 or sz.Y > 20 or sz.Z > 20)
+                                -- Measure true distance to closest surface point so floors/walls under feet get top priority
+                                local dist = GetDistanceToPart(pPos, part, sz)
+                                table.insert(validList, {
+                                    part = part,
+                                    dist = dist,
+                                    target = t,
+                                    isLarge = isLarge,
+                                    sz = sz
+                                })
+                            end
+                        end
+                    end
+                end
+
+                -- Sort closest to player surface first
+                table.sort(validList, function(a, b) return a.dist < b.dist end)
+                if #validList > maxPartsPerTarget then
+                    local trimmed = {}
+                    for i = 1, maxPartsPerTarget do trimmed[i] = validList[i] end
+                    validList = trimmed
+                end
+                table.insert(targetPartLists, validList)
+            end
+        end
+
+        -- 2. Interleaved round-robin selection across all targets
+        local selected = {}
+        local processedSmallParts = {}
+        local processedLargeParts = {} -- [part] = { [targetPlayer] = true }
+        local anyLeft = true
+        local round = 1
+
+        while anyLeft and #selected < maxAdornments do
+            anyLeft = false
+            for _, list in ipairs(targetPartLists) do
+                if #selected >= maxAdornments then break end
+                if round <= #list then
+                    anyLeft = true
+                    local item = list[round]
+                    if item.isLarge then
+                        local targetPlayer = item.target.Player or "P"
+                        local map = processedLargeParts[item.part]
+                        if not map then
+                            map = {}
+                            processedLargeParts[item.part] = map
+                        end
+                        if not map[targetPlayer] then
+                            map[targetPlayer] = true
+                            table.insert(selected, item)
+                        end
+                    else
+                        if not processedSmallParts[item.part] then
+                            processedSmallParts[item.part] = true
+                            table.insert(selected, item)
                         end
                     end
                 end
             end
-
-            -- Sort closest to player first so near obstacles are never starved
-            table.sort(validList, function(a, b) return a.dist < b.dist end)
-            if #validList > maxPartsPerTarget then
-                local trimmed = {}
-                for i = 1, maxPartsPerTarget do trimmed[i] = validList[i] end
-                validList = trimmed
-            end
-            table.insert(targetPartLists, validList)
+            round = round + 1
         end
+
+        cachedSelectedItems = selected
     end
 
-    -- 2. Interleaved round-robin selection across all targets
-    -- Guarantees fair pool sharing so no prioritized target starves another target of visual slots
-    local selectedItems = {}
-    local processedSmallParts = {}
-    local processedLargeParts = {}
-    local anyLeft = true
-    local round = 1
-
-    while anyLeft and #selectedItems < maxAdornments do
-        anyLeft = false
-        for _, list in ipairs(targetPartLists) do
-            if #selectedItems >= maxAdornments then break end
-            if round <= #list then
-                anyLeft = true
-                local item = list[round]
-                if item.isLarge then
-                    -- Large parts (floors/walls) get independent slice proxies per target position
-                    local pName = item.targetPlayer and item.targetPlayer.Name or "P"
-                    local key = tostring(item.part) .. "_" .. pName
-                    if not processedLargeParts[key] then
-                        processedLargeParts[key] = true
-                        table.insert(selectedItems, item)
-                    end
-                else
-                    -- Small parts are shared in the 3D scene (no redundant duplicate highlights)
-                    if not processedSmallParts[item.part] then
-                        processedSmallParts[item.part] = true
-                        table.insert(selectedItems, item)
-                    end
-                end
-            end
-        end
-        round = round + 1
-    end
-
-    -- 3. Render adornments and wireframe boxes for selected items
+    -- 3. Render adornments and wireframe boxes every frame
+    local baseColor = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
+    local trans     = S.EnvironmentalESPTransparency or 0.95
     local usedCount = 0
-    for _, item in ipairs(selectedItems) do
-        usedCount = usedCount + 1
+
+    for _, item in ipairs(cachedSelectedItems) do
         local part = item.part
-        local pPos = item.targetPos
+        if not (part and part.Parent) then continue end
+        local t = item.target
+        local pPos = (t and t.Root and t.Root.Parent) and t.Root.Position or item.part.Position
         local sz = item.sz
         local isLarge = item.isLarge
+
+        usedCount = usedCount + 1
+        if usedCount > maxAdornments then break end
 
         local adorn = GetEnvAdornment(usedCount)
         local box   = GetEnvBox(usedCount)
@@ -582,7 +632,8 @@ local function UpdateEnvironmentalESP()
                 else normalAxis = "X" end
             end
 
-            local sliceExtent = radius * 1.5
+            -- Slice covers the diameter of the configured radius around the player (visibly expands as radius slider increases)
+            local sliceExtent = radius * 2.0
 
             if normalAxis == "Y" then
                 local sx = math.min(sliceExtent, sz.X)
@@ -590,8 +641,12 @@ local function UpdateEnvironmentalESP()
                 local sy = math.min(sz.Y, 0.15)
                 local signY = (localPos.Y >= 0) and 1 or -1
                 local cy = (halfSize.Y - (sy * 0.5)) * signY
-                local cx = math.clamp(localPos.X, -halfSize.X + sx * 0.5, halfSize.X - sx * 0.5)
-                local cz = math.clamp(localPos.Z, -halfSize.Z + sz_len * 0.5, halfSize.Z - sz_len * 0.5)
+                local minX = -halfSize.X + sx * 0.5
+                local maxX = halfSize.X - sx * 0.5
+                local cx = (minX < maxX) and math.clamp(localPos.X, minX, maxX) or 0
+                local minZ = -halfSize.Z + sz_len * 0.5
+                local maxZ = halfSize.Z - sz_len * 0.5
+                local cz = (minZ < maxZ) and math.clamp(localPos.Z, minZ, maxZ) or 0
                 sliceSize = Vector3.new(sx, sy, sz_len)
                 sliceCenter = Vector3.new(cx, cy, cz)
             elseif normalAxis == "Z" then
@@ -600,8 +655,12 @@ local function UpdateEnvironmentalESP()
                 local sz_len = math.min(sz.Z, 0.15)
                 local signZ = (localPos.Z >= 0) and 1 or -1
                 local cz = (halfSize.Z - (sz_len * 0.5)) * signZ
-                local cx = math.clamp(localPos.X, -halfSize.X + sx * 0.5, halfSize.X - sx * 0.5)
-                local cy = math.clamp(localPos.Y, -halfSize.Y + sy * 0.5, halfSize.Y - sy * 0.5)
+                local minX = -halfSize.X + sx * 0.5
+                local maxX = halfSize.X - sx * 0.5
+                local cx = (minX < maxX) and math.clamp(localPos.X, minX, maxX) or 0
+                local minY = -halfSize.Y + sy * 0.5
+                local maxY = halfSize.Y - sy * 0.5
+                local cy = (minY < maxY) and math.clamp(localPos.Y, minY, maxY) or 0
                 sliceSize = Vector3.new(sx, sy, sz_len)
                 sliceCenter = Vector3.new(cx, cy, cz)
             else -- normalAxis == "X"
@@ -610,8 +669,12 @@ local function UpdateEnvironmentalESP()
                 local sx = math.min(sz.X, 0.15)
                 local signX = (localPos.X >= 0) and 1 or -1
                 local cx = (halfSize.X - (sx * 0.5)) * signX
-                local cy = math.clamp(localPos.Y, -halfSize.Y + sy * 0.5, halfSize.Y - sy * 0.5)
-                local cz = math.clamp(localPos.Z, -halfSize.Z + sz_len * 0.5, halfSize.Z - sz_len * 0.5)
+                local minY = -halfSize.Y + sy * 0.5
+                local maxY = halfSize.Y - sy * 0.5
+                local cy = (minY < maxY) and math.clamp(localPos.Y, minY, maxY) or 0
+                local minZ = -halfSize.Z + sz_len * 0.5
+                local maxZ = halfSize.Z - sz_len * 0.5
+                local cz = (minZ < maxZ) and math.clamp(localPos.Z, minZ, maxZ) or 0
                 sliceSize = Vector3.new(sx, sy, sz_len)
                 sliceCenter = Vector3.new(cx, cy, cz)
             end

@@ -241,12 +241,6 @@ local function LoadModule(filename)
         error("[TASFF Loader] Runtime error in " .. filename .. ":\n" .. tostring(runErr))
     end
 
-    local S = _G.TASFF_State
-    if S then
-        if not S._LoadedModuleLengths then S._LoadedModuleLengths = {} end
-        S._LoadedModuleLengths[filename] = #source
-    end
-
     print("[TASFF Loader] OK: " .. filename)
 end
 

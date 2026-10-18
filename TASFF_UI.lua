@@ -501,10 +501,37 @@ local MainTab = Window:CreateTab("Combat", "crosshair")
 
 
 
+local function ToggleMasterSwitch(forcedState)
+    local newState = (forcedState ~= nil) and forcedState or (not S.MasterEnabled)
+    if Rayfield and Rayfield.Flags and Rayfield.Flags["MasterSwitch"] and Rayfield.Flags["MasterSwitch"].Set then
+        pcall(function()
+            Rayfield.Flags["MasterSwitch"]:Set(newState)
+        end)
+    else
+        S.MasterEnabled = newState
+        if not newState then
+            S.AimbotActive = false; S.CurrentTarget = nil; S.AimbotCandidates = {}
+            if S.SetADSState    then S.SetADSState(false)  end
+            if S.ClearVisuals   then S.ClearVisuals()      end
+            if S.ClearCrosshair then S.ClearCrosshair()    end
+            if S.FOVCircle      then S.FOVCircle.Visible = false end
+        end
+    end
+    if S.Notify then
+        S.Notify({
+            Title    = "TASFF System",
+            Content  = S.MasterEnabled and "Master Switch ENABLED" or "Master Switch DISABLED",
+            Duration = 1.5,
+            Image    = S.MasterEnabled and "power" or "power-off",
+        })
+    end
+end
+S.ToggleMasterSwitch = ToggleMasterSwitch
+
 MainTab:CreateSection("Command & Control")
 MainTab:CreateParagraph({
-    Title   = "TASFF â€” The Aimbot Script Final Form",
-    Content = "The definitive combat suite. Master Switch is the global killswitch â€” nothing runs while it's off. Aimbot Engine controls active target acquisition and tracking independently."
+    Title   = "TASFF — The Aimbot Script Final Form",
+    Content = "The definitive combat suite. Master Switch is the global killswitch — nothing runs while it's off. Aimbot Engine controls active target acquisition and tracking independently."
 })
 MainTab:CreateToggle({Name = "Master Switch (Killswitch)", CurrentValue = S.MasterEnabled, Flag = "MasterSwitch", Callback = function(v)
     S.MasterEnabled = v
@@ -516,6 +543,27 @@ MainTab:CreateToggle({Name = "Master Switch (Killswitch)", CurrentValue = S.Mast
         if S.FOVCircle      then S.FOVCircle.Visible = false end
     end
 end})
+MainTab:CreateKeybind({
+    Name           = "Master Switch Keybind",
+    CurrentKeybind = S.MasterSwitchKeybind or "RightShift",
+    HoldToInteract = false,
+    CallOnChange   = true,
+    Flag           = "MasterSwitchKeybind",
+    Callback       = function(key)
+        local validKey = SanitizeKeyName(key)
+        if validKey then
+            S.MasterSwitchKeybind = validKey
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Keybind",
+                    Content  = "Master Switch key set to [" .. tostring(validKey) .. "]",
+                    Duration = 2,
+                    Image    = "keyboard"
+                })
+            end
+        end
+    end
+})
 MainTab:CreateToggle({Name = "Enable Aimbot Engine", CurrentValue = S.TargetingEnabled, Flag = "TargetSystemToggle", Callback = function(v)
     S.TargetingEnabled = v
     if not v then
@@ -1555,6 +1603,9 @@ PresetsTab:CreateButton({
                 -- Settings & Entities
                 TargetPlayers = S.TargetPlayers, TargetNPCs = S.TargetNPCs, TeamCheck = S.TeamCheck,
                 AutoEnableOnEquip = S.AutoEnableOnEquip, IgnoreDead = S.IgnoreDead,
+                RapidModeCycleEnabled = S.RapidModeCycleEnabled, RapidModeCycleKey = S.RapidModeCycleKey,
+                QuickPresetSwitchEnabled = S.QuickPresetSwitchEnabled, QuickPresetSwitchKey = S.QuickPresetSwitchKey,
+                MasterSwitchKeybind = S.MasterSwitchKeybind,
             }
             for _, field in ipairs(ColorFields) do
                 if typeof(S[field]) == "Color3" then
@@ -1631,8 +1682,87 @@ local STO_FLAG = {
     OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled",
     ExpertInstinctsIntensity = "ExpertInstinctsIntensity", InstinctsInventoryCheck = "InstinctsInventoryCheck",
     InstinctsMode = "InstinctsMode",
-    AutoUpdateCheckerEnabled = "AutoUpdateChecker"
+    AutoUpdateCheckerEnabled = "AutoUpdateChecker",
+    RapidModeCycleEnabled = "RapidModeCycle",
+    RapidModeCycleKey = "RapidModeCycleKey",
+    QuickPresetSwitchEnabled = "QuickPresetSwitchToggle",
+    QuickPresetSwitchKey = "QuickPresetSwitchKey",
+    MasterSwitchKeybind = "MasterSwitchKeybind"
 }
+
+local function LoadPresetByName(presetName, silent)
+    if not presetName or type(presetName) ~= "string" then return false end
+    local data = S.SavedPresets and S.SavedPresets[presetName]
+    if not data then return false end
+
+    for key, value in pairs(data) do 
+        local color = table.find(ColorFields, key) and DecodeColor(value)
+        local flag = STO_FLAG[key]
+        if color then
+            SetColor(key, color)
+            local colorFlag = ColorFlagMap[key]
+            if colorFlag and Rayfield.Flags[colorFlag] then
+                pcall(function() Rayfield.Flags[colorFlag]:Set(color) end)
+            end
+        elseif flag and Rayfield.Flags[flag] then
+            pcall(function() Rayfield.Flags[flag]:Set(value) end)
+        else
+            S[key] = value
+        end
+    end
+
+    S.ActivePresetName = presetName
+    SelectedPresetToManage = presetName
+    if PresetDropdownRef and PresetDropdownRef.Set then
+        pcall(function() PresetDropdownRef:Set({presetName}) end)
+    end
+    if UpdatePresetStatusDisplay then
+        pcall(UpdatePresetStatusDisplay)
+    end
+
+    if not silent and S.Notify then
+        S.Notify({
+            Title    = "TASFF Presets",
+            Content  = "Loaded profile: " .. presetName .. "\nUI has been updated.",
+            Duration = 3,
+            Image    = "folder-open"
+        })
+    end
+    return true
+end
+S.LoadPresetByName = LoadPresetByName
+
+local function CycleToNextPreset()
+    local names = {}
+    if S.SavedPresets then
+        for k, _ in pairs(S.SavedPresets) do
+            if type(k) == "string" and k ~= "No Profiles Found" and k ~= "" then
+                table.insert(names, k)
+            end
+        end
+    end
+    table.sort(names)
+
+    if #names == 0 then
+        if S.Notify then
+            S.Notify({
+                Title    = "TASFF Presets",
+                Content  = "No saved profiles available to switch between.",
+                Duration = 2.5,
+                Image    = "alert-circle"
+            })
+        end
+        return
+    end
+
+    local cur = S.ActivePresetName or ""
+    local idx = table.find(names, cur) or 0
+    local nextIdx = (idx % #names) + 1
+    local nextName = names[nextIdx]
+
+    LoadPresetByName(nextName, false)
+end
+S.CycleToNextPreset = CycleToNextPreset
 
 PresetsTab:CreateButton({
     Name     = "Load Selected Profile",
@@ -1645,23 +1775,7 @@ PresetsTab:CreateButton({
         if not selected or selected == "" then selected = SelectedPresetToManage end
         
         if selected and S.SavedPresets[selected] then
-            local data = S.SavedPresets[selected]
-            for key, value in pairs(data) do 
-                local color = table.find(ColorFields, key) and DecodeColor(value)
-                local flag = STO_FLAG[key]
-                if color then
-                    SetColor(key, color)
-                    local colorFlag = ColorFlagMap[key]
-                    if colorFlag and Rayfield.Flags[colorFlag] then
-                        pcall(function() Rayfield.Flags[colorFlag]:Set(color) end)
-                    end
-                elseif flag and Rayfield.Flags[flag] then
-                    pcall(function() Rayfield.Flags[flag]:Set(value) end)
-                else
-                    S[key] = value
-                end
-            end
-            if S.Notify then S.Notify({Title = "TASFF Presets", Content = "Successfully loaded profile: " .. selected .. "\nUI has been updated.", Duration = 4, Image = "folder-open"}) end
+            LoadPresetByName(selected, false)
         else
             if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected.", Duration = 2, Image = "alert-circle"}) end
         end
@@ -1760,6 +1874,9 @@ PresetsTab:CreateButton({
                 -- Settings & Entities
                 TargetPlayers = S.TargetPlayers, TargetNPCs = S.TargetNPCs, TeamCheck = S.TeamCheck,
                 AutoEnableOnEquip = S.AutoEnableOnEquip, IgnoreDead = S.IgnoreDead,
+                RapidModeCycleEnabled = S.RapidModeCycleEnabled, RapidModeCycleKey = S.RapidModeCycleKey,
+                QuickPresetSwitchEnabled = S.QuickPresetSwitchEnabled, QuickPresetSwitchKey = S.QuickPresetSwitchKey,
+                MasterSwitchKeybind = S.MasterSwitchKeybind,
             }
             for _, field in ipairs(ColorFields) do
                 if typeof(S[field]) == "Color3" then
@@ -1779,6 +1896,39 @@ PresetsTab:CreateButton({
             end
         else
             if S.Notify then S.Notify({Title = "TASFF Presets", Content = "No valid profile selected to override.", Duration = 2, Image = "alert-triangle"}) end
+        end
+    end
+})
+
+PresetsTab:CreateSection("Quick Profile Switching")
+PresetsTab:CreateParagraph({
+    Title   = "Rapid Profile Switcher",
+    Content = "Cycle through all saved presets on the fly using a customizable keybind without opening the menu."
+})
+PresetsTab:CreateToggle({
+    Name         = "Enable Quick Preset Switching",
+    CurrentValue = S.QuickPresetSwitchEnabled,
+    Flag         = "QuickPresetSwitchToggle",
+    Callback     = function(v) S.QuickPresetSwitchEnabled = v end
+})
+PresetsTab:CreateKeybind({
+    Name           = "Quick Preset Switch Keybind",
+    CurrentKeybind = S.QuickPresetSwitchKey or "J",
+    HoldToInteract = false,
+    CallOnChange   = true,
+    Flag           = "QuickPresetSwitchKey",
+    Callback       = function(key)
+        local validKey = SanitizeKeyName(key)
+        if validKey then
+            S.QuickPresetSwitchKey = validKey
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Presets",
+                    Content  = "Preset switch key set to [" .. tostring(validKey) .. "]",
+                    Duration = 2,
+                    Image    = "keyboard"
+                })
+            end
         end
     end
 })
@@ -2385,6 +2535,28 @@ MiscTab:CreateKeybind({
         end
     end
 })
+MiscTab:CreateToggle({Name = "Enable Quick Preset Switching", CurrentValue = S.QuickPresetSwitchEnabled, Flag = "QuickPresetSwitchToggleMisc", Callback = function(v) S.QuickPresetSwitchEnabled = v end})
+MiscTab:CreateKeybind({
+    Name           = "Preset Switch Key",
+    CurrentKeybind = S.QuickPresetSwitchKey or "J",
+    HoldToInteract = false,
+    CallOnChange   = true,
+    Flag           = "QuickPresetSwitchKeyMisc",
+    Callback       = function(key)
+        local validKey = SanitizeKeyName(key)
+        if validKey then
+            S.QuickPresetSwitchKey = validKey
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Keybind",
+                    Content  = "Preset switch key set to [" .. tostring(validKey) .. "]",
+                    Duration = 2,
+                    Image    = "keyboard"
+                })
+            end
+        end
+    end
+})
 
 -- // ══════════════════════════════════════════════════════════════ // --
 -- //           SCREEN RECORDING CLOAKING SYSTEM (v2.2.0)          // --
@@ -2653,6 +2825,10 @@ SystemTab:CreateButton({
         S.EnvironmentalESPColor = Color3.fromRGB(0, 200, 255)
         S.TargetPlayers = true;         S.TargetNPCs = false;           S.TeamCheck = false
         S.AutoEnableOnEquip = false;    S.IgnoreDead = true
+        S.MasterSwitchKeybind = "RightShift"
+        S.RapidModeCycleEnabled = false; S.RapidModeCycleKey = "P"
+        S.QuickPresetSwitchEnabled = false; S.QuickPresetSwitchKey = "J"
+        S.ActivePresetName = ""
         S.CurrentTarget = nil
         if S.ClearEnvironmentalESP then S.ClearEnvironmentalESP() end
         if S.SetADSState    then S.SetADSState(false) end
@@ -2666,7 +2842,7 @@ SystemTab:CreateSection("Repository & Updates")
 
 local UpdateStatusDisplay = SystemTab:CreateParagraph({
     Title   = "Repository Status",
-    Content = "Running TASFF v" .. (S.CurrentVersion or "2.2.5") .. ".\nClick 'Check for Updates' to verify repository sync."
+    Content = "Running TASFF v" .. (S.CurrentVersion or "2.2.6") .. ".\nClick 'Check for Updates' to verify repository sync."
 })
 S.UpdateStatusDisplay = UpdateStatusDisplay
 
@@ -2735,7 +2911,8 @@ UpdateLogTab:CreateParagraph({
               "• Expert Instincts Lock Speed Range: extended slider range to 0–100 (was 5–100) for full smooth range.\n" ..
               "• Permanent Priority Notification Dedup: 'Killer is now PERMANENT' notification now fires only once per unique killer upon first reaching the continuous kill threshold; resets on neutralization.\n" ..
               "• Home Tab Paragraph Count: replaced Status Displays counter with accurate Paragraph count (34) in the home tab controls summary.\n" ..
-              "• Universal Damage Tracking Hardening: raised heuristic score threshold from 60 to 80, tightened dotAim thresholds, shrunk unarmed range to 7 studs, added minimum 5-HP drop filter to suppress chip/environmental false flags.\n" ..
+              "• Quick Preset Profile Switching: rapid cycle between saved configuration presets using a customizable keybind (default J) without opening the menu.\n" ..
+              "• Master Switch Keybind: added a customizable keybind (default RightShift) to toggle the Master Switch on and off instantly without opening the menu.\n" ..
               "• Version bump to v2.2.6."
 })
 
@@ -2946,7 +3123,7 @@ local booleanSettings = {
     "CoverAnticipationEnabled", "FoliageConcealmentCheck",
     "EnvironmentalESPEnabled", "EnvironmentalESPPriorityOnly",
     "EnvironmentalESPDistanceFade", "EnvironmentalESPAutoScaling",
-    "TriggerbotPriorityOnly",
+    "TriggerbotPriorityOnly", "RapidModeCycleEnabled", "QuickPresetSwitchEnabled",
 }
 for _, key in ipairs(booleanSettings) do
     if type(S[key]) ~= "boolean" then

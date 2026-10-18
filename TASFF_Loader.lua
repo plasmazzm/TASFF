@@ -122,6 +122,28 @@ if previousTASFF and type(previousTASFF) == "table" then
         pcall(function() previousTASFF.Rayfield:Destroy() end)
     end
 
+    local parentsToClean = {}
+    pcall(function()
+        if typeof(gethui) == "function" then
+            local h = gethui()
+            if h then table.insert(parentsToClean, h) end
+        end
+    end)
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then table.insert(parentsToClean, cg) end
+    local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if pg then table.insert(parentsToClean, pg) end
+
+    for _, parent in ipairs(parentsToClean) do
+        pcall(function()
+            for _, child in ipairs(parent:GetChildren()) do
+                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        end)
+    end
+
     -- Reset shared state so Core rebuilds everything cleanly
     _G.TASFF_State = nil
 
@@ -167,6 +189,27 @@ local function CleanupPartialRuntime()
     if runtime.Rayfield and runtime.Rayfield.Destroy then
         pcall(function() runtime.Rayfield:Destroy() end)
     end
+    local parentsToClean = {}
+    pcall(function()
+        if typeof(gethui) == "function" then
+            local h = gethui()
+            if h then table.insert(parentsToClean, h) end
+        end
+    end)
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then table.insert(parentsToClean, cg) end
+    local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if pg then table.insert(parentsToClean, pg) end
+
+    for _, parent in ipairs(parentsToClean) do
+        pcall(function()
+            for _, child in ipairs(parent:GetChildren()) do
+                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        end)
+    end
 end
 
 -- // ── Load Rayfield (once) ────────────────────────────────────── // --
@@ -181,7 +224,8 @@ if not executorCapabilities.LoadString then
 end
 local cachedRayfieldFactory = nil
 local rayfieldOk, RayfieldOrError = pcall(function()
-    local rayfieldSource = SafeHttpGet("https://sirius.menu/rayfield", "Rayfield")
+    local cacheBust = "?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
+    local rayfieldSource = SafeHttpGet("https://sirius.menu/rayfield" .. cacheBust, "Rayfield")
     local rayfieldFactory, compileError = loadstring(rayfieldSource)
     if type(rayfieldFactory) ~= "function" then
         error("[TASFF Loader] Failed to compile Rayfield bootstrap: " .. tostring(compileError))
@@ -206,7 +250,9 @@ print("[TASFF Loader] Rayfield loaded.")
 local function LoadModule(filename)
     local source
     if USE_HTTP then
-        local url = BASE_URL .. filename
+        local sep = filename:find("%?") and "&" or "?"
+        local cacheBust = sep .. "t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
+        local url = BASE_URL .. filename .. cacheBust
         source = SafeHttpGet(url, filename)
     else
         -- Method B: load from executor filesystem
@@ -336,26 +382,47 @@ local function StartLoadingSequence()
                 if Rayfield and Rayfield.Destroy then Rayfield:Destroy() end
             end)
 
+            local parentsToClean = {}
+            pcall(function()
+                if typeof(gethui) == "function" then
+                    local h = gethui()
+                    if h then table.insert(parentsToClean, h) end
+                end
+            end)
+            local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+            if ok and cg then table.insert(parentsToClean, cg) end
+            local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+            if pg then table.insert(parentsToClean, pg) end
+
+            for _, parent in ipairs(parentsToClean) do
+                pcall(function()
+                    for _, child in ipairs(parent:GetChildren()) do
+                        if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                            pcall(function() child:Destroy() end)
+                        end
+                    end
+                end)
+            end
+
             _G.TASFF_State = nil
             task.wait(0.25)
 
             -- Step 3: Re-instantiate fresh Rayfield instance
             local freshRayfield = nil
-            if cachedRayfieldFactory then
+            pcall(function()
+                local cacheBust = "?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
+                local rfSource = SafeHttpGet("https://sirius.menu/rayfield" .. cacheBust, "Rayfield")
+                local fac = loadstring(rfSource)
+                if type(fac) == "function" then
+                    cachedRayfieldFactory = fac
+                    freshRayfield = fac()
+                end
+            end)
+            if not freshRayfield and cachedRayfieldFactory then
                 local ok, inst = pcall(cachedRayfieldFactory)
                 if ok and type(inst) == "table" then
                     freshRayfield = inst
                 end
-            end
-            if not freshRayfield then
-                pcall(function()
-                    local rfSource = SafeHttpGet("https://sirius.menu/rayfield", "Rayfield")
-                    local fac = loadstring(rfSource)
-                    if type(fac) == "function" then
-                        cachedRayfieldFactory = fac
-                        freshRayfield = fac()
-                    end
-                end)
             end
 
             Rayfield = freshRayfield

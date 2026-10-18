@@ -323,7 +323,7 @@ HomeTab:CreateParagraph({
     Title   = "TASFF v2.2.6 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 92) .. " Toggles | " .. tostring(S.SliderCount or 34) .. " Sliders | " .. tostring(S.DropdownCount or 41) .. " Dropdowns | " .. tostring(S.ButtonCount or 29) .. " Buttons | " .. tostring(S.ParagraphCount or 34) .. " Paragraphs\n"
+           .. "Controls: " .. tostring(S.ToggleCount or 98) .. " Toggles | " .. tostring(S.SliderCount or 38) .. " Sliders | " .. tostring(S.DropdownCount or 42) .. " Dropdowns | " .. tostring(S.ButtonCount or 29) .. " Buttons | " .. tostring(S.ParagraphCount or 34) .. " Paragraphs\n"
            .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
 })
 
@@ -728,8 +728,14 @@ VisualTab:CreateToggle({Name = "Environmental ESP — Priority Targets Only", Cu
     S.EnvironmentalESPPriorityOnly = v
     if S.ClearEnvironmentalESP then S.ClearEnvironmentalESP() end
 end})
+VisualTab:CreateToggle({Name = "Environmental ESP — Distance Fade", CurrentValue = S.EnvironmentalESPDistanceFade, Flag = "EnvironmentalESPDistanceFade", Callback = function(v)
+    S.EnvironmentalESPDistanceFade = v
+end})
 VisualTab:CreateSlider({Name = "Environmental ESP Radius (Studs)", Range = {5, 50}, Increment = 1, CurrentValue = S.EnvironmentalESPRange or 15, Flag = "EnvironmentalESPRange", Callback = function(v)
     S.EnvironmentalESPRange = v
+end})
+VisualTab:CreateSlider({Name = "Environmental ESP Baseline Transparency", Range = {0, 1}, Increment = 0.01, CurrentValue = S.EnvironmentalESPTransparency or 0.95, Flag = "EnvironmentalESPTransparency", Callback = function(v)
+    S.EnvironmentalESPTransparency = v
 end})
 
 VisualTab:CreateSection("Target Intelligence Tags")
@@ -1497,6 +1503,7 @@ PresetsTab:CreateButton({
                 BoxModeEnabled = S.BoxModeEnabled, SkeletonModeEnabled = S.SkeletonModeEnabled, SnaplinesEnabled = S.SnaplinesEnabled,
                 SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius, OOFArrowsPriorityOnly = S.OOFArrowsPriorityOnly,
                 EnvironmentalESPEnabled = S.EnvironmentalESPEnabled, EnvironmentalESPPriorityOnly = S.EnvironmentalESPPriorityOnly, EnvironmentalESPRange = S.EnvironmentalESPRange,
+                EnvironmentalESPDistanceFade = S.EnvironmentalESPDistanceFade, EnvironmentalESPTransparency = S.EnvironmentalESPTransparency,
                 UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
                 ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
@@ -1591,6 +1598,7 @@ local STO_FLAG = {
     DistancePredictionAdjustEnabled = "DistancePredictionAdjustEnabled", MaxAutoPrediction = "MaxAutoPrediction",
     CoverAnticipationEnabled = "CoverAnticipationEnabled", CoverAnticipationDuration = "CoverAnticipationDuration",
     EnvironmentalESPEnabled = "EnvironmentalESPEnabled", EnvironmentalESPPriorityOnly = "EnvironmentalESPPriorityOnly",
+    EnvironmentalESPDistanceFade = "EnvironmentalESPDistanceFade", EnvironmentalESPTransparency = "EnvironmentalESPTransparency",
     EnvironmentalESPRange = "EnvironmentalESPRange", FoliageConcealmentCheck = "FoliageConcealmentCheck",
     OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled",
     ExpertInstinctsIntensity = "ExpertInstinctsIntensity", InstinctsInventoryCheck = "InstinctsInventoryCheck",
@@ -1698,6 +1706,7 @@ PresetsTab:CreateButton({
                 BoxModeEnabled = S.BoxModeEnabled, SkeletonModeEnabled = S.SkeletonModeEnabled, SnaplinesEnabled = S.SnaplinesEnabled,
                 SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius, OOFArrowsPriorityOnly = S.OOFArrowsPriorityOnly,
                 EnvironmentalESPEnabled = S.EnvironmentalESPEnabled, EnvironmentalESPPriorityOnly = S.EnvironmentalESPPriorityOnly, EnvironmentalESPRange = S.EnvironmentalESPRange,
+                EnvironmentalESPDistanceFade = S.EnvironmentalESPDistanceFade, EnvironmentalESPTransparency = S.EnvironmentalESPTransparency,
                 UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
                 ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
@@ -2598,6 +2607,7 @@ SystemTab:CreateButton({
         S.DecalsCheck = false
         S.CoverAnticipationEnabled = true; S.CoverAnticipationDuration = 0.8
         S.EnvironmentalESPEnabled = false; S.EnvironmentalESPPriorityOnly = false; S.EnvironmentalESPRange = 15
+        S.EnvironmentalESPDistanceFade = false; S.EnvironmentalESPTransparency = 0.95
         S.TargetPlayers = true;         S.TargetNPCs = false;           S.TeamCheck = false
         S.AutoEnableOnEquip = false;    S.IgnoreDead = true
         S.CurrentTarget = nil
@@ -2668,12 +2678,14 @@ UpdateLogTab:CreateSection("Recent Releases & Updates")
 
 UpdateLogTab:CreateParagraph({
     Title   = "Version 2.2.6 (Environmental ESP Rewrite, Stability & Instincts Polish)",
-    Content = "• Environmental ESP Rewrite (SelectionBox): replaced 2D screen-space Drawing boxes with Roblox SelectionBox instances — true 3D wireframe edge/corner outlines fixed to world geometry, exactly like player ESP Highlight. Multi-part models (roof tiles, props, etc.) are now deduplicated to a single SelectionBox per top-level Model ancestor, eliminating the clustered nested-box artifact seen in previous builds.\n" ..
-              "• Environmental ESP Large-Part Skip: parts whose largest dimension exceeds 40 studs are skipped entirely to prevent massive floor/wall/ceiling slabs from receiving a SelectionBox.\n" ..
+    Content = "• Environmental ESP Dual Architecture: combines BoxHandleAdornment (for 95% invisible chams fill) with SelectionBox (for sharp corner & edge outlines) — highlights small objects fully while maintaining total visibility of player ESP.\n" ..
+              "• Environmental ESP 2D Surface Plane Slices: dynamic normal-axis detection projects flat 0.15-stud thin proxy slabs directly onto the surface of large floors, walls, and ceilings around players instead of engulfing them in 3D cubes.\n" ..
+              "• Environmental ESP Distance Fade Toggle: dynamically scales both chams fill transparency and outline thickness based on distance from the target player, smoothly fading to invisible at maximum range.\n" ..
+              "• Environmental ESP Baseline Transparency Slider: configurable baseline transparency slider (default 0.95 = 95% invisible) for precise chams fill customization.\n" ..
+              "• Environmental ESP Character & Accessory Filter: humanoids, character models, and accessories are strictly excluded from environmental ESP processing.\n" ..
               "• OOF Arrow Angle Smoothing: added per-arrow exponential moving-average filter (shortest-arc lerp at ~12×deltaTime) stored in S._OOFAngleSmooth. Smooths out HumanoidRootPart animation bob and camera wobble without affecting directional accuracy. Angle cache is cleared when an arrow hides so the next appearance starts from scratch.\n" ..
               "• Environmental ESP Priority Fix: priority-only toggle now queries all players directly instead of LastVisualList, correctly showing or hiding overlays for all players when priority filter is disabled.\n" ..
               "• OOF Arrow Direction Fix (Round 2): replaced PointToObjectSpace atan2 with RightVector/UpVector dot products — arrows now point in the correct screen direction with no z-boundary discontinuity.\n" ..
-              "• Environmental ESP Visibility Fix: corrected inverted overlay transparency mapping (Transparency=1 is fully opaque in the UI stroke system, not 0).\n" ..
               "• Expert Instincts Last-Known-Position Steering: camera now continues steering towards the attacker's last known world position when they duck behind cover mid-reaction, instead of stopping mid-turn.\n" ..
               "• Expert Instincts Live Position Update: last-known-position is refreshed every frame while the attacker is visible, ensuring the held angle is always current before they take cover.\n" ..
               "• Expert Instincts Blatant/Legit Mode Dropdown: mirrors the aimbot's mode system — Blatant does a direct per-intensity CFrame lerp (100=instant, 0=very smooth), Legit uses the humanized smoothstep pipeline.\n" ..
@@ -2890,6 +2902,7 @@ local booleanSettings = {
     "AutoUpdateCheckerEnabled", "InstinctsInventoryCheck",
     "CoverAnticipationEnabled", "FoliageConcealmentCheck",
     "EnvironmentalESPEnabled", "EnvironmentalESPPriorityOnly",
+    "EnvironmentalESPDistanceFade",
     "TriggerbotPriorityOnly",
 }
 for _, key in ipairs(booleanSettings) do
@@ -2904,6 +2917,7 @@ local numericRanges = {
     MaxAutoPrediction = {0.16, 2}, ExpertInstinctsIntensity = {0, 100},
     ContinuousKillsPermanent = {2, 15}, KillsBeforeThreat = {1, 10},
     CoverAnticipationDuration = {0.1, 3}, EnvironmentalESPRange = {5, 50},
+    EnvironmentalESPTransparency = {0, 1},
     Smoothness = {0.1, 100}, SmoothnessX = {0.1, 100}, SmoothnessY = {0.1, 100},
     BlatantSnapSpeed = {1, 100}, TransparencyThreshold = {0, 1},
     GracePeriodMs = {0, 2000}, AimbotRenderDistance = {1, 10000},

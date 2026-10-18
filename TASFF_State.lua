@@ -190,6 +190,15 @@ _G.TASFF_State = {
     EnvironmentalESPDistanceFade= false,         -- dynamic fade: parts fade to invisible as distance reaches max range
     EnvironmentalESPColor       = Color3.fromRGB(0, 200, 255),
     EnvironmentalESPTransparency= 0.95,          -- baseline transparency (0.95 = 95% invisible chams fill)
+    EnvironmentalESPAutoScaling = true,          -- dynamically scales max parts pool based on active Performance Mode
+    EnvironmentalESPMaxParts    = 160,           -- maximum parts/adornments limit (configurable 20-500)
+    EnvironmentalESPScaleTable  = {
+        ["Ultra High"] = 400,
+        ["High"]       = 260,
+        ["Medium"]     = 160,
+        ["Low"]        = 90,
+        ["Ultra Low"]  = 45,
+    },
     EnvironmentalESPAdornments  = {},            -- runtime pool of adornment objects
     HighlightColor              = Color3.fromRGB(240, 240, 240),
     FOVColor                    = Color3.fromRGB(240, 240, 240),

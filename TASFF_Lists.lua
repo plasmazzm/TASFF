@@ -195,7 +195,6 @@ local FeatureList = {
     "Humanized Cover Anticipation",
     "Environmental Awareness ESP",
     "Triggerbot Priority Target Filter",
-    "Hybrid Repository Commit & Signature Sync",
 }
 
 S.FeatureCount = #FeatureList
@@ -206,6 +205,7 @@ S.DropdownCount       = 41   -- +3 (Legacy Changelog Version, InstinctsBlacklist
 S.ButtonCount         = 29   -- +5 (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)
 S.KeybindCount        = 5
 S.StatusDisplayCount  = 7    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status, Repository Status
+S.ParagraphCount      = 34   -- Total CreateParagraph calls across TASFF_UI.lua
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --
 -- Applied via the Presets tab "Quick-Load Game Config" dropdown.

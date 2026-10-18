@@ -321,66 +321,24 @@ local function PrepareDrawing(obj)
 end
 S.PrepareDrawing = PrepareDrawing
 
-local EnvFolder = nil
-local function GetEnvFolder()
-    local cam = Camera or workspace.CurrentCamera
-    if not EnvFolder or EnvFolder.Parent ~= cam then
-        EnvFolder = cam and cam:FindFirstChild("TASFF_EnvFolder")
-        if not EnvFolder and cam then
-            local f = Instance.new("Folder")
-            f.Name = "TASFF_EnvFolder"
-            pcall(function() f.Parent = cam end)
-            EnvFolder = f
+local EnvDrawPool = {}
+local function GetEnvDraw(index)
+    if not EnvDrawPool[index] then
+        local sq = NewDrawing("Square")
+        if sq then
+            sq.Filled   = false
+            sq.Thickness = 1.5
+            sq.Visible  = false
         end
+        EnvDrawPool[index] = sq
     end
-    return EnvFolder or cam or workspace
-end
-
-local EnvOutlinePool = {}
-local function GetEnvOutline(index)
-    local box = EnvOutlinePool[index]
-    if not box or not box.Parent then
-        box = Instance.new("SelectionBox")
-        box.Name = "TASFF_EnvOutline_" .. index
-        box.AlwaysOnTop = false
-        box.LineThickness = 0.05
-        box.Transparency = 1
-        box.SurfaceTransparency = 1
-        local folder = GetEnvFolder()
-        pcall(function() box.Parent = folder end)
-        EnvOutlinePool[index] = box
-    end
-    return box
-end
-
-local EnvSlicePool = {}
-local function GetEnvSlice(index)
-    local adorn = EnvSlicePool[index]
-    if not adorn or not adorn.Parent then
-        adorn = Instance.new("BoxHandleAdornment")
-        adorn.Name = "TASFF_EnvSlice_" .. index
-        adorn.AlwaysOnTop = false
-        adorn.ZIndex = 1
-        adorn.Visible = false
-        local folder = GetEnvFolder()
-        pcall(function() adorn.Parent = folder end)
-        EnvSlicePool[index] = adorn
-    end
-    return adorn
+    return EnvDrawPool[index]
 end
 
 local function ClearEnvironmentalESP()
-    for _, box in ipairs(EnvOutlinePool) do
-        if box then
-            box.Adornee = nil
-            box.Transparency = 1
-            box.SurfaceTransparency = 1
-        end
-    end
-    for _, slice in ipairs(EnvSlicePool) do
-        if slice then
-            slice.Visible = false
-            slice.Adornee = nil
+    for _, sq in ipairs(EnvDrawPool) do
+        if sq then
+            sq.Visible = false
         end
     end
 end
@@ -391,7 +349,7 @@ envOverlap.FilterType = Enum.RaycastFilterType.Exclude
 
 local function UpdateEnvironmentalESP()
     if not (S.MasterEnabled and S.EnvironmentalESPEnabled) then
-        if #EnvOutlinePool > 0 or #EnvSlicePool > 0 then ClearEnvironmentalESP() end
+        if #EnvDrawPool > 0 then ClearEnvironmentalESP() end
         return
     end
 
@@ -399,39 +357,17 @@ local function UpdateEnvironmentalESP()
     local targets = {}
     local PP = S.PriorityPlayers or {}
 
-    if S.EnvironmentalESPPriorityOnly then
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= Player and p.Character then
-                local char = p.Character
-                local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
-                local hum = char:FindFirstChildOfClass("Humanoid")
+    -- Query all players directly (not just LastVisualList) so priority-only
+    -- toggle correctly shows everyone when it is disabled.
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Player and p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            local hum  = p.Character:FindFirstChildOfClass("Humanoid")
+            if root and hum and hum.Health > 0 then
                 local isPrio = table.find(PP, p.Name) ~= nil
                     or (S.IntelPlayers and S.IntelPlayers[p.Name] ~= nil)
-                    or (NemesisMemory and NemesisMemory[p.Name] ~= nil)
-                if isPrio and root and hum and hum.Health > 0 then
-                    table.insert(targets, { Instance = char, Root = root, Name = p.Name })
-                end
-            end
-        end
-    else
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= Player and p.Character then
-                local char = p.Character
-                local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
-                local hum = char:FindFirstChildOfClass("Humanoid")
-                if root and hum and hum.Health > 0 then
-                    table.insert(targets, { Instance = char, Root = root, Name = p.Name })
-                end
-            end
-        end
-        if S.TargetNPCs and S.CachedNPCs then
-            for _, npc in ipairs(S.CachedNPCs) do
-                if npc and npc.Parent then
-                    local root = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Torso")
-                    local hum = npc:FindFirstChildOfClass("Humanoid")
-                    if root and hum and hum.Health > 0 then
-                        table.insert(targets, { Instance = npc, Root = root, Name = npc.Name })
-                    end
+                if not S.EnvironmentalESPPriorityOnly or isPrio then
+                    table.insert(targets, { Root = root, Player = p })
                 end
             end
         end
@@ -455,115 +391,106 @@ local function UpdateEnvironmentalESP()
     end
     envOverlap.FilterDescendantsInstances = excludeList
 
-    local usedOutlineCount = 0
-    local usedSliceCount = 0
-    local maxOutlines = 100
-    local maxSlices = 50
+    local usedCount    = 0
+    local maxSquares   = 120
     local processedParts = {}
+    local baseColor    = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
+    local vp           = Camera.ViewportSize
+    local LARGE_THRESH = 20
 
-    local baseColor = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
-    local sliceTrans = S.EnvironmentalESPTransparency or 0.82
+    -- Helper: project 8 OBB corners of a part (or a slice box) to screen and
+    -- return (minX, minY, maxX, maxY). Returns nil if entirely behind camera.
+    local function ProjectBox(cf, size)
+        local hx, hy, hz = size.X * 0.5, size.Y * 0.5, size.Z * 0.5
+        local corners = {
+            cf * Vector3.new( hx,  hy,  hz),
+            cf * Vector3.new(-hx,  hy,  hz),
+            cf * Vector3.new( hx, -hy,  hz),
+            cf * Vector3.new(-hx, -hy,  hz),
+            cf * Vector3.new( hx,  hy, -hz),
+            cf * Vector3.new(-hx,  hy, -hz),
+            cf * Vector3.new( hx, -hy, -hz),
+            cf * Vector3.new(-hx, -hy, -hz),
+        }
+        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+        local anyVisible = false
+        for _, worldPt in ipairs(corners) do
+            local sp, onS = Camera:WorldToViewportPoint(worldPt)
+            if sp.Z > 0 then
+                anyVisible = true
+                if sp.X < minX then minX = sp.X end
+                if sp.Y < minY then minY = sp.Y end
+                if sp.X > maxX then maxX = sp.X end
+                if sp.Y > maxY then maxY = sp.Y end
+            end
+        end
+        if not anyVisible then return nil end
+        -- Clamp to viewport so off-screen clips don't cause issues
+        minX = math.max(minX, 0)
+        minY = math.max(minY, 0)
+        maxX = math.min(maxX, vp.X)
+        maxY = math.min(maxY, vp.Y)
+        if maxX <= minX or maxY <= minY then return nil end
+        return minX, minY, maxX, maxY
+    end
 
     for _, t in ipairs(targets) do
+        if usedCount >= maxSquares then break end
         local pPos = t.Root.Position
         local ok, parts = pcall(function()
             return workspace:GetPartBoundsInRadius(pPos, radius, envOverlap)
         end)
         if ok and parts then
             for _, part in ipairs(parts) do
-                if (usedOutlineCount >= maxOutlines) and (usedSliceCount >= maxSlices) then break end
-                if part:IsA("BasePart") and not part:IsA("Terrain") and not processedParts[part] then
-                    if not part:IsDescendantOf(workspace) then continue end
-                    if part.Transparency >= 0.98 and not part.CanCollide then continue end
+                if usedCount >= maxSquares then break end
+                if part:IsA("BasePart") and not processedParts[part] then
                     processedParts[part] = true
-                    local pSize = part.Size
-                    local isLarge = (pSize.X > 18 or pSize.Y > 18 or pSize.Z > 18) or (pSize.X * pSize.Z > 200)
+                    local pSize  = part.Size
+                    local isLarge = (pSize.X > LARGE_THRESH or pSize.Y > LARGE_THRESH or pSize.Z > LARGE_THRESH)
 
+                    local boxCF, boxSize
                     if isLarge then
-                        if usedSliceCount < maxSlices then
-                            usedSliceCount = usedSliceCount + 1
-                            local slice = GetEnvSlice(usedSliceCount)
-                            slice.Color3 = baseColor
-                            slice.Transparency = sliceTrans
-                            slice.Adornee = part
-
-                            local localPos = part.CFrame:PointToObjectSpace(pPos)
-                            local halfSize = pSize * 0.5
-                            local clampedX = math.clamp(localPos.X, -halfSize.X, halfSize.X)
-                            local clampedY = math.clamp(localPos.Y, -halfSize.Y, halfSize.Y)
-                            local clampedZ = math.clamp(localPos.Z, -halfSize.Z, halfSize.Z)
-
-                            -- Detect surface orientation (Floor/Ceiling, Z-Wall, or X-Wall)
-                            local isFloorCeil = (pSize.Y <= pSize.X and pSize.Y <= pSize.Z) or (pSize.Y <= 6)
-                            local isZWall     = (pSize.Z <= pSize.X and pSize.Z <= pSize.Y) or (pSize.Z <= 6)
-                            local isXWall     = (pSize.X <= pSize.Y and pSize.X <= pSize.Z) or (pSize.X <= 6)
-
-                            if not isFloorCeil and not isZWall and not isXWall then
-                                -- Thick block: determine closest face to player
-                                local distY = math.abs(halfSize.Y - math.abs(localPos.Y))
-                                local distZ = math.abs(halfSize.Z - math.abs(localPos.Z))
-                                local distX = math.abs(halfSize.X - math.abs(localPos.X))
-                                if distY <= distX and distY <= distZ then
-                                    isFloorCeil = true
-                                elseif distZ <= distX then
-                                    isZWall = true
-                                else
-                                    isXWall = true
-                                end
-                            end
-
-                            if isFloorCeil then
-                                local faceY = (localPos.Y >= 0 and (halfSize.Y + 0.02) or (-halfSize.Y - 0.02))
-                                local sliceW = math.min(pSize.X, radius * 1.5)
-                                local sliceL = math.min(pSize.Z, radius * 1.5)
-                                slice.CFrame = CFrame.new(clampedX, faceY, clampedZ)
-                                slice.Size = Vector3.new(sliceW, 0.04, sliceL)
-                            elseif isZWall then
-                                local faceZ = (localPos.Z >= 0 and (halfSize.Z + 0.02) or (-halfSize.Z - 0.02))
-                                local sliceW = math.min(pSize.X, radius * 1.5)
-                                local sliceH = math.min(pSize.Y, radius * 1.5)
-                                slice.CFrame = CFrame.new(clampedX, clampedY, faceZ)
-                                slice.Size = Vector3.new(sliceW, sliceH, 0.04)
-                            else
-                                local faceX = (localPos.X >= 0 and (halfSize.X + 0.02) or (-halfSize.X - 0.02))
-                                local sliceH = math.min(pSize.Y, radius * 1.5)
-                                local sliceL = math.min(pSize.Z, radius * 1.5)
-                                slice.CFrame = CFrame.new(faceX, clampedY, clampedZ)
-                                slice.Size = Vector3.new(0.04, sliceH, sliceL)
-                            end
-                            slice.Visible = true
-                        end
+                        -- Slice: construct a sub-box of radius*1.4 extent around the
+                        -- player's projected position on this part's face/interior.
+                        local localPos = part.CFrame:PointToObjectSpace(pPos)
+                        local halfSize = pSize * 0.5
+                        local cx = math.clamp(localPos.X, -halfSize.X, halfSize.X)
+                        local cy = math.clamp(localPos.Y, -halfSize.Y, halfSize.Y)
+                        local cz = math.clamp(localPos.Z, -halfSize.Z, halfSize.Z)
+                        local sliceR = radius * 1.4
+                        local sliceX = (pSize.X > LARGE_THRESH) and math.min(sliceR, pSize.X) or (pSize.X + 0.1)
+                        local sliceY = (pSize.Y > LARGE_THRESH) and math.min(sliceR, pSize.Y) or (pSize.Y + 0.1)
+                        local sliceZ = (pSize.Z > LARGE_THRESH) and math.min(sliceR, pSize.Z) or (pSize.Z + 0.1)
+                        boxCF   = part.CFrame * CFrame.new(cx, cy, cz)
+                        boxSize = Vector3.new(sliceX, sliceY, sliceZ)
                     else
-                        if usedOutlineCount < maxOutlines then
-                            usedOutlineCount = usedOutlineCount + 1
-                            local outline = GetEnvOutline(usedOutlineCount)
-                            outline.Color3 = baseColor
-                            outline.SurfaceColor3 = baseColor
-                            outline.LineThickness = 0.05
-                            outline.Transparency = 0
-                            outline.SurfaceTransparency = 0.92
-                            outline.Adornee = part
+                        boxCF   = part.CFrame
+                        boxSize = pSize + Vector3.new(0.08, 0.08, 0.08)
+                    end
+
+                    local minX, minY, maxX, maxY = ProjectBox(boxCF, boxSize)
+                    if minX then
+                        usedCount = usedCount + 1
+                        local sq = GetEnvDraw(usedCount)
+                        if sq then
+                            sq.Color     = baseColor
+                            sq.Transparency = 0  -- outline, no fill
+                            sq.Position  = Vector2.new(minX, minY)
+                            sq.Size      = Vector2.new(maxX - minX, maxY - minY)
+                            sq.Visible   = true
                         end
                     end
                 end
             end
         end
-        if (usedOutlineCount >= maxOutlines) and (usedSliceCount >= maxSlices) then break end
+        if usedCount >= maxSquares then break end
     end
 
-    for i = usedOutlineCount + 1, #EnvOutlinePool do
-        local box = EnvOutlinePool[i]
-        if box and box.Adornee then
-            box.Adornee = nil
-            box.Transparency = 1
-            box.SurfaceTransparency = 1
-        end
-    end
-    for i = usedSliceCount + 1, #EnvSlicePool do
-        local slice = EnvSlicePool[i]
-        if slice and slice.Visible then
-            slice.Visible = false
-            slice.Adornee = nil
+    -- Hide unused pool entries
+    for i = usedCount + 1, #EnvDrawPool do
+        local sq = EnvDrawPool[i]
+        if sq and sq.Visible then
+            sq.Visible = false
         end
     end
 end
@@ -777,17 +704,6 @@ local function UnloadScript(isRestarting)
         end
         pcall(function() table.clear(getgenv().TASFF.Drawings) end)
     end
-    -- Clean up Environmental ESP adornments and container folder
-    pcall(ClearEnvironmentalESP)
-    for _, box in ipairs(EnvOutlinePool) do
-        if box then pcall(function() box:Destroy() end) end
-    end
-    table.clear(EnvOutlinePool)
-    for _, slice in ipairs(EnvSlicePool) do
-        if slice then pcall(function() slice:Destroy() end) end
-    end
-    table.clear(EnvSlicePool)
-    if EnvFolder then pcall(function() EnvFolder:Destroy() end); EnvFolder = nil end
     -- Remove TASFF_Overlay from wherever it was parented (CoreGui or PlayerGui fallback)
     local ok, cg = pcall(function() return game:GetService("CoreGui") end)
     if ok and cg then
@@ -1709,6 +1625,7 @@ local function HookThreatHealth(char)
                         S._ExpertInstinctsAttacker = attackerObj
                         S._ExpertInstinctsTargetChar = aChar
                         S._ExpertInstinctsIntensity = intensity
+                        S._ExpertInstinctsLastKnownPos = aimPos  -- persist for cover-hidden steering
                         if intensity >= 100 then
                             Camera.CFrame = CFrame.new(Camera.CFrame.Position, aimPos)
                         else
@@ -2697,12 +2614,14 @@ local function HookNeutralization(p)
                         local kData = S.IntelPlayers and S.IntelPlayers[killerName]
 
                         if streak >= permReq then
-                            local wasAlreadyPerm = (kData and kData.permanent == true) or (S.IntelPlayers and S.IntelPlayers[killerName] and S.IntelPlayers[killerName].permanent == true)
                             if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
                             if S.IntelPlayers and S.IntelPlayers[killerName] then
                                 S.IntelPlayers[killerName].permanent = true
                             end
-                            if not wasAlreadyPerm then
+                            -- Only notify once per killer reaching permanent status
+                            if not S._PermanentPriorityNotified then S._PermanentPriorityNotified = {} end
+                            if not S._PermanentPriorityNotified[killerName] then
+                                S._PermanentPriorityNotified[killerName] = true
                                 Notify({Title="TASFF Threat", Content="💀 " .. killerName .. " is now PERMANENT (Streak: " .. streak .. ") until neutralized!", Duration=3, Image="alert-triangle"})
                             end
                         elseif streak >= threatReq then
@@ -2733,6 +2652,10 @@ local function HookNeutralization(p)
                 end
                 if S.IntelPlayers and S.IntelPlayers[p.Name] then
                     S.IntelPlayers[p.Name].permanent = nil
+                end
+                -- Reset permanent notification dedup so future streaks can notify again
+                if S._PermanentPriorityNotified then
+                    S._PermanentPriorityNotified[p.Name] = nil
                 end
 
                 if not S.ThreatNeutralizationEnabled then return end
@@ -2799,7 +2722,7 @@ end))
 task.defer(function()
     -- Render loop remains idle until UI loading sequence completes and explicitly sets S.ScriptInitialized = true
     S.CurrentTarget = nil
-    print("[TASFF v2.2.6] Core function slots registered. Awaiting UI sequence...")
+    print("[TASFF v2.2.5] Core function slots registered. Awaiting UI sequence...")
 end)
 
 -- // ══════════════════════════════════════════════════════════════ // --
@@ -3282,23 +3205,18 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end
                 local arrow=OOFArrowCache[t.Instance]
                 if arrow then
-                    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-                    local localPos = Camera.CFrame:PointToObjectSpace(rootPart.Position)
-                    local dirX = localPos.X
-                    local dirY = -localPos.Y
-                    if localPos.Z > 0 then
-                        dirY = dirY + localPos.Z
-                    end
-                    if math.abs(dirX) < 1e-4 and math.abs(dirY) < 1e-4 then
-                        dirY = 1
-                    end
-                    local angle = math.atan2(dirY, dirX)
-                    local r = OOFR
-                    arrow.PointA = center + Vector2.new(math.cos(angle), math.sin(angle)) * r
-                    arrow.PointB = center + Vector2.new(math.cos(angle - 0.2), math.sin(angle - 0.2)) * (r - 20)
-                    arrow.PointC = center + Vector2.new(math.cos(angle + 0.2), math.sin(angle + 0.2)) * (r - 20)
-                    arrow.Color = statusESPColor or S.OOFArrowColor or SLC or bc
-                    arrow.Visible = true
+                    local center=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
+                    -- Use camera-local space direction to get stable angle without Z-sign flip twitching
+                    local camLocal = Camera.CFrame:PointToObjectSpace(rootPart.Position)
+                    -- atan2(X, -Z) maps camera-local forward (-Z) to screen up, X to screen right
+                    local angle = math.atan2(camLocal.X, -camLocal.Z)
+                    -- Flip Y to match screen-space (screen Y increases downward)
+                    angle = math.atan2(math.sin(angle), math.cos(angle))
+                    local r=OOFR
+                    arrow.PointA=center+Vector2.new(math.cos(angle),math.sin(angle))*r
+                    arrow.PointB=center+Vector2.new(math.cos(angle-0.2),math.sin(angle-0.2))*(r-20)
+                    arrow.PointC=center+Vector2.new(math.cos(angle+0.2),math.sin(angle+0.2))*(r-20)
+                    arrow.Color=statusESPColor or S.OOFArrowColor or SLC or bc; arrow.Visible=true
                 end
             else if OOFArrowCache[t.Instance] then OOFArrowCache[t.Instance].Visible=false end end
             if onScreen then
@@ -3494,6 +3412,23 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
             -- v2.1.0: Silent Aim — only block MOUSE movement (mousemoverel/abs).
             -- Camera CFrame writes still happen so the engine doesn't freeze the camera.
             -- The __index/__namecall hooks handle actual bullet/raycast redirection.
+
+            -- Expert Instincts: update last-known-pos each frame while attacker is visible,
+            -- then fall back to it when attacker hides (TWP == nil but instincts still active).
+            if S._ExpertInstinctsActive and tick() < (S._ExpertInstinctsExpiry or 0) then
+                local aChar = S._ExpertInstinctsTargetChar
+                if aChar then
+                    local liveRoot = aChar:FindFirstChild("HumanoidRootPart")
+                    local livePart = (S.TargetPart and aChar:FindFirstChild(S.TargetPart)) or aChar:FindFirstChild("Head") or liveRoot
+                    if livePart then
+                        S._ExpertInstinctsLastKnownPos = livePart.Position
+                    end
+                end
+                if TWP == nil and S._ExpertInstinctsLastKnownPos then
+                    TWP = S._ExpertInstinctsLastKnownPos
+                end
+            end
+
             if TWP then
                 local tcf=CFrame.new(Camera.CFrame.Position,TWP)
                 local sp,os=Camera:WorldToViewportPoint(TWP)
@@ -3884,104 +3819,81 @@ function S.CheckForUpdates(manual)
         end
     end
 
-    -- Option A: Semantic Version Check
-    local isNewerVersion = (remoteVer ~= nil) and IsVersionNewer(remoteVer, currentVer)
+    local isNewer = (remoteVer ~= nil) and IsVersionNewer(remoteVer, currentVer)
 
-    -- Option B: Commit & Module Revision Check (detects additions, toggles, buttons without version bump)
-    local isCommitUpdate = false
-    local commitUpdateReason = nil
-
-    -- Check 1 of Option B: Query GitHub Commits API for latest commit SHA on main
-    local apiOk, apiRes = pcall(function()
-        return FetchRemoteText("https://api.github.com/repos/plasmazzm/TASFF/commits/main" .. cacheBust)
-    end)
-    if apiOk and apiRes and #apiRes > 0 then
-        local remoteSha = apiRes:match('"sha"%s*:%s*"([%w]+)"')
-        if remoteSha and #remoteSha >= 7 then
-            local shortSha = remoteSha:sub(1, 7)
-            if S.LoadedCommitSha and S.LoadedCommitSha ~= "" and S.LoadedCommitSha ~= shortSha then
-                isCommitUpdate = true
-                commitUpdateReason = "Commit " .. shortSha
-            end
-            S.LatestRemoteCommitSha = shortSha
-        end
+    -- Step 3 (SHA Tier): Query the GitHub Commits API to detect any new commit
+    -- even when the version string hasn't changed (new toggles, content additions, etc).
+    -- Logic: first successful fetch this session sets a per-session baseline SHA without
+    -- flagging an update. Subsequent fetches compare against that baseline.
+    local commitSHAChanged = false
+    local commitApiUrl = "https://api.github.com/repos/plasmazzm/TASFF/commits?per_page=1"
+    local commitJson = CleanRemoteText(FetchRemoteText(commitApiUrl .. "&t=" .. tostring(tick())))
+    if not commitJson then
+        commitJson = CleanRemoteText(FetchRemoteText(commitApiUrl))
     end
-
-    -- Check 2 of Option B: Module Metric & Content Signature Check
-    -- Even if commit API is rate-limited or unauthenticated, check remote TASFF_Lists.lua for feature/toggle changes
-    if not isNewerVersion and not isCommitUpdate then
-        local listsText = CleanRemoteText(FetchRemoteText(repoBase .. "TASFF_Lists.lua" .. cacheBust))
-        if not listsText then
-            listsText = CleanRemoteText(FetchRemoteText(repoBase .. "TASFF_Lists.lua"))
-        end
-        if listsText then
-            local remToggles = tonumber(listsText:match('ToggleCount%s*=%s*(%d+)'))
-            local remSliders = tonumber(listsText:match('SliderCount%s*=%s*(%d+)'))
-            local curToggles = S.ToggleCount or 97
-            local curSliders = S.SliderCount or 37
-            if remToggles and remToggles > curToggles then
-                isCommitUpdate = true
-                commitUpdateReason = "New UI toggles (" .. remToggles .. " vs " .. curToggles .. ")"
-            elseif remSliders and remSliders > curSliders then
-                isCommitUpdate = true
-                commitUpdateReason = "New UI sliders (" .. remSliders .. " vs " .. curSliders .. ")"
-            end
-
-            -- Content signature fallback: compare length against session-loaded modules
-            if not isCommitUpdate and S._LoadedModuleLengths and S._LoadedModuleLengths["TASFF_Lists.lua"] then
-                local loadedLen = S._LoadedModuleLengths["TASFF_Lists.lua"]
-                if math.abs(#listsText - loadedLen) > 10 then
-                    isCommitUpdate = true
-                    commitUpdateReason = "Module revision (TASFF_Lists.lua)"
-                end
-            end
-        end
-
-        if not isCommitUpdate and S._LoadedModuleLengths and S._LoadedModuleLengths["TASFF_Core.lua"] then
-            local coreText = CleanRemoteText(FetchRemoteText(repoBase .. "TASFF_Core.lua" .. cacheBust))
-            if coreText and math.abs(#coreText - S._LoadedModuleLengths["TASFF_Core.lua"]) > 20 then
-                isCommitUpdate = true
-                commitUpdateReason = "Module revision (TASFF_Core.lua)"
+    if commitJson then
+        local remoteSHA = commitJson:match('"sha"%s*:%s*"([%w]+)"')
+        if remoteSHA then
+            if S._LastKnownCommitSHA == nil then
+                -- First successful fetch this session: store as baseline, no update
+                S._LastKnownCommitSHA = remoteSHA
+            elseif S._LastKnownCommitSHA ~= remoteSHA then
+                -- New commit detected since last check
+                commitSHAChanged = true
+                S._LastKnownCommitSHA = remoteSHA
             end
         end
     end
 
-    local isUpdateFound = isNewerVersion or isCommitUpdate
-    local displayVer = isNewerVersion and remoteVer or (currentVer .. (commitUpdateReason and (" (" .. commitUpdateReason .. ")") or " (New Commits)"))
-
-    if isUpdateFound then
+    if isNewer then
         S.UpdateAvailable = true
-        S.RemoteVersion = displayVer
+        S.RemoteVersion = remoteVer
         if S.UpdateStatusDisplay and S.UpdateStatusDisplay.Set then
             pcall(function()
                 S.UpdateStatusDisplay:Set({
-                    Title = isNewerVersion and ("Update Available: v" .. remoteVer) or ("Repository Update Available: " .. displayVer),
-                    Content = isNewerVersion
-                        and ("A new release has been detected in the repository.\nClick 'Restart Script & Reload Interface' below to apply changes.")
-                        or ("New module commitments/additions were detected in repository (" .. (commitUpdateReason or "revision update") .. ").\nClick 'Restart Script & Reload Interface' below to apply changes.")
+                    Title = "Update Available: v" .. remoteVer,
+                    Content = "A new update has been detected in the repository.\nClick 'Restart Script & Reload Interface' below to apply changes."
                 })
             end)
         end
-        if manual or (lastNotifiedUpdateVer ~= displayVer) then
-            lastNotifiedUpdateVer = displayVer
+        if manual or (lastNotifiedUpdateVer ~= remoteVer) then
+            lastNotifiedUpdateVer = remoteVer
             if S.Notify then
                 S.Notify({
                     Title    = "TASFF Update Checker",
-                    Content  = isNewerVersion
-                        and ("Update available (v" .. remoteVer .. "), restart for it to take changes.")
-                        or ("Repository update available (" .. (commitUpdateReason or "new commits") .. "), restart for it to take changes."),
+                    Content  = "Update available (v" .. remoteVer .. "), restart for it to take changes.",
                     Duration = 8,
                     Image    = "arrow-up-circle"
                 })
             end
         end
-        return true, displayVer
+        return true, remoteVer
+    elseif commitSHAChanged then
+        -- New commit pushed but version string unchanged (content / feature additions)
+        S.UpdateAvailable = true
+        if S.UpdateStatusDisplay and S.UpdateStatusDisplay.Set then
+            pcall(function()
+                S.UpdateStatusDisplay:Set({
+                    Title   = "Module Update Detected",
+                    Content = "New changes committed to the repository (same version).\nRestart to apply updated modules."
+                })
+            end)
+        end
+        if S.Notify then
+            S.Notify({
+                Title    = "TASFF Update Checker",
+                Content  = "Module update detected — new commit pushed. Restart for changes to take effect.",
+                Duration = 8,
+                Image    = "arrow-up-circle"
+            })
+        end
+        return true, remoteVer or currentVer
     else
         S.UpdateAvailable = false
         if S.UpdateStatusDisplay and S.UpdateStatusDisplay.Set then
             pcall(function()
                 S.UpdateStatusDisplay:Set({
-                    Title = "Update Status — Up to Date",
+                    Title   = "Update Status — Up to Date",
                     Content = "Running TASFF v" .. currentVer .. ".\nRepository is fully in sync."
                 })
             end)

@@ -480,10 +480,11 @@ local function UpdateEnvironmentalESP()
                 local adorn = GetEnvAdornment(usedCount)
                 local box   = GetEnvBox(usedCount)
 
-                adorn.Color3       = baseColor
-                adorn.Transparency = trans
-                box.Color3         = baseColor
-                box.LineThickness  = 0.04
+                adorn.Color3 = baseColor
+                box.Color3   = baseColor
+
+                local targetPartPos
+                local sliceSize, sliceCenter
 
                 if isLarge then
                     -- True 2D surface slice on large parts (floors, walls, ceilings)
@@ -508,7 +509,6 @@ local function UpdateEnvironmentalESP()
                     end
 
                     local sliceExtent = radius * 1.5
-                    local sliceSize, sliceCenter
 
                     if normalAxis == "Y" then
                         local sx = math.min(sliceExtent, sz.X)
@@ -542,6 +542,30 @@ local function UpdateEnvironmentalESP()
                         sliceCenter = Vector3.new(cx, cy, cz)
                     end
 
+                    targetPartPos = (part.CFrame * CFrame.new(sliceCenter)).Position
+                else
+                    targetPartPos = part.Position
+                end
+
+                -- Compute distance-based fade if enabled
+                local partTrans = trans
+                local lineThick = 0.04
+                local isVisible = true
+
+                if S.EnvironmentalESPDistanceFade then
+                    local dist = (targetPartPos - pPos).Magnitude
+                    local distFrac = math.clamp(dist / math.max(radius, 1), 0, 1)
+                    partTrans = trans + (1 - trans) * distFrac
+                    lineThick = math.clamp(0.04 * (1 - distFrac), 0, 0.04)
+                    if distFrac >= 0.98 or partTrans >= 0.999 then
+                        isVisible = false
+                    end
+                end
+
+                adorn.Transparency = math.clamp(partTrans, 0, 1)
+                box.LineThickness  = lineThick
+
+                if isLarge then
                     local proxy = GetEnvProxy(usedCount)
                     if proxy then
                         proxy.CFrame = part.CFrame * CFrame.new(sliceCenter)
@@ -550,20 +574,20 @@ local function UpdateEnvironmentalESP()
                         adorn.Adornee = proxy
                         adorn.CFrame  = CFrame.new(0, 0, 0)
                         adorn.Size    = sliceSize
-                        adorn.Visible = true
+                        adorn.Visible = isVisible
 
                         box.Adornee = proxy
-                        box.Visible = true
+                        box.Visible = isVisible
                     end
                 else
                     -- Small parts: fully highlight the part with chams fill and edge outlines
                     adorn.Adornee = part
                     adorn.CFrame  = CFrame.new(0, 0, 0)
                     adorn.Size    = sz + Vector3.new(0.04, 0.04, 0.04)
-                    adorn.Visible = true
+                    adorn.Visible = isVisible
 
                     box.Adornee = part
-                    box.Visible = true
+                    box.Visible = isVisible
                 end
             end
         end

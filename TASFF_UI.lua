@@ -75,7 +75,7 @@ local ColorFields = {
     "HighlightColor", "FOVColor", "CrosshairColor", "BoxColor", "SkeletonColor",
     "SnaplineColor", "OOFArrowColor", "PriorityHighlightColor", "ThreatHighlightColor",
     "NemesisHighlightColor", "BlacklistedTagColor", "KillFlashColor", "VisibleColor",
-    "HiddenColor", "ChamsColor",
+    "HiddenColor", "ChamsColor", "EnvironmentalESPColor",
 }
 local ColorFlagMap = {
     HighlightColor = "HighlightColorPicker", FOVColor = "FOVCircleColorPicker",
@@ -85,6 +85,7 @@ local ColorFlagMap = {
     ThreatHighlightColor = "ThreatHighlightColorPicker", NemesisHighlightColor = "NemesisHighlightColorPicker",
     BlacklistedTagColor = "BlacklistedTagColorPicker", KillFlashColor = "KillFlashColorPicker",
     VisibleColor = "VisibleColorPicker", HiddenColor = "HiddenColorPicker", ChamsColor = "ChamsColorPicker",
+    EnvironmentalESPColor = "EnvironmentalESPColorPicker",
 }
 
 local GlobalThemeOptions = {
@@ -145,6 +146,7 @@ local GlobalThemeColorFields = {
     {title="Kill Flash", field="KillFlashColor", role="Combat"},
     {title="Visible Target", field="VisibleColor", role="Visible"},
     {title="Hidden Target", field="HiddenColor", role="Hidden"},
+    {title="Environmental ESP", field="EnvironmentalESPColor", role="Drawing"},
     {title="UI Background", themeField="Background", role="UIBackground"},
     {title="UI Topbar", themeField="Topbar", role="UITopbar"},
     {title="UI Selected Accent", themeField="TabBackgroundSelected", role="UIAccent"},
@@ -737,6 +739,12 @@ end})
 VisualTab:CreateSlider({Name = "Environmental ESP Baseline Transparency", Range = {0, 1}, Increment = 0.01, CurrentValue = S.EnvironmentalESPTransparency or 0.95, Flag = "EnvironmentalESPTransparency", Callback = function(v)
     S.EnvironmentalESPTransparency = v
 end})
+VisualTab:CreateToggle({Name = "Environmental ESP — Auto-Scale with Performance Mode", CurrentValue = S.EnvironmentalESPAutoScaling, Flag = "EnvironmentalESPAutoScaling", Callback = function(v)
+    S.EnvironmentalESPAutoScaling = v
+end})
+VisualTab:CreateSlider({Name = "Environmental ESP Max Parts Capacity", Range = {20, 500}, Increment = 10, CurrentValue = S.EnvironmentalESPMaxParts or 160, Flag = "EnvironmentalESPMaxParts", Callback = function(v)
+    S.EnvironmentalESPMaxParts = v
+end})
 
 VisualTab:CreateSection("Target Intelligence Tags")
 VisualTab:CreateToggle({Name = "Render Player Tags", CurrentValue = S.UseInfoTag, Flag = "UseInfoTag", Callback = function(v) S.UseInfoTag = v end})
@@ -1217,10 +1225,28 @@ local SpectateDropdown = IntelTab:CreateDropdown({
     Flag            = "SpectateTargetDropdown",
     Callback        = function(v)
         local val = type(v) == "table" and v[1] or v
-        S.SpectateTarget = val
+        local realName = (S.ResolvePlayerName and S.ResolvePlayerName(val)) or val
+        S.SpectateTarget = realName
     end
 })
 local SpectateToggle = IntelTab:CreateToggle({Name = "Spectate Player", CurrentValue = S.SpectatePlayerEnabled, Flag = "SpectatePlayer", Callback = function(v)
+    if v then
+        local targetName = (S.ResolvePlayerName and S.ResolvePlayerName(S.SpectateTarget)) or S.SpectateTarget
+        if not targetName or targetName == "" then
+            S.SpectatePlayerEnabled = false
+            pcall(function() SpectateToggle:Set(false) end)
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Spectator",
+                    Content  = "Please select a target player from the dropdown first.",
+                    Duration = 3,
+                    Image    = "alert-circle"
+                })
+            end
+            return
+        end
+        S.SpectateTarget = targetName
+    end
     S.SpectatePlayerEnabled = v
 end})
 S.SyncSpectatorUI = function(state) pcall(function() SpectateToggle:Set(state) end) end
@@ -1504,6 +1530,7 @@ PresetsTab:CreateButton({
                 SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius, OOFArrowsPriorityOnly = S.OOFArrowsPriorityOnly,
                 EnvironmentalESPEnabled = S.EnvironmentalESPEnabled, EnvironmentalESPPriorityOnly = S.EnvironmentalESPPriorityOnly, EnvironmentalESPRange = S.EnvironmentalESPRange,
                 EnvironmentalESPDistanceFade = S.EnvironmentalESPDistanceFade, EnvironmentalESPTransparency = S.EnvironmentalESPTransparency,
+                EnvironmentalESPAutoScaling = S.EnvironmentalESPAutoScaling, EnvironmentalESPMaxParts = S.EnvironmentalESPMaxParts,
                 UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
                 ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
@@ -1599,7 +1626,8 @@ local STO_FLAG = {
     CoverAnticipationEnabled = "CoverAnticipationEnabled", CoverAnticipationDuration = "CoverAnticipationDuration",
     EnvironmentalESPEnabled = "EnvironmentalESPEnabled", EnvironmentalESPPriorityOnly = "EnvironmentalESPPriorityOnly",
     EnvironmentalESPDistanceFade = "EnvironmentalESPDistanceFade", EnvironmentalESPTransparency = "EnvironmentalESPTransparency",
-    EnvironmentalESPRange = "EnvironmentalESPRange", FoliageConcealmentCheck = "FoliageConcealmentCheck",
+    EnvironmentalESPRange = "EnvironmentalESPRange", EnvironmentalESPAutoScaling = "EnvironmentalESPAutoScaling",
+    EnvironmentalESPMaxParts = "EnvironmentalESPMaxParts", FoliageConcealmentCheck = "FoliageConcealmentCheck",
     OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled",
     ExpertInstinctsIntensity = "ExpertInstinctsIntensity", InstinctsInventoryCheck = "InstinctsInventoryCheck",
     InstinctsMode = "InstinctsMode",
@@ -1707,6 +1735,7 @@ PresetsTab:CreateButton({
                 SnaplineOrigin = S.SnaplineOrigin, OOFArrowsEnabled = S.OOFArrowsEnabled, OOFArrowRadius = S.OOFArrowRadius, OOFArrowsPriorityOnly = S.OOFArrowsPriorityOnly,
                 EnvironmentalESPEnabled = S.EnvironmentalESPEnabled, EnvironmentalESPPriorityOnly = S.EnvironmentalESPPriorityOnly, EnvironmentalESPRange = S.EnvironmentalESPRange,
                 EnvironmentalESPDistanceFade = S.EnvironmentalESPDistanceFade, EnvironmentalESPTransparency = S.EnvironmentalESPTransparency,
+                EnvironmentalESPAutoScaling = S.EnvironmentalESPAutoScaling, EnvironmentalESPMaxParts = S.EnvironmentalESPMaxParts,
                 UseInfoTag = S.UseInfoTag, UseNPCInfoTag = S.UseNPCInfoTag, ShowDisplayName = S.ShowDisplayName, ShowToolCheck = S.ShowToolCheck,
                 ShowFOV = S.ShowFOV, InvisibleFOV = S.InvisibleFOV, FOVSize = S.FOVSize, AimReferenceMode = S.AimReferenceMode,
                 EnableCrosshair = S.EnableCrosshair, CrosshairStyle = S.CrosshairStyle, CrosshairSize = S.CrosshairSize,
@@ -2058,7 +2087,7 @@ CustomizationTab:CreateButton({
             "BoxPresetToggle", "SkelPresetToggle", "SnapPresetToggle",
             "PrioPresetToggle", "ThreatPresetToggle", "NemesisPresetToggle",
             "BlacklistPresetToggle", "ChamsPresetToggle", "KillFlashPresetToggle",
-            "VisiblePresetToggle", "HiddenPresetToggle",
+            "VisiblePresetToggle", "HiddenPresetToggle", "EnvESPPresetToggle",
         }
         for _, flag in ipairs(PresetOverrideFlags) do
             local ctrl = Rayfield.Flags and Rayfield.Flags[flag]
@@ -2263,6 +2292,18 @@ CustomizationTab:CreateDropdown({Name = "Preset — Hidden Target Color", Option
     local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("HiddenColor", rgb) end
 end})
 CustomizationTab:CreateColorPicker({Name = "Fine — Hidden Target Color", Color = S.HiddenColor or Color3.fromRGB(255,0,0), Flag = "HiddenColorPicker", Callback = function(Value) SetColor("HiddenColor", Value) end})
+
+-- ─── Section: Environmental ESP ───────────────────────────────────────────
+CustomizationTab:CreateSection("Environmental ESP — Props & Terrain")
+CustomizationTab:CreateToggle({Name = "Use Preset Color — Environmental ESP", CurrentValue = false, Flag = "EnvESPPresetToggle", Callback = function(v)
+    applyPreset(v, "EnvESPColorDd", nil, "EnvironmentalESPColor")
+end})
+CustomizationTab:CreateDropdown({Name = "Preset — Environmental ESP Color", Options = ColorDropdownOptions, CurrentOption = {"Cyan"}, Flag = "EnvESPColorDd", Callback = function(v)
+    local f = Rayfield.Flags and Rayfield.Flags["EnvESPPresetToggle"]
+    if not (f and f.CurrentValue) then return end
+    local rgb = ColorPresetMap[type(v)=="table" and v[1] or v]; if rgb then SetColor("EnvironmentalESPColor", rgb) end
+end})
+CustomizationTab:CreateColorPicker({Name = "Fine — Environmental ESP Color", Color = S.EnvironmentalESPColor or Color3.fromRGB(0,200,255), Flag = "EnvironmentalESPColorPicker", Callback = function(Value) SetColor("EnvironmentalESPColor", Value) end})
 
 -- ─── Section: UI Theme Editor ─────────────────────────────────────────────
 CustomizationTab:CreateSection("UI Theme Editor (Next Load)")
@@ -2608,6 +2649,8 @@ SystemTab:CreateButton({
         S.CoverAnticipationEnabled = true; S.CoverAnticipationDuration = 0.8
         S.EnvironmentalESPEnabled = false; S.EnvironmentalESPPriorityOnly = false; S.EnvironmentalESPRange = 15
         S.EnvironmentalESPDistanceFade = false; S.EnvironmentalESPTransparency = 0.95
+        S.EnvironmentalESPAutoScaling = true; S.EnvironmentalESPMaxParts = 160
+        S.EnvironmentalESPColor = Color3.fromRGB(0, 200, 255)
         S.TargetPlayers = true;         S.TargetNPCs = false;           S.TeamCheck = false
         S.AutoEnableOnEquip = false;    S.IgnoreDead = true
         S.CurrentTarget = nil
@@ -2902,7 +2945,7 @@ local booleanSettings = {
     "AutoUpdateCheckerEnabled", "InstinctsInventoryCheck",
     "CoverAnticipationEnabled", "FoliageConcealmentCheck",
     "EnvironmentalESPEnabled", "EnvironmentalESPPriorityOnly",
-    "EnvironmentalESPDistanceFade",
+    "EnvironmentalESPDistanceFade", "EnvironmentalESPAutoScaling",
     "TriggerbotPriorityOnly",
 }
 for _, key in ipairs(booleanSettings) do
@@ -2917,7 +2960,7 @@ local numericRanges = {
     MaxAutoPrediction = {0.16, 2}, ExpertInstinctsIntensity = {0, 100},
     ContinuousKillsPermanent = {2, 15}, KillsBeforeThreat = {1, 10},
     CoverAnticipationDuration = {0.1, 3}, EnvironmentalESPRange = {5, 50},
-    EnvironmentalESPTransparency = {0, 1},
+    EnvironmentalESPTransparency = {0, 1}, EnvironmentalESPMaxParts = {20, 500},
     Smoothness = {0.1, 100}, SmoothnessX = {0.1, 100}, SmoothnessY = {0.1, 100},
     BlatantSnapSpeed = {1, 100}, TransparencyThreshold = {0, 1},
     GracePeriodMs = {0, 2000}, AimbotRenderDistance = {1, 10000},

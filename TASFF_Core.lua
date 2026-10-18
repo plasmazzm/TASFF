@@ -321,44 +321,60 @@ local function PrepareDrawing(obj)
 end
 S.PrepareDrawing = PrepareDrawing
 
+local EnvFolder = nil
+local function GetEnvFolder()
+    local cam = Camera or workspace.CurrentCamera
+    if not EnvFolder or EnvFolder.Parent ~= cam then
+        EnvFolder = cam and cam:FindFirstChild("TASFF_EnvFolder")
+        if not EnvFolder and cam then
+            local f = Instance.new("Folder")
+            f.Name = "TASFF_EnvFolder"
+            pcall(function() f.Parent = cam end)
+            EnvFolder = f
+        end
+    end
+    return EnvFolder or cam or workspace
+end
+
 local EnvOutlinePool = {}
 local function GetEnvOutline(index)
-    if not EnvOutlinePool[index] then
-        local box = Instance.new("SelectionBox")
+    local box = EnvOutlinePool[index]
+    if not box or not box.Parent then
+        box = Instance.new("SelectionBox")
         box.Name = "TASFF_EnvOutline_" .. index
         box.AlwaysOnTop = false
-        box.LineThickness = 0.04
-        box.SurfaceTransparency = 0.96
-        local parentObj = nil
-        pcall(function() parentObj = CoreGui end)
-        if not parentObj then parentObj = Camera end
-        box.Parent = parentObj
+        box.LineThickness = 0.05
+        box.Transparency = 1
+        box.SurfaceTransparency = 1
+        local folder = GetEnvFolder()
+        pcall(function() box.Parent = folder end)
         EnvOutlinePool[index] = box
     end
-    return EnvOutlinePool[index]
+    return box
 end
 
 local EnvSlicePool = {}
 local function GetEnvSlice(index)
-    if not EnvSlicePool[index] then
-        local adorn = Instance.new("BoxHandleAdornment")
+    local adorn = EnvSlicePool[index]
+    if not adorn or not adorn.Parent then
+        adorn = Instance.new("BoxHandleAdornment")
         adorn.Name = "TASFF_EnvSlice_" .. index
         adorn.AlwaysOnTop = false
         adorn.ZIndex = 1
-        local parentObj = nil
-        pcall(function() parentObj = CoreGui end)
-        if not parentObj then parentObj = Camera end
-        adorn.Parent = parentObj
+        adorn.Visible = false
+        local folder = GetEnvFolder()
+        pcall(function() adorn.Parent = folder end)
         EnvSlicePool[index] = adorn
     end
-    return EnvSlicePool[index]
+    return adorn
 end
 
 local function ClearEnvironmentalESP()
     for _, box in ipairs(EnvOutlinePool) do
         if box then
-            box.Visible = false
             box.Adornee = nil
+            box.Transparency = 1
+            box.SurfaceTransparency = 1
         end
     end
     for _, slice in ipairs(EnvSlicePool) do
@@ -456,7 +472,9 @@ local function UpdateEnvironmentalESP()
         if ok and parts then
             for _, part in ipairs(parts) do
                 if (usedOutlineCount >= maxOutlines) and (usedSliceCount >= maxSlices) then break end
-                if part:IsA("BasePart") and not processedParts[part] then
+                if part:IsA("BasePart") and not part:IsA("Terrain") and not processedParts[part] then
+                    if not part:IsDescendantOf(workspace) then continue end
+                    if part.Transparency >= 0.98 and not part.CanCollide then continue end
                     processedParts[part] = true
                     local pSize = part.Size
                     local isLarge = (pSize.X > 18 or pSize.Y > 18 or pSize.Z > 18) or (pSize.X * pSize.Z > 200)
@@ -521,9 +539,10 @@ local function UpdateEnvironmentalESP()
                             local outline = GetEnvOutline(usedOutlineCount)
                             outline.Color3 = baseColor
                             outline.SurfaceColor3 = baseColor
-                            outline.SurfaceTransparency = 0.96
+                            outline.LineThickness = 0.05
+                            outline.Transparency = 0
+                            outline.SurfaceTransparency = 0.92
                             outline.Adornee = part
-                            outline.Visible = true
                         end
                     end
                 end
@@ -534,9 +553,10 @@ local function UpdateEnvironmentalESP()
 
     for i = usedOutlineCount + 1, #EnvOutlinePool do
         local box = EnvOutlinePool[i]
-        if box and box.Visible then
-            box.Visible = false
+        if box and box.Adornee then
             box.Adornee = nil
+            box.Transparency = 1
+            box.SurfaceTransparency = 1
         end
     end
     for i = usedSliceCount + 1, #EnvSlicePool do
@@ -757,6 +777,17 @@ local function UnloadScript(isRestarting)
         end
         pcall(function() table.clear(getgenv().TASFF.Drawings) end)
     end
+    -- Clean up Environmental ESP adornments and container folder
+    pcall(ClearEnvironmentalESP)
+    for _, box in ipairs(EnvOutlinePool) do
+        if box then pcall(function() box:Destroy() end) end
+    end
+    table.clear(EnvOutlinePool)
+    for _, slice in ipairs(EnvSlicePool) do
+        if slice then pcall(function() slice:Destroy() end) end
+    end
+    table.clear(EnvSlicePool)
+    if EnvFolder then pcall(function() EnvFolder:Destroy() end); EnvFolder = nil end
     -- Remove TASFF_Overlay from wherever it was parented (CoreGui or PlayerGui fallback)
     local ok, cg = pcall(function() return game:GetService("CoreGui") end)
     if ok and cg then
@@ -2666,11 +2697,14 @@ local function HookNeutralization(p)
                         local kData = S.IntelPlayers and S.IntelPlayers[killerName]
 
                         if streak >= permReq then
+                            local wasAlreadyPerm = (kData and kData.permanent == true) or (S.IntelPlayers and S.IntelPlayers[killerName] and S.IntelPlayers[killerName].permanent == true)
                             if S.AddToIntel then S.AddToIntel(killerName, "Threat", 30) end
                             if S.IntelPlayers and S.IntelPlayers[killerName] then
                                 S.IntelPlayers[killerName].permanent = true
                             end
-                            Notify({Title="TASFF Threat", Content="💀 " .. killerName .. " is now PERMANENT (Streak: " .. streak .. ") until neutralized!", Duration=3, Image="alert-triangle"})
+                            if not wasAlreadyPerm then
+                                Notify({Title="TASFF Threat", Content="💀 " .. killerName .. " is now PERMANENT (Streak: " .. streak .. ") until neutralized!", Duration=3, Image="alert-triangle"})
+                            end
                         elseif streak >= threatReq then
                             local isTracked = (kData and (kData.nemesis or kData.source == "Threat" or kData.source == "Registry" or kData.source == "Marked")) or (table.find(S.PriorityPlayers or {}, killerName) ~= nil)
                             if not isTracked then
@@ -3248,14 +3282,23 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end
                 local arrow=OOFArrowCache[t.Instance]
                 if arrow then
-                    local center=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
-                    local relX,relY=pos.X-center.X,pos.Y-center.Y
-                    if pos.Z<0 then relX=-relX;relY=-relY end
-                    local angle=math.atan2(relY,relX); local r=OOFR
-                    arrow.PointA=center+Vector2.new(math.cos(angle),math.sin(angle))*r
-                    arrow.PointB=center+Vector2.new(math.cos(angle-0.2),math.sin(angle-0.2))*(r-20)
-                    arrow.PointC=center+Vector2.new(math.cos(angle+0.2),math.sin(angle+0.2))*(r-20)
-                    arrow.Color=statusESPColor or S.OOFArrowColor or SLC or bc; arrow.Visible=true
+                    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                    local localPos = Camera.CFrame:PointToObjectSpace(rootPart.Position)
+                    local dirX = localPos.X
+                    local dirY = -localPos.Y
+                    if localPos.Z > 0 then
+                        dirY = dirY + localPos.Z
+                    end
+                    if math.abs(dirX) < 1e-4 and math.abs(dirY) < 1e-4 then
+                        dirY = 1
+                    end
+                    local angle = math.atan2(dirY, dirX)
+                    local r = OOFR
+                    arrow.PointA = center + Vector2.new(math.cos(angle), math.sin(angle)) * r
+                    arrow.PointB = center + Vector2.new(math.cos(angle - 0.2), math.sin(angle - 0.2)) * (r - 20)
+                    arrow.PointC = center + Vector2.new(math.cos(angle + 0.2), math.sin(angle + 0.2)) * (r - 20)
+                    arrow.Color = statusESPColor or S.OOFArrowColor or SLC or bc
+                    arrow.Visible = true
                 end
             else if OOFArrowCache[t.Instance] then OOFArrowCache[t.Instance].Visible=false end end
             if onScreen then

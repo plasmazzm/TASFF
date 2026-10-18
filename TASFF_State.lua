@@ -187,8 +187,9 @@ _G.TASFF_State = {
     EnvironmentalESPEnabled     = false,         -- highlights surrounding props and environment near players
     EnvironmentalESPPriorityOnly= false,         -- restricts environmental ESP to priority/intel targets only
     EnvironmentalESPRange       = 15,            -- radius around players to highlight environment
+    EnvironmentalESPDistanceFade= false,         -- dynamic fade: parts fade to invisible as distance reaches max range
     EnvironmentalESPColor       = Color3.fromRGB(0, 200, 255),
-    EnvironmentalESPTransparency= 0.65,
+    EnvironmentalESPTransparency= 0.95,          -- baseline transparency (0.95 = 95% invisible chams fill)
     EnvironmentalESPAdornments  = {},            -- runtime pool of adornment objects
     HighlightColor              = Color3.fromRGB(240, 240, 240),
     FOVColor                    = Color3.fromRGB(240, 240, 240),

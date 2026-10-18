@@ -2668,19 +2668,20 @@ UpdateLogTab:CreateSection("Recent Releases & Updates")
 
 UpdateLogTab:CreateParagraph({
     Title   = "Version 2.2.6 (Environmental ESP Rewrite, Stability & Instincts Polish)",
-    Content = "• Environmental ESP Rewrite: replaced 3D BoxHandleAdornment system with 2D screen-space Drawing outlines; small parts get a precise 2D box projection, large parts show a 2D slice centred on the player position.\n" ..
+    Content = "• Environmental ESP Rewrite (SelectionBox): replaced 2D screen-space Drawing boxes with Roblox SelectionBox instances — true 3D wireframe edge/corner outlines fixed to world geometry, exactly like player ESP Highlight. Multi-part models (roof tiles, props, etc.) are now deduplicated to a single SelectionBox per top-level Model ancestor, eliminating the clustered nested-box artifact seen in previous builds.\n" ..
+              "• Environmental ESP Large-Part Skip: parts whose largest dimension exceeds 40 studs are skipped entirely to prevent massive floor/wall/ceiling slabs from receiving a SelectionBox.\n" ..
+              "• OOF Arrow Angle Smoothing: added per-arrow exponential moving-average filter (shortest-arc lerp at ~12×deltaTime) stored in S._OOFAngleSmooth. Smooths out HumanoidRootPart animation bob and camera wobble without affecting directional accuracy. Angle cache is cleared when an arrow hides so the next appearance starts from scratch.\n" ..
               "• Environmental ESP Priority Fix: priority-only toggle now queries all players directly instead of LastVisualList, correctly showing or hiding overlays for all players when priority filter is disabled.\n" ..
-              "• OOF Arrow Twitching Fix: replaced unstable WorldToViewportPoint Z-sign flip with a camera-local PointToObjectSpace direction vector for stable angle calculation — arrows no longer jitter.\n" ..
-              "• Expert Instincts Last-Known-Position Steering: camera now continues steering towards the attacker's last known world position when they duck behind cover mid-reaction, instead of stopping mid-turn.\n" ..
-              "• Expert Instincts Live Position Update: last-known-position is refreshed every frame while the attacker is visible, ensuring the held angle is always current before they take cover.\n" ..
-              "• Permanent Priority Notification Dedup: 'Killer is now PERMANENT' notification now fires only once per unique killer upon first reaching the continuous kill threshold; resets on neutralization.\n" ..
-              "• Home Tab Paragraph Count: replaced Status Displays counter with accurate Paragraph count (34) in the home tab controls summary.\n" ..
-              "• Version bump to v2.2.6.\n" ..
               "• OOF Arrow Direction Fix (Round 2): replaced PointToObjectSpace atan2 with RightVector/UpVector dot products — arrows now point in the correct screen direction with no z-boundary discontinuity.\n" ..
               "• Environmental ESP Visibility Fix: corrected inverted overlay transparency mapping (Transparency=1 is fully opaque in the UI stroke system, not 0).\n" ..
+              "• Expert Instincts Last-Known-Position Steering: camera now continues steering towards the attacker's last known world position when they duck behind cover mid-reaction, instead of stopping mid-turn.\n" ..
+              "• Expert Instincts Live Position Update: last-known-position is refreshed every frame while the attacker is visible, ensuring the held angle is always current before they take cover.\n" ..
               "• Expert Instincts Blatant/Legit Mode Dropdown: mirrors the aimbot's mode system — Blatant does a direct per-intensity CFrame lerp (100=instant, 0=very smooth), Legit uses the humanized smoothstep pipeline.\n" ..
               "• Expert Instincts Lock Speed Range: extended slider range to 0–100 (was 5–100) for full smooth range.\n" ..
-              "• Universal Damage Tracking Hardening: raised heuristic score threshold from 60 to 80, tightened dotAim thresholds, shrunk unarmed range to 7 studs, added minimum 5-HP drop filter to suppress chip/environmental false flags."
+              "• Permanent Priority Notification Dedup: 'Killer is now PERMANENT' notification now fires only once per unique killer upon first reaching the continuous kill threshold; resets on neutralization.\n" ..
+              "• Home Tab Paragraph Count: replaced Status Displays counter with accurate Paragraph count (34) in the home tab controls summary.\n" ..
+              "• Universal Damage Tracking Hardening: raised heuristic score threshold from 60 to 80, tightened dotAim thresholds, shrunk unarmed range to 7 studs, added minimum 5-HP drop filter to suppress chip/environmental false flags.\n" ..
+              "• Version bump to v2.2.6."
 })
 
 UpdateLogTab:CreateParagraph({

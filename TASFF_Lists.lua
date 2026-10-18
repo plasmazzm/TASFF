@@ -195,12 +195,13 @@ local FeatureList = {
     "Humanized Cover Anticipation",
     "Environmental Awareness ESP",
     "Triggerbot Priority Target Filter",
+    "Environmental ESP Distance Fade",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 97   -- +1 (TriggerbotPriorityOnly)
-S.SliderCount         = 37   -- +2 (CoverAnticipationDuration, EnvironmentalESPRange)
+S.ToggleCount         = 98   -- +1 (EnvironmentalESPDistanceFade)
+S.SliderCount         = 38   -- +1 (EnvironmentalESPTransparency)
 S.DropdownCount       = 42   -- +1 (InstinctsMode)
 S.ButtonCount         = 29   -- +5 (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)
 S.KeybindCount        = 5

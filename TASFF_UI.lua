@@ -323,7 +323,7 @@ HomeTab:CreateParagraph({
     Title   = "TASFF v2.2.6 — The Aimbot Script Final Form",
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 92) .. " Toggles | " .. tostring(S.SliderCount or 34) .. " Sliders | " .. tostring(S.DropdownCount or 41) .. " Dropdowns | " .. tostring(S.ButtonCount or 29) .. " Buttons | " .. tostring(S.StatusDisplayCount or 7) .. " Status Displays\n"
+           .. "Controls: " .. tostring(S.ToggleCount or 92) .. " Toggles | " .. tostring(S.SliderCount or 34) .. " Sliders | " .. tostring(S.DropdownCount or 41) .. " Dropdowns | " .. tostring(S.ButtonCount or 29) .. " Buttons | " .. tostring(S.ParagraphCount or 34) .. " Paragraphs\n"
            .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
 })
 
@@ -2465,7 +2465,7 @@ end)
 task.defer(RebuildCloakStatus)
 
 -- // ══════════════════════════════════════════════════════════════ // --
--- //                       SYSTEM TAB (v2.2.5)                     // --
+-- //                       SYSTEM TAB (v2.2.6)                     // --
 -- // ══════════════════════════════════════════════════════════════ // --
 
 local SystemTab = Window:CreateTab("System", "cog")
@@ -2598,7 +2598,7 @@ SystemTab:CreateSection("Repository & Updates")
 
 local UpdateStatusDisplay = SystemTab:CreateParagraph({
     Title   = "Repository Status",
-    Content = "Running TASFF v" .. (S.CurrentVersion or "2.2.6") .. ".\nClick 'Check for Updates' to verify repository sync."
+    Content = "Running TASFF v" .. (S.CurrentVersion or "2.2.5") .. ".\nClick 'Check for Updates' to verify repository sync."
 })
 S.UpdateStatusDisplay = UpdateStatusDisplay
 
@@ -2652,12 +2652,15 @@ local UpdateLogTab = Window:CreateTab("Update Log", "history")
 UpdateLogTab:CreateSection("Recent Releases & Updates")
 
 UpdateLogTab:CreateParagraph({
-    Title   = "Version 2.2.6 (Environmental ESP Overhaul & Hybrid Repository Synchronization)",
-    Content = "• 2D Surface Environmental ESP: Completely overhauled large-part highlighting to project flat 2D bounding square slices (0.04-stud thickness) directly on contact surfaces (floors, walls, ceilings), completely eliminating floating 3D cubes.\n" ..
-              "• Wireframe Prop Outlines (Anti-Obstruction): Small props (chairs, tables, obstacles) now render with hollow SelectionBox outlines (96% transparent interior), highlighting objects without obstructing player models or ESP.\n" ..
-              "• Global Environmental ESP Target Fix: Correctly enumerates all active players across the server when 'Priority Only' is disabled, ensuring full room awareness rather than single-target confinement.\n" ..
-              "• Hybrid Update & Commit Checker (Option A + B): Combined semantic version comparison with live GitHub commit SHA querying and module content/control signature verification, instantly catching additions and hotfixes without requiring manual version bumps.\n" ..
-              "• Triggerbot Priority Target Filter: Dedicated toggle ensuring Triggerbot (both Mouse and Keybind simulation) exclusively fires when locked onto prioritized, threat, or nemesis targets."
+    Title   = "Version 2.2.6 (Environmental ESP Rewrite, Stability & Instincts Polish)",
+    Content = "• Environmental ESP Rewrite: replaced 3D BoxHandleAdornment system with 2D screen-space Drawing outlines; small parts get a precise 2D box projection, large parts show a 2D slice centred on the player position.\n" ..
+              "• Environmental ESP Priority Fix: priority-only toggle now queries all players directly instead of LastVisualList, correctly showing or hiding overlays for all players when priority filter is disabled.\n" ..
+              "• OOF Arrow Twitching Fix: replaced unstable WorldToViewportPoint Z-sign flip with a camera-local PointToObjectSpace direction vector for stable angle calculation — arrows no longer jitter.\n" ..
+              "• Expert Instincts Last-Known-Position Steering: camera now continues steering towards the attacker's last known world position when they duck behind cover mid-reaction, instead of stopping mid-turn.\n" ..
+              "• Expert Instincts Live Position Update: last-known-position is refreshed every frame while the attacker is visible, ensuring the held angle is always current before they take cover.\n" ..
+              "• Permanent Priority Notification Dedup: 'Killer is now PERMANENT' notification now fires only once per unique killer upon first reaching the continuous kill threshold; resets on neutralization.\n" ..
+              "• Home Tab Paragraph Count: replaced Status Displays counter with accurate Paragraph count (34) in the home tab controls summary.\n" ..
+              "• Version bump to v2.2.6."
 })
 
 UpdateLogTab:CreateParagraph({

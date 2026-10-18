@@ -1034,9 +1034,18 @@ end})
 IntelTab:CreateToggle({Name = "Expert Instincts (Instant Counter-Lock)", CurrentValue = S.ExpertInstinctsEnabled, Flag = "ExpertInstinctsEnabled", Callback = function(v)
     S.ExpertInstinctsEnabled = v
 end})
-IntelTab:CreateSlider({Name = "Expert Instincts Lock Speed", Range = {5, 100}, Increment = 5, CurrentValue = S.ExpertInstinctsIntensity or 60, Flag = "ExpertInstinctsIntensity", Callback = function(v)
+IntelTab:CreateSlider({Name = "Expert Instincts Lock Speed", Range = {0, 100}, Increment = 5, CurrentValue = S.ExpertInstinctsIntensity or 60, Flag = "ExpertInstinctsIntensity", Callback = function(v)
     S.ExpertInstinctsIntensity = v
 end})
+IntelTab:CreateDropdown({
+    Name = "Expert Instincts Mode",
+    Options = {"Blatant", "Legit"},
+    CurrentOption = {S.InstinctsMode or "Blatant"},
+    Flag = "InstinctsMode",
+    Callback = function(v)
+        S.InstinctsMode = (type(v) == "table") and v[1] or v
+    end
+})
 IntelTab:CreateToggle({Name = "Expert Instincts Weapon Check (Flee When Unarmed)", CurrentValue = S.InstinctsInventoryCheck, Flag = "InstinctsInventoryCheck", Callback = function(v)
     S.InstinctsInventoryCheck = v
 end})
@@ -1503,6 +1512,7 @@ PresetsTab:CreateButton({
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, ContinuousKillsPermanent = S.ContinuousKillsPermanent, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
+                InstinctsMode = S.InstinctsMode,
                 InstinctsInventoryCheck = S.InstinctsInventoryCheck,
                 AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
@@ -1584,6 +1594,7 @@ local STO_FLAG = {
     EnvironmentalESPRange = "EnvironmentalESPRange", FoliageConcealmentCheck = "FoliageConcealmentCheck",
     OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled",
     ExpertInstinctsIntensity = "ExpertInstinctsIntensity", InstinctsInventoryCheck = "InstinctsInventoryCheck",
+    InstinctsMode = "InstinctsMode",
     AutoUpdateCheckerEnabled = "AutoUpdateChecker"
 }
 
@@ -1702,6 +1713,7 @@ PresetsTab:CreateButton({
                 KillCountThreatEnabled = S.KillCountThreatEnabled, KillFeedEnabled = S.KillFeedEnabled, KillsBeforeThreat = S.KillsBeforeThreat, ContinuousKillsPermanent = S.ContinuousKillsPermanent, KillsBeforeNemesis = S.KillsBeforeNemesis, ThreatNeutralizationEnabled = S.ThreatNeutralizationEnabled, AutoExpireOnDisconnect = S.AutoExpireOnDisconnect,
                 DeepThreatScanEnabled = S.DeepThreatScanEnabled, StatCorrelatorEnabled = S.StatCorrelatorEnabled, IgnoreThreatVictims = S.IgnoreThreatVictims,
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
+                InstinctsMode = S.InstinctsMode,
                 InstinctsInventoryCheck = S.InstinctsInventoryCheck,
                 AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
@@ -1787,6 +1799,9 @@ local function BuildPresetStatusContent(profileName, category)
         check("Threat Detector",        data.ThreatDetectorEnabled)
         check("Universal Damage Track", data.OtherPlayersDamageTracking)
         check("Expert Instincts",       data.ExpertInstinctsEnabled)
+        if data.InstinctsMode then
+            contentLines[#contentLines + 1] = "  Instincts Mode: " .. tostring(data.InstinctsMode)
+        end
         check("Nemesis System",         data.NemesisEnabled)
         check("Click-to-Mark",          data.ClickToMarkEnabled)
         check("Focus Mode ESP",         data.FocusMode)
@@ -2571,7 +2586,7 @@ SystemTab:CreateButton({
         S.MeleeModeEnabled = false;     S.MeleeDetectionRange = 5;      S.MeleeClickInterval = 100
         S.ThreatDetectorEnabled = false; S.NemesisEnabled = true;       S.ThreatTimeout = 10
         S.BlacklistExpiredThreats = false
-        S.OtherPlayersDamageTracking = true; S.ExpertInstinctsEnabled = false; S.ExpertInstinctsIntensity = 60
+        S.OtherPlayersDamageTracking = true; S.ExpertInstinctsEnabled = false; S.ExpertInstinctsIntensity = 60; S.InstinctsMode = "Blatant"
         S.InstinctsInventoryCheck = false; S.InstinctsBlacklist = {}; S.InstinctsPrioritizedTools = {}
         S.AutoUpdateCheckerEnabled = true
         S.KillCountThreatEnabled = false; S.KillFeedEnabled = false; S.KillsBeforeThreat = 3; S.ContinuousKillsPermanent = 5; S.KillsBeforeNemesis = 3
@@ -2660,7 +2675,12 @@ UpdateLogTab:CreateParagraph({
               "• Expert Instincts Live Position Update: last-known-position is refreshed every frame while the attacker is visible, ensuring the held angle is always current before they take cover.\n" ..
               "• Permanent Priority Notification Dedup: 'Killer is now PERMANENT' notification now fires only once per unique killer upon first reaching the continuous kill threshold; resets on neutralization.\n" ..
               "• Home Tab Paragraph Count: replaced Status Displays counter with accurate Paragraph count (34) in the home tab controls summary.\n" ..
-              "• Version bump to v2.2.6."
+              "• Version bump to v2.2.6.\n" ..
+              "• OOF Arrow Direction Fix (Round 2): replaced PointToObjectSpace atan2 with RightVector/UpVector dot products — arrows now point in the correct screen direction with no z-boundary discontinuity.\n" ..
+              "• Environmental ESP Visibility Fix: corrected inverted overlay transparency mapping (Transparency=1 is fully opaque in the UI stroke system, not 0).\n" ..
+              "• Expert Instincts Blatant/Legit Mode Dropdown: mirrors the aimbot's mode system — Blatant does a direct per-intensity CFrame lerp (100=instant, 0=very smooth), Legit uses the humanized smoothstep pipeline.\n" ..
+              "• Expert Instincts Lock Speed Range: extended slider range to 0–100 (was 5–100) for full smooth range.\n" ..
+              "• Universal Damage Tracking Hardening: raised heuristic score threshold from 60 to 80, tightened dotAim thresholds, shrunk unarmed range to 7 studs, added minimum 5-HP drop filter to suppress chip/environmental false flags."
 })
 
 UpdateLogTab:CreateParagraph({
@@ -2880,7 +2900,7 @@ end
 
 local numericRanges = {
     FOVSize = {10, 2000}, SwitchDelayMs = {0, 2000}, PredictionAmount = {0, 5},
-    MaxAutoPrediction = {0.16, 2}, ExpertInstinctsIntensity = {5, 100},
+    MaxAutoPrediction = {0.16, 2}, ExpertInstinctsIntensity = {0, 100},
     ContinuousKillsPermanent = {2, 15}, KillsBeforeThreat = {1, 10},
     CoverAnticipationDuration = {0.1, 3}, EnvironmentalESPRange = {5, 50},
     Smoothness = {0.1, 100}, SmoothnessX = {0.1, 100}, SmoothnessY = {0.1, 100},

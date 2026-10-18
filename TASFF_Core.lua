@@ -321,25 +321,70 @@ local function PrepareDrawing(obj)
 end
 S.PrepareDrawing = PrepareDrawing
 
-local EnvDrawPool = {}
-local function GetEnvDraw(index)
-    if not EnvDrawPool[index] then
-        local sq = NewDrawing("Square")
-        if sq then
-            sq.Filled      = false
-            sq.Thickness   = 2       -- UIStroke thickness
-            sq.Transparency = 1      -- 1 = fully opaque in the overlay alpha system
-            sq.Visible     = false
-        end
-        EnvDrawPool[index] = sq
+-- // Environmental ESP — SelectionBox pool (3D wireframe edges fixed to world geometry) // --
+local EnvESPFolder = nil
+local function GetEnvESPFolder()
+    if EnvESPFolder and EnvESPFolder.Parent then return EnvESPFolder end
+    local ok2, cg2 = pcall(function() return game:GetService("CoreGui") end)
+    local parent2 = (ok2 and cg2) or workspace
+    local ex = parent2:FindFirstChild("TASFF_EnvESP")
+    if ex then pcall(function() ex:Destroy() end) end
+    EnvESPFolder = Instance.new("Folder")
+    EnvESPFolder.Name = "TASFF_EnvESP"
+    EnvESPFolder.Parent = parent2
+    -- Track so UnloadScript/Cleanup destroys the folder (and all child SelectionBoxes)
+    if getgenv().TASFF and getgenv().TASFF.Drawings then
+        table.insert(getgenv().TASFF.Drawings, EnvESPFolder)
     end
-    return EnvDrawPool[index]
+    return EnvESPFolder
+end
+
+local EnvBoxPool   = {}  -- pool of SelectionBox instances
+local EnvProxyPool = {}  -- pool of invisible Part proxies for large-part plane slices
+
+local function GetEnvBox(index)
+    if not EnvBoxPool[index] then
+        local box = Instance.new("SelectionBox")
+        box.LineThickness = 0.04
+        box.SurfaceTransparency = 1   -- no face fill, edges/corners only
+        box.SurfaceColor3 = Color3.new(0, 0, 0)
+        box.Visible = false
+        box.Parent = GetEnvESPFolder()
+        EnvBoxPool[index] = box
+    end
+    return EnvBoxPool[index]
+end
+
+-- Proxy parts are fully transparent, non-collidable, non-queryable Parts used as
+-- SelectionBox adornees for large-surface plane slices (floors, walls, ceilings).
+-- CanQuery=false guarantees they are never returned by GetPartBoundsInRadius.
+local function GetEnvProxy(index)
+    if not EnvProxyPool[index] then
+        local proxy = Instance.new("Part")
+        proxy.Name          = "TASFF_EnvProxy"
+        proxy.Anchored      = true
+        proxy.CanCollide    = false
+        proxy.CanQuery      = false
+        proxy.CanTouch      = false
+        proxy.CastShadow    = false
+        proxy.Transparency  = 1
+        proxy.Size          = Vector3.new(1, 0.15, 1)
+        proxy.Parent        = GetEnvESPFolder()
+        EnvProxyPool[index] = proxy
+    end
+    return EnvProxyPool[index]
 end
 
 local function ClearEnvironmentalESP()
-    for _, sq in ipairs(EnvDrawPool) do
-        if sq then
-            sq.Visible = false
+    for i, box in ipairs(EnvBoxPool) do
+        if box and box.Parent then
+            box.Visible = false
+            box.Adornee = nil
+        end
+        -- Reset proxy size so stale dimensions don't linger
+        local proxy = EnvProxyPool[i]
+        if proxy and proxy.Parent then
+            proxy.Size = Vector3.new(1, 0.15, 1)
         end
     end
 end
@@ -350,7 +395,7 @@ envOverlap.FilterType = Enum.RaycastFilterType.Exclude
 
 local function UpdateEnvironmentalESP()
     if not (S.MasterEnabled and S.EnvironmentalESPEnabled) then
-        if #EnvDrawPool > 0 then ClearEnvironmentalESP() end
+        if #EnvBoxPool > 0 then ClearEnvironmentalESP() end
         return
     end
 
@@ -358,8 +403,8 @@ local function UpdateEnvironmentalESP()
     local targets = {}
     local PP = S.PriorityPlayers or {}
 
-    -- Query all players directly (not just LastVisualList) so priority-only
-    -- toggle correctly shows everyone when it is disabled.
+    -- Query all players directly so priority-only toggle correctly
+    -- shows everyone when it is disabled.
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= Player and p.Character then
             local root = p.Character:FindFirstChild("HumanoidRootPart")
@@ -384,118 +429,100 @@ local function UpdateEnvironmentalESP()
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Character then table.insert(excludeList, p.Character) end
     end
-    for _, npc in ipairs(S.CachedNPCs or {}) do
-        table.insert(excludeList, npc)
-    end
-    for _, item in ipairs(S.CachedWorkspaceIgnores or {}) do
-        table.insert(excludeList, item)
-    end
+    for _, npc in ipairs(S.CachedNPCs or {}) do table.insert(excludeList, npc) end
+    for _, item in ipairs(S.CachedWorkspaceIgnores or {}) do table.insert(excludeList, item) end
     envOverlap.FilterDescendantsInstances = excludeList
 
-    local usedCount    = 0
-    local maxSquares   = 120
-    local processedParts = {}
-    local baseColor    = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
-    local vp           = Camera.ViewportSize
-    local LARGE_THRESH = 20
-
-    -- Helper: project 8 OBB corners of a part (or a slice box) to screen and
-    -- return (minX, minY, maxX, maxY). Returns nil if entirely behind camera.
-    local function ProjectBox(cf, size)
-        local hx, hy, hz = size.X * 0.5, size.Y * 0.5, size.Z * 0.5
-        local corners = {
-            cf * Vector3.new( hx,  hy,  hz),
-            cf * Vector3.new(-hx,  hy,  hz),
-            cf * Vector3.new( hx, -hy,  hz),
-            cf * Vector3.new(-hx, -hy,  hz),
-            cf * Vector3.new( hx,  hy, -hz),
-            cf * Vector3.new(-hx,  hy, -hz),
-            cf * Vector3.new( hx, -hy, -hz),
-            cf * Vector3.new(-hx, -hy, -hz),
-        }
-        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
-        local anyVisible = false
-        for _, worldPt in ipairs(corners) do
-            local sp, onS = Camera:WorldToViewportPoint(worldPt)
-            if sp.Z > 0 then
-                anyVisible = true
-                if sp.X < minX then minX = sp.X end
-                if sp.Y < minY then minY = sp.Y end
-                if sp.X > maxX then maxX = sp.X end
-                if sp.Y > maxY then maxY = sp.Y end
-            end
-        end
-        if not anyVisible then return nil end
-        -- Clamp to viewport so off-screen clips don't cause issues
-        minX = math.max(minX, 0)
-        minY = math.max(minY, 0)
-        maxX = math.min(maxX, vp.X)
-        maxY = math.min(maxY, vp.Y)
-        if maxX <= minX or maxY <= minY then return nil end
-        return minX, minY, maxX, maxY
-    end
+    local usedCount        = 0
+    local maxBoxes         = 80
+    local processedAdornee = {}  -- deduplicates multi-part models (key = adornee)
+    local baseColor        = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
+    -- Threshold above which a part dimension is considered "large"
+    local LARGE_SKIP = 40
+    local THIN       = 0.15  -- thickness of the proxy plane slab
 
     for _, t in ipairs(targets) do
-        if usedCount >= maxSquares then break end
+        if usedCount >= maxBoxes then break end
         local pPos = t.Root.Position
         local ok, parts = pcall(function()
             return workspace:GetPartBoundsInRadius(pPos, radius, envOverlap)
         end)
         if ok and parts then
             for _, part in ipairs(parts) do
-                if usedCount >= maxSquares then break end
-                if part:IsA("BasePart") and not processedParts[part] then
-                    processedParts[part] = true
-                    local pSize  = part.Size
-                    local isLarge = (pSize.X > LARGE_THRESH or pSize.Y > LARGE_THRESH or pSize.Z > LARGE_THRESH)
+                if usedCount >= maxBoxes then break end
+                if not part:IsA("BasePart") then continue end
 
-                    local boxCF, boxSize
-                    if isLarge then
-                        -- Slice: construct a sub-box of radius*1.4 extent around the
-                        -- player's projected position on this part's face/interior.
-                        local localPos = part.CFrame:PointToObjectSpace(pPos)
-                        local halfSize = pSize * 0.5
-                        local cx = math.clamp(localPos.X, -halfSize.X, halfSize.X)
-                        local cy = math.clamp(localPos.Y, -halfSize.Y, halfSize.Y)
-                        local cz = math.clamp(localPos.Z, -halfSize.Z, halfSize.Z)
-                        local sliceR = radius * 1.4
-                        local sliceX = (pSize.X > LARGE_THRESH) and math.min(sliceR, pSize.X) or (pSize.X + 0.1)
-                        local sliceY = (pSize.Y > LARGE_THRESH) and math.min(sliceR, pSize.Y) or (pSize.Y + 0.1)
-                        local sliceZ = (pSize.Z > LARGE_THRESH) and math.min(sliceR, pSize.Z) or (pSize.Z + 0.1)
-                        boxCF   = part.CFrame * CFrame.new(cx, cy, cz)
-                        boxSize = Vector3.new(sliceX, sliceY, sliceZ)
-                    else
-                        boxCF   = part.CFrame
-                        boxSize = pSize + Vector3.new(0.08, 0.08, 0.08)
-                    end
+                local sz    = part.Size
+                local bigX  = sz.X >= LARGE_SKIP
+                local bigY  = sz.Y >= LARGE_SKIP
+                local bigZ  = sz.Z >= LARGE_SKIP
+                local isLarge = bigX or bigY or bigZ
 
-                    local minX, minY, maxX, maxY = ProjectBox(boxCF, boxSize)
-                    if minX then
-                        usedCount = usedCount + 1
-                        local sq = GetEnvDraw(usedCount)
-                        if sq then
-                            sq.Color        = baseColor
-                            -- In the overlay system, Transparency=1 means fully opaque stroke.
-                            -- S.EnvironmentalESPTransparency (0-1) is treated as an opacity fraction.
-                            local opac = 1 - math.clamp(S.EnvironmentalESPTransparency or 0.65, 0, 1)
-                            sq.Transparency = math.clamp(opac, 0, 1)
-                            sq.Position     = Vector2.new(minX, minY)
-                            sq.Size         = Vector2.new(maxX - minX, maxY - minY)
-                            sq.Visible      = true
-                        end
+                local adornTarget
+                if isLarge then
+                    -- Large part: use a per-slot proxy slab as the SelectionBox adornee
+                    -- so that the wireframe appears as a 2D plane on the surface near the player,
+                    -- rather than a massive box enclosing the whole floor/wall/ceiling.
+                    local localPos = part.CFrame:PointToObjectSpace(pPos)
+                    local hx, hy, hz = sz.X * 0.5, sz.Y * 0.5, sz.Z * 0.5
+                    local cx = math.clamp(localPos.X, -hx, hx)
+                    local cy = math.clamp(localPos.Y, -hy, hy)
+                    local cz = math.clamp(localPos.Z, -hz, hz)
+                    local sliceR = radius * 1.2
+                    -- Each "large" axis is capped to sliceR; "small" axes stay their actual size.
+                    -- This naturally produces: floor → flat slab, wall → vertical panel, etc.
+                    local px = bigX and sliceR or (sz.X + 0.1)
+                    local py = bigY and sliceR or math.min(sz.Y + 0.1, THIN)
+                    local pz = bigZ and sliceR or (sz.Z + 0.1)
+                    -- If none of the non-large axes are thin, make the dominant-large axis thin.
+                    -- Priority: Y thin (floor) > Z thin (wall) > X thin (pillar side)
+                    if not bigY then py = math.min(py, THIN)
+                    elseif not bigZ then pz = math.min(pz, THIN)
+                    elseif not bigX then px = math.min(px, THIN) end
+
+                    usedCount = usedCount + 1
+                    local proxy = GetEnvProxy(usedCount)
+                    if not proxy then continue end
+                    proxy.CFrame = part.CFrame * CFrame.new(cx, cy, cz)
+                    proxy.Size   = Vector3.new(px, py, pz)
+                    adornTarget  = proxy
+                else
+                    -- Small part: walk up to top-level Model ancestor to deduplicate
+                    -- multi-part models (roof tiles, furniture, etc.)
+                    adornTarget = part
+                    local anc = part.Parent
+                    while anc and anc ~= workspace do
+                        if anc:IsA("Model") then adornTarget = anc end
+                        anc = anc.Parent
                     end
+                    if processedAdornee[adornTarget] then continue end
+                    processedAdornee[adornTarget] = true
+
+                    usedCount = usedCount + 1
+                end
+
+                local box = GetEnvBox(usedCount)
+                if box then
+                    box.Color3              = baseColor
+                    box.LineThickness       = 0.04
+                    box.SurfaceTransparency = 1
+                    box.Adornee             = adornTarget
+                    box.Visible             = true
                 end
             end
         end
-        if usedCount >= maxSquares then break end
+        if usedCount >= maxBoxes then break end
     end
 
     -- Hide unused pool entries
-    for i = usedCount + 1, #EnvDrawPool do
-        local sq = EnvDrawPool[i]
-        if sq and sq.Visible then
-            sq.Visible = false
+    for i = usedCount + 1, #EnvBoxPool do
+        local box = EnvBoxPool[i]
+        if box and box.Visible then
+            box.Visible = false
+            box.Adornee = nil
         end
+        local proxy = EnvProxyPool[i]
+        if proxy then proxy.Size = Vector3.new(1, 0.15, 1) end
     end
 end
 S.UpdateEnvironmentalESP = UpdateEnvironmentalESP
@@ -3227,14 +3254,31 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                     local worldDir = (rootPart.Position - Camera.CFrame.Position)
                     local screenX = worldDir:Dot(Camera.CFrame.RightVector)
                     local screenY = -worldDir:Dot(Camera.CFrame.UpVector) -- screen Y is inverted
-                    local angle = math.atan2(screenY, screenX)
+                    local rawAngle = math.atan2(screenY, screenX)
+                    -- Exponential moving-average smoothing per arrow to eliminate jitter
+                    -- from HumanoidRootPart animation bob and camera wobble.
+                    if not S._OOFAngleSmooth then S._OOFAngleSmooth = {} end
+                    local prev = S._OOFAngleSmooth[t.Instance]
+                    local angle
+                    if prev then
+                        -- Shortest arc interpolation to avoid 2π wrap-around snapping
+                        local diff = ((rawAngle - prev + math.pi) % (2 * math.pi)) - math.pi
+                        angle = prev + diff * math.min(1, deltaTime * 12)
+                    else
+                        angle = rawAngle
+                    end
+                    S._OOFAngleSmooth[t.Instance] = angle
                     local r=OOFR
                     arrow.PointA=center+Vector2.new(math.cos(angle),math.sin(angle))*r
                     arrow.PointB=center+Vector2.new(math.cos(angle-0.2),math.sin(angle-0.2))*(r-20)
                     arrow.PointC=center+Vector2.new(math.cos(angle+0.2),math.sin(angle+0.2))*(r-20)
                     arrow.Color=statusESPColor or S.OOFArrowColor or SLC or bc; arrow.Visible=true
                 end
-            else if OOFArrowCache[t.Instance] then OOFArrowCache[t.Instance].Visible=false end end
+            else
+                if OOFArrowCache[t.Instance] then OOFArrowCache[t.Instance].Visible=false end
+                -- Clear smoothed angle when arrow hides so next appearance starts fresh
+                if S._OOFAngleSmooth then S._OOFAngleSmooth[t.Instance] = nil end
+            end
             if onScreen then
                 local hs=ApplyScreenCalibration(Vector2.new(headPos.X,headPos.Y))
                 -- Tags: when cloakTags=true, GetVisualAssets already returned a BillboardGui

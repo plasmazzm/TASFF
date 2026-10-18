@@ -187,7 +187,7 @@ _G.TASFF_State = {
     EnvironmentalESPPriorityOnly= false,         -- restricts environmental ESP to priority/intel targets only
     EnvironmentalESPRange       = 15,            -- radius around players to highlight environment
     EnvironmentalESPColor       = Color3.fromRGB(0, 200, 255),
-    EnvironmentalESPTransparency= 0.82,          -- subtle non-obstructive surface transparency
+    EnvironmentalESPTransparency= 0.65,
     EnvironmentalESPAdornments  = {},            -- runtime pool of adornment objects
     HighlightColor              = Color3.fromRGB(240, 240, 240),
     FOVColor                    = Color3.fromRGB(240, 240, 240),
@@ -248,9 +248,6 @@ _G.TASFF_State = {
     UpdateAvailable             = false,     -- set true when a newer version or commit is detected
     RemoteVersion               = nil,       -- remote version string if detected
     UpdateCheckInterval         = 180,       -- periodic check interval in seconds (3 minutes)
-    LoadedCommitSha             = "",        -- commit SHA at session load
-    LatestRemoteCommitSha       = "",        -- latest commit SHA detected from GitHub API
-    _LoadedModuleLengths        = {},        -- runtime length of loaded module sources for revision diffing
 
     -- // ── Session Statistics (v2.1.0) ─────────────────────────── // --
     SessionStartTime            = 0,

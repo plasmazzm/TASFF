@@ -201,7 +201,7 @@ S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
 S.ToggleCount         = 97   -- +1 (TriggerbotPriorityOnly)
 S.SliderCount         = 37   -- +2 (CoverAnticipationDuration, EnvironmentalESPRange)
-S.DropdownCount       = 41   -- +3 (Legacy Changelog Version, InstinctsBlacklist, InstinctsPriority)
+S.DropdownCount       = 42   -- +1 (InstinctsMode)
 S.ButtonCount         = 29   -- +5 (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)
 S.KeybindCount        = 5
 S.StatusDisplayCount  = 7    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status, Repository Status

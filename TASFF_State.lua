@@ -242,10 +242,15 @@ _G.TASFF_State = {
     },
 
     -- // ── Script Meta ────────────────────────────────────────── // --
+    MasterSwitchKeybind         = "RightShift", -- keybind to toggle master switch on/off
     AimbotKeybind               = "E",
     PanicKeybind                = "Delete",
     PanicLocked                 = false,     -- set true by TriggerPanic; only cleared by re-exec
+    RapidModeCycleEnabled       = false,     -- rapid aim mode cycle toggle
     RapidModeCycleKey           = "P",       -- Feature 17: cycles aim mode on press
+    QuickPresetSwitchEnabled    = false,     -- rapid profile/preset switching toggle
+    QuickPresetSwitchKey        = "J",       -- keybind to cycle saved profiles/presets
+    ActivePresetName            = "",        -- currently active profile/preset name
     ScriptInitialized           = false,
     DisableNotifications        = false,
     NotificationDuration        = 3,     -- global notification duration override (seconds)
@@ -258,6 +263,7 @@ _G.TASFF_State = {
     AutoUpdateCheckerEnabled    = true,      -- automatically check repository for updates
     UpdateAvailable             = false,     -- set true when a newer version or commit is detected
     RemoteVersion               = nil,       -- remote version string if detected
+    _SessionBaselineCommitSHA   = nil,       -- baseline commit SHA of current running session
     UpdateCheckInterval         = 180,       -- periodic check interval in seconds (3 minutes)
 
     -- // ── Session Statistics (v2.1.0) ─────────────────────────── // --
@@ -356,6 +362,7 @@ _G.TASFF_State = {
     PerformanceIndicator        = nil,
 
     -- // ── Cross-Chunk Function Slots (set by Core / UI) ──────── // --
+    ToggleMasterSwitch          = nil,   -- function(forcedState) toggles master switch
     TriggerPanic                = nil,
     UnloadScript                = nil,
     ClearVisuals                = nil,

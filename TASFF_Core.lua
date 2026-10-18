@@ -934,7 +934,33 @@ end
 S.TriggerPanic = TriggerPanic
 
 local function UnloadScript(isRestarting)
-    TriggerPanic()
+    if not isRestarting then
+        TriggerPanic()
+    else
+        S.MasterEnabled = false
+        S.AimbotActive  = false
+        S.CurrentTarget = nil
+        SetADSState(false)
+        if S.IsHoldingClick then
+            S.IsHoldingClick = false
+            pcall(function()
+                local loc = UserInputService:GetMouseLocation()
+                VirtualInputManager:SendMouseButtonEvent(loc.X, loc.Y, 0, false, game, 0)
+            end)
+        end
+        if S.IsHoldingTriggerKey then
+            S.IsHoldingTriggerKey = false
+            pcall(function()
+                local key = GetKeyCode(S.KeyTriggerbotKey)
+                if key then VirtualInputManager:SendKeyEvent(false, key, false, game) end
+            end)
+        end
+        S.SilentAimTargetCache = nil
+        ClearVisuals()
+        ClearCrosshair()
+        if S.FOVCircle then S.FOVCircle.Visible = false end
+    end
+
     if getgenv().TASFF then getgenv().TASFF.Running = false end
     if S.ToolAddedConnection then pcall(function() S.ToolAddedConnection:Disconnect() end); S.ToolAddedConnection = nil end
     if S.ToolRemovedConnection then pcall(function() S.ToolRemovedConnection:Disconnect() end); S.ToolRemovedConnection = nil end
@@ -956,17 +982,26 @@ local function UnloadScript(isRestarting)
         end
         pcall(function() table.clear(getgenv().TASFF.Drawings) end)
     end
-    -- Remove TASFF_Overlay from wherever it was parented (CoreGui or PlayerGui fallback)
-    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-    if ok and cg then
-        local overlay = cg:FindFirstChild("TASFF_Overlay")
-        if overlay then pcall(function() overlay:Destroy() end) end
+
+    -- Thorough cleanup across gethui(), CoreGui, and PlayerGui
+    local parentsToClean = {}
+    local okHui, hui = pcall(gethui)
+    if okHui and hui then table.insert(parentsToClean, hui) end
+    local okCg, cg = pcall(function() return game:GetService("CoreGui") end)
+    if okCg and cg then table.insert(parentsToClean, cg) end
+    local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if pg then table.insert(parentsToClean, pg) end
+
+    for _, parent in ipairs(parentsToClean) do
+        pcall(function()
+            for _, child in ipairs(parent:GetChildren()) do
+                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") or child.Name == "TASFF_Overlay" then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        end)
     end
-    local playerGui = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if playerGui then
-        local overlay = playerGui:FindFirstChild("TASFF_Overlay")
-        if overlay then pcall(function() overlay:Destroy() end) end
-    end
+
     -- Native Roblox notification — fired before Rayfield GUI is destroyed (skip if restarting)
     if not isRestarting then
         pcall(function()
@@ -978,24 +1013,6 @@ local function UnloadScript(isRestarting)
         end)
     end
     pcall(function() if Rayfield and Rayfield.Destroy then Rayfield:Destroy() end end)
-    if ok and cg then
-        pcall(function()
-            for _, gui in ipairs(cg:GetChildren()) do
-                if gui.Name:find("Rayfield") or gui.Name:find("Sirius") or gui.Name == "TASFF_UI" then
-                    gui:Destroy()
-                end
-            end
-        end)
-    end
-    if playerGui then
-        pcall(function()
-            for _, gui in ipairs(playerGui:GetChildren()) do
-                if gui.Name:find("Rayfield") or gui.Name:find("Sirius") or gui.Name == "TASFF_UI" then
-                    gui:Destroy()
-                end
-            end
-        end)
-    end
 end
 S.UnloadScript = UnloadScript
 
@@ -2084,6 +2101,31 @@ table.insert(getgenv().TASFF.Connections, UserInputService.InputBegan:Connect(fu
             TriggerPanic(); return
         end
 
+        -- Master Switch toggle keybind
+        if not gpe and not S.PanicLocked and S.MasterSwitchKeybind and S.MasterSwitchKeybind ~= "None" and S.MasterSwitchKeybind ~= "" then
+            local masterKey = GetKeyCode(S.MasterSwitchKeybind)
+            if masterKey and input.KeyCode == masterKey then
+                if S.ToggleMasterSwitch then
+                    S.ToggleMasterSwitch()
+                else
+                    S.MasterEnabled = not S.MasterEnabled
+                    if not S.MasterEnabled then
+                        S.AimbotActive = false; S.CurrentTarget = nil; S.AimbotCandidates = {}
+                        if S.SetADSState    then S.SetADSState(false)  end
+                        if S.ClearVisuals   then S.ClearVisuals()      end
+                        if S.ClearCrosshair then S.ClearCrosshair()    end
+                        if S.FOVCircle      then S.FOVCircle.Visible = false end
+                    end
+                    Notify({
+                        Title    = "TASFF System",
+                        Content  = S.MasterEnabled and "Master Switch ENABLED" or "Master Switch DISABLED",
+                        Duration = 1.5,
+                        Image    = S.MasterEnabled and "power" or "power-off",
+                    })
+                end
+            end
+        end
+
         -- Aimbot activation toggle
         if not gpe and S.MasterEnabled and not S.PanicLocked then
             local aimKey = GetKeyCode(S.AimbotKeybind)
@@ -2116,6 +2158,16 @@ table.insert(getgenv().TASFF.Connections, UserInputService.InputBegan:Connect(fu
                 S.Mode = modes[(idx % #modes) + 1]
                 Notify({Title="TASFF Mode", Content="Aim mode → "..S.Mode, Duration=1.5, Image="refresh-cw"})
                 if S.DebugMode then print("[TASFF Debug] Aim mode cycled to: "..S.Mode) end
+            end
+        end
+
+        -- Quick Preset Switching Keybind
+        if not gpe and S.QuickPresetSwitchEnabled then
+            local switchKey = GetKeyCode(S.QuickPresetSwitchKey)
+            if switchKey and input.KeyCode == switchKey then
+                if S.CycleToNextPreset then
+                    S.CycleToNextPreset()
+                end
             end
         end
 
@@ -4157,17 +4209,26 @@ function S.CheckForUpdates(manual)
     if not commitJson then
         commitJson = CleanRemoteText(FetchRemoteText(commitApiUrl))
     end
+    local remoteSHA = nil
     if commitJson then
-        local remoteSHA = commitJson:match('"sha"%s*:%s*"([%w]+)"')
+        remoteSHA = commitJson:match('"sha"%s*:%s*"([%w]+)"')
         if remoteSHA then
-            if S._LastKnownCommitSHA == nil then
+            if S._SessionBaselineCommitSHA == nil then
                 -- First successful fetch this session: store as baseline, no update
+                S._SessionBaselineCommitSHA = remoteSHA
                 S._LastKnownCommitSHA = remoteSHA
-            elseif S._LastKnownCommitSHA ~= remoteSHA then
-                -- New commit detected since last check
+            elseif S._SessionBaselineCommitSHA ~= remoteSHA then
+                -- Remote commit is different from our session baseline: an update has been committed
                 commitSHAChanged = true
                 S._LastKnownCommitSHA = remoteSHA
             end
+        end
+    end
+
+    -- If already flagged as available, keep true unless a definitive check proves remote equals baseline
+    if not isNewer and not commitSHAChanged and S.UpdateAvailable then
+        if remoteSHA and S._SessionBaselineCommitSHA and remoteSHA ~= S._SessionBaselineCommitSHA then
+            commitSHAChanged = true
         end
     end
 
@@ -4269,19 +4330,24 @@ getgenv().TASFF.Cleanup = function()
         pcall(function() table.clear(getgenv().TASFF.Connections) end)
     end
     pcall(function() if OverlayGui then OverlayGui:Destroy(); OverlayGui = nil end end)
+    local parentsToClean = {}
+    pcall(function()
+        if typeof(gethui) == "function" then
+            local h = gethui()
+            if h then table.insert(parentsToClean, h) end
+        end
+    end)
     local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-    if ok and cg then
-        pcall(function()
-            for _, child in ipairs(cg:GetChildren()) do
-                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then child:Destroy() end
-            end
-        end)
-    end
+    if ok and cg then table.insert(parentsToClean, cg) end
     local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if pg then
+    if pg then table.insert(parentsToClean, pg) end
+
+    for _, parent in ipairs(parentsToClean) do
         pcall(function()
-            for _, child in ipairs(pg:GetChildren()) do
-                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then child:Destroy() end
+            for _, child in ipairs(parent:GetChildren()) do
+                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                    pcall(function() child:Destroy() end)
+                end
             end
         end)
     end

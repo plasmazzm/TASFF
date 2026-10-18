@@ -196,17 +196,18 @@ local FeatureList = {
     "Environmental Awareness ESP",
     "Triggerbot Priority Target Filter",
     "Environmental ESP Distance Fade",
+    "Quick Preset Profile Switching",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 98   -- +1 (EnvironmentalESPDistanceFade)
-S.SliderCount         = 38   -- +1 (EnvironmentalESPTransparency)
-S.DropdownCount       = 42   -- +1 (InstinctsMode)
-S.ButtonCount         = 29   -- +5 (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)
-S.KeybindCount        = 5
+S.ToggleCount         = 100  -- +2 (Enable Quick Preset Switching in PresetsTab & MiscTab)
+S.SliderCount         = 38   -- (EnvironmentalESPTransparency)
+S.DropdownCount       = 42   -- (InstinctsMode)
+S.ButtonCount         = 29   -- (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)
+S.KeybindCount        = 8    -- +1 (Master Switch Keybind in CombatTab)
 S.StatusDisplayCount  = 7    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status, Repository Status
-S.ParagraphCount      = 34   -- Total CreateParagraph calls across TASFF_UI.lua
+S.ParagraphCount      = 35   -- +1 (Quick Profile Switcher in PresetsTab)
 
 -- // ── Preset Game Configurations ───────────────────────────────── // --
 -- Applied via the Presets tab "Quick-Load Game Config" dropdown.

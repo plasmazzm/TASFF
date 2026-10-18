@@ -450,151 +450,222 @@ local function UpdateEnvironmentalESP()
     for _, item in ipairs(S.CachedWorkspaceIgnores or {}) do table.insert(excludeList, item) end
     envOverlap.FilterDescendantsInstances = excludeList
 
-    local usedCount      = 0
-    local maxAdornments  = 80
-    local processedParts = {}
-    local baseColor      = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
-    local trans          = S.EnvironmentalESPTransparency or 0.95 -- 95% invisible chams fill
+    local maxAdornments = S.EnvironmentalESPMaxParts or 160
+    if S.EnvironmentalESPAutoScaling then
+        local scaleTable = S.EnvironmentalESPScaleTable or {
+            ["Ultra High"] = 400,
+            ["High"]       = 260,
+            ["Medium"]     = 160,
+            ["Low"]        = 90,
+            ["Ultra Low"]  = 45,
+        }
+        maxAdornments = scaleTable[S.PerformanceMode or "Medium"] or maxAdornments
+    end
+    local maxPartsPerTarget  = math.clamp(math.floor(maxAdornments * 0.6), 30, 200)
+    local targetPartLists    = {}
+    local baseColor          = S.EnvironmentalESPColor or Color3.fromRGB(0, 200, 255)
+    local trans              = S.EnvironmentalESPTransparency or 0.95 -- 95% invisible chams fill
 
+    -- 1. Collect candidate parts per target sorted by proximity (closest parts prioritized)
     for _, t in ipairs(targets) do
-        if usedCount >= maxAdornments then break end
         local pPos = t.Root.Position
         local ok, parts = pcall(function()
             return workspace:GetPartBoundsInRadius(pPos, radius, envOverlap)
         end)
         if ok and parts then
+            local validList = {}
             for _, part in ipairs(parts) do
-                if usedCount >= maxAdornments then break end
-                if not part:IsA("BasePart") or processedParts[part] then continue end
-
-                -- Never highlight character models, humanoids, or accessories
-                if part:FindFirstAncestorOfClass("Accessory") then continue end
-                local modelAnc = part:FindFirstAncestorOfClass("Model")
-                if modelAnc and modelAnc:FindFirstChildOfClass("Humanoid") then continue end
-
-                processedParts[part] = true
-                local sz = part.Size
-                local isLarge = (sz.X > 20 or sz.Y > 20 or sz.Z > 20)
-
-                usedCount = usedCount + 1
-                local adorn = GetEnvAdornment(usedCount)
-                local box   = GetEnvBox(usedCount)
-
-                adorn.Color3 = baseColor
-                box.Color3   = baseColor
-
-                local targetPartPos
-                local sliceSize, sliceCenter
-
-                if isLarge then
-                    -- True 2D surface slice on large parts (floors, walls, ceilings)
-                    local localPos = part.CFrame:PointToObjectSpace(pPos)
-                    local halfSize = sz * 0.5
-
-                    -- Determine the surface normal axis the player is closest to
-                    local normalAxis = "Y"
-                    if sz.Y <= sz.X and sz.Y <= sz.Z then
-                        normalAxis = "Y" -- Flat floor or ceiling
-                    elseif sz.Z <= sz.X and sz.Z <= sz.Y then
-                        normalAxis = "Z" -- Z-aligned wall
-                    elseif sz.X <= sz.Y and sz.X <= sz.Z then
-                        normalAxis = "X" -- X-aligned wall
-                    else
-                        local dx = math.abs(math.abs(localPos.X) - halfSize.X)
-                        local dy = math.abs(math.abs(localPos.Y) - halfSize.Y)
-                        local dz = math.abs(math.abs(localPos.Z) - halfSize.Z)
-                        if dy <= dx and dy <= dz then normalAxis = "Y"
-                        elseif dz <= dx and dz <= dy then normalAxis = "Z"
-                        else normalAxis = "X" end
-                    end
-
-                    local sliceExtent = radius * 1.5
-
-                    if normalAxis == "Y" then
-                        local sx = math.min(sliceExtent, sz.X)
-                        local sz_len = math.min(sliceExtent, sz.Z)
-                        local sy = math.min(sz.Y, 0.15)
-                        local signY = (localPos.Y >= 0) and 1 or -1
-                        local cy = (halfSize.Y - (sy * 0.5)) * signY
-                        local cx = math.clamp(localPos.X, -halfSize.X + sx * 0.5, halfSize.X - sx * 0.5)
-                        local cz = math.clamp(localPos.Z, -halfSize.Z + sz_len * 0.5, halfSize.Z - sz_len * 0.5)
-                        sliceSize = Vector3.new(sx, sy, sz_len)
-                        sliceCenter = Vector3.new(cx, cy, cz)
-                    elseif normalAxis == "Z" then
-                        local sx = math.min(sliceExtent, sz.X)
-                        local sy = math.min(sliceExtent, sz.Y)
-                        local sz_len = math.min(sz.Z, 0.15)
-                        local signZ = (localPos.Z >= 0) and 1 or -1
-                        local cz = (halfSize.Z - (sz_len * 0.5)) * signZ
-                        local cx = math.clamp(localPos.X, -halfSize.X + sx * 0.5, halfSize.X - sx * 0.5)
-                        local cy = math.clamp(localPos.Y, -halfSize.Y + sy * 0.5, halfSize.Y - sy * 0.5)
-                        sliceSize = Vector3.new(sx, sy, sz_len)
-                        sliceCenter = Vector3.new(cx, cy, cz)
-                    else -- normalAxis == "X"
-                        local sy = math.min(sliceExtent, sz.Y)
-                        local sz_len = math.min(sliceExtent, sz.Z)
-                        local sx = math.min(sz.X, 0.15)
-                        local signX = (localPos.X >= 0) and 1 or -1
-                        local cx = (halfSize.X - (sx * 0.5)) * signX
-                        local cy = math.clamp(localPos.Y, -halfSize.Y + sy * 0.5, halfSize.Y - sy * 0.5)
-                        local cz = math.clamp(localPos.Z, -halfSize.Z + sz_len * 0.5, halfSize.Z - sz_len * 0.5)
-                        sliceSize = Vector3.new(sx, sy, sz_len)
-                        sliceCenter = Vector3.new(cx, cy, cz)
-                    end
-
-                    targetPartPos = (part.CFrame * CFrame.new(sliceCenter)).Position
-                else
-                    targetPartPos = part.Position
-                end
-
-                -- Compute distance-based fade if enabled
-                local partTrans = trans
-                local lineThick = 0.04
-                local isVisible = true
-
-                if S.EnvironmentalESPDistanceFade then
-                    local dist = (targetPartPos - pPos).Magnitude
-                    local distFrac = math.clamp(dist / math.max(radius, 1), 0, 1)
-                    partTrans = trans + (1 - trans) * distFrac
-                    lineThick = math.clamp(0.04 * (1 - distFrac), 0, 0.04)
-                    if distFrac >= 0.98 or partTrans >= 0.999 then
-                        isVisible = false
+                if part:IsA("BasePart") then
+                    -- Never highlight character models, humanoids, or accessories
+                    if not part:FindFirstAncestorOfClass("Accessory") then
+                        local modelAnc = part:FindFirstAncestorOfClass("Model")
+                        if not (modelAnc and modelAnc:FindFirstChildOfClass("Humanoid")) then
+                            local sz = part.Size
+                            local isLarge = (sz.X > 20 or sz.Y > 20 or sz.Z > 20)
+                            local dist = (part.Position - pPos).Magnitude
+                            table.insert(validList, {
+                                part = part,
+                                dist = dist,
+                                targetPos = pPos,
+                                targetPlayer = t.Player,
+                                isLarge = isLarge,
+                                sz = sz
+                            })
+                        end
                     end
                 end
+            end
 
-                adorn.Transparency = math.clamp(partTrans, 0, 1)
-                box.LineThickness  = lineThick
+            -- Sort closest to player first so near obstacles are never starved
+            table.sort(validList, function(a, b) return a.dist < b.dist end)
+            if #validList > maxPartsPerTarget then
+                local trimmed = {}
+                for i = 1, maxPartsPerTarget do trimmed[i] = validList[i] end
+                validList = trimmed
+            end
+            table.insert(targetPartLists, validList)
+        end
+    end
 
-                if isLarge then
-                    local proxy = GetEnvProxy(usedCount)
-                    if proxy then
-                        proxy.CFrame = part.CFrame * CFrame.new(sliceCenter)
-                        proxy.Size   = sliceSize
+    -- 2. Interleaved round-robin selection across all targets
+    -- Guarantees fair pool sharing so no prioritized target starves another target of visual slots
+    local selectedItems = {}
+    local processedSmallParts = {}
+    local processedLargeParts = {}
+    local anyLeft = true
+    local round = 1
 
-                        adorn.Adornee = proxy
-                        adorn.CFrame  = CFrame.new(0, 0, 0)
-                        adorn.Size    = sliceSize
-                        adorn.Visible = isVisible
-
-                        box.Adornee = proxy
-                        box.Visible = isVisible
+    while anyLeft and #selectedItems < maxAdornments do
+        anyLeft = false
+        for _, list in ipairs(targetPartLists) do
+            if #selectedItems >= maxAdornments then break end
+            if round <= #list then
+                anyLeft = true
+                local item = list[round]
+                if item.isLarge then
+                    -- Large parts (floors/walls) get independent slice proxies per target position
+                    local pName = item.targetPlayer and item.targetPlayer.Name or "P"
+                    local key = tostring(item.part) .. "_" .. pName
+                    if not processedLargeParts[key] then
+                        processedLargeParts[key] = true
+                        table.insert(selectedItems, item)
                     end
                 else
-                    -- Small parts: fully highlight the part with chams fill and edge outlines
-                    adorn.Adornee = part
-                    adorn.CFrame  = CFrame.new(0, 0, 0)
-                    adorn.Size    = sz + Vector3.new(0.04, 0.04, 0.04)
-                    adorn.Visible = isVisible
-
-                    box.Adornee = part
-                    box.Visible = isVisible
+                    -- Small parts are shared in the 3D scene (no redundant duplicate highlights)
+                    if not processedSmallParts[item.part] then
+                        processedSmallParts[item.part] = true
+                        table.insert(selectedItems, item)
+                    end
                 end
             end
         end
-        if usedCount >= maxAdornments then break end
+        round = round + 1
     end
 
-    -- Hide unused pool entries
+    -- 3. Render adornments and wireframe boxes for selected items
+    local usedCount = 0
+    for _, item in ipairs(selectedItems) do
+        usedCount = usedCount + 1
+        local part = item.part
+        local pPos = item.targetPos
+        local sz = item.sz
+        local isLarge = item.isLarge
+
+        local adorn = GetEnvAdornment(usedCount)
+        local box   = GetEnvBox(usedCount)
+
+        adorn.Color3 = baseColor
+        box.Color3   = baseColor
+
+        local targetPartPos
+        local sliceSize, sliceCenter
+
+        if isLarge then
+            -- True 2D surface slice on large parts (floors, walls, ceilings) centered on this target
+            local localPos = part.CFrame:PointToObjectSpace(pPos)
+            local halfSize = sz * 0.5
+
+            -- Determine the surface normal axis the player is closest to
+            local normalAxis = "Y"
+            if sz.Y <= sz.X and sz.Y <= sz.Z then
+                normalAxis = "Y" -- Flat floor or ceiling
+            elseif sz.Z <= sz.X and sz.Z <= sz.Y then
+                normalAxis = "Z" -- Z-aligned wall
+            elseif sz.X <= sz.Y and sz.X <= sz.Z then
+                normalAxis = "X" -- X-aligned wall
+            else
+                local dx = math.abs(math.abs(localPos.X) - halfSize.X)
+                local dy = math.abs(math.abs(localPos.Y) - halfSize.Y)
+                local dz = math.abs(math.abs(localPos.Z) - halfSize.Z)
+                if dy <= dx and dy <= dz then normalAxis = "Y"
+                elseif dz <= dx and dz <= dy then normalAxis = "Z"
+                else normalAxis = "X" end
+            end
+
+            local sliceExtent = radius * 1.5
+
+            if normalAxis == "Y" then
+                local sx = math.min(sliceExtent, sz.X)
+                local sz_len = math.min(sliceExtent, sz.Z)
+                local sy = math.min(sz.Y, 0.15)
+                local signY = (localPos.Y >= 0) and 1 or -1
+                local cy = (halfSize.Y - (sy * 0.5)) * signY
+                local cx = math.clamp(localPos.X, -halfSize.X + sx * 0.5, halfSize.X - sx * 0.5)
+                local cz = math.clamp(localPos.Z, -halfSize.Z + sz_len * 0.5, halfSize.Z - sz_len * 0.5)
+                sliceSize = Vector3.new(sx, sy, sz_len)
+                sliceCenter = Vector3.new(cx, cy, cz)
+            elseif normalAxis == "Z" then
+                local sx = math.min(sliceExtent, sz.X)
+                local sy = math.min(sliceExtent, sz.Y)
+                local sz_len = math.min(sz.Z, 0.15)
+                local signZ = (localPos.Z >= 0) and 1 or -1
+                local cz = (halfSize.Z - (sz_len * 0.5)) * signZ
+                local cx = math.clamp(localPos.X, -halfSize.X + sx * 0.5, halfSize.X - sx * 0.5)
+                local cy = math.clamp(localPos.Y, -halfSize.Y + sy * 0.5, halfSize.Y - sy * 0.5)
+                sliceSize = Vector3.new(sx, sy, sz_len)
+                sliceCenter = Vector3.new(cx, cy, cz)
+            else -- normalAxis == "X"
+                local sy = math.min(sliceExtent, sz.Y)
+                local sz_len = math.min(sliceExtent, sz.Z)
+                local sx = math.min(sz.X, 0.15)
+                local signX = (localPos.X >= 0) and 1 or -1
+                local cx = (halfSize.X - (sx * 0.5)) * signX
+                local cy = math.clamp(localPos.Y, -halfSize.Y + sy * 0.5, halfSize.Y - sy * 0.5)
+                local cz = math.clamp(localPos.Z, -halfSize.Z + sz_len * 0.5, halfSize.Z - sz_len * 0.5)
+                sliceSize = Vector3.new(sx, sy, sz_len)
+                sliceCenter = Vector3.new(cx, cy, cz)
+            end
+
+            targetPartPos = (part.CFrame * CFrame.new(sliceCenter)).Position
+        else
+            targetPartPos = part.Position
+        end
+
+        -- Compute distance-based fade if enabled
+        local partTrans = trans
+        local lineThick = 0.04
+        local isVisible = true
+
+        if S.EnvironmentalESPDistanceFade then
+            local dist = (targetPartPos - pPos).Magnitude
+            local distFrac = math.clamp(dist / math.max(radius, 1), 0, 1)
+            partTrans = trans + (1 - trans) * distFrac
+            lineThick = math.clamp(0.04 * (1 - distFrac), 0, 0.04)
+            if distFrac >= 0.98 or partTrans >= 0.999 then
+                isVisible = false
+            end
+        end
+
+        adorn.Transparency = math.clamp(partTrans, 0, 1)
+        box.LineThickness  = lineThick
+
+        if isLarge then
+            local proxy = GetEnvProxy(usedCount)
+            if proxy then
+                proxy.CFrame = part.CFrame * CFrame.new(sliceCenter)
+                proxy.Size   = sliceSize
+
+                adorn.Adornee = proxy
+                adorn.CFrame  = CFrame.new(0, 0, 0)
+                adorn.Size    = sliceSize
+                adorn.Visible = isVisible
+
+                box.Adornee = proxy
+                box.Visible = isVisible
+            end
+        else
+            -- Small parts: fully highlight the part with chams fill and edge outlines
+            adorn.Adornee = part
+            adorn.CFrame  = CFrame.new(0, 0, 0)
+            adorn.Size    = sz + Vector3.new(0.04, 0.04, 0.04)
+            adorn.Visible = isVisible
+
+            box.Adornee = part
+            box.Visible = isVisible
+        end
+    end
+
+    -- 4. Hide unused pool entries
     for i = usedCount + 1, #EnvAdornmentPool do
         local adorn = EnvAdornmentPool[i]
         if adorn and adorn.Visible then
@@ -2860,14 +2931,33 @@ end)
 
 local function UpdateSpectator()
     if S.SpectatePlayerEnabled and S.SpectateTarget and S.SpectateTarget ~= "" then
-        local p = Players:FindFirstChild(S.SpectateTarget)
-        if p and p.Character and p.Character:FindFirstChild("Humanoid") then
-            workspace.CurrentCamera.CameraSubject = p.Character.Humanoid
-            S.WasSpectating = true
+        local targetName = (S.ResolvePlayerName and S.ResolvePlayerName(S.SpectateTarget)) or S.SpectateTarget
+        local p = Players:FindFirstChild(targetName)
+        if p then
+            if p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+                workspace.CurrentCamera.CameraSubject = p.Character.Humanoid
+                S.WasSpectating = true
+                return
+            elseif p.Character and p.Character:FindFirstChild("Head") then
+                workspace.CurrentCamera.CameraSubject = p.Character.Head
+                S.WasSpectating = true
+                return
+            end
+            -- Player is still in server but currently respawning/waiting for character
+            -- Keep spectating active without resetting the toggle
             return
         else
+            -- Player left the server
             S.SpectatePlayerEnabled = false
             if S.SyncSpectatorUI then S.SyncSpectatorUI(false) end
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Spectator",
+                    Content  = "Spectate target left the server.",
+                    Duration = 3,
+                    Image    = "user-x"
+                })
+            end
         end
     end
     if S.WasSpectating then

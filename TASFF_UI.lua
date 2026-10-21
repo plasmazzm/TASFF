@@ -26,6 +26,19 @@ local function SanitizeKeyName(k)
     end
     return nil
 end
+
+local function UnpackOption(v, fallback)
+    if type(v) == "table" then
+        if v[1] ~= nil and v[1] ~= "" then return v[1] end
+        for _, val in pairs(v) do
+            if type(val) == "string" and val ~= "" then return val end
+        end
+        return fallback
+    elseif type(v) == "string" and v ~= "" then
+        return v
+    end
+    return fallback
+end
 local Rayfield    = TASFFEnv.Rayfield
 local Players     = game:GetService("Players")
 local Player      = Players.LocalPlayer
@@ -579,7 +592,9 @@ MainTab:CreateDropdown({
     Options       = {"Legit (Camera)", "Advanced Legit (Mouse)", "Blatant", "Flickbot (Click-Teleport)"},
     CurrentOption = {S.Mode},
     Flag          = "AimMethod",
-    Callback      = function(v) S.Mode = v[1] end
+    Callback      = function(v)
+        S.Mode = UnpackOption(v, "Legit (Camera)")
+    end
 })
 
 MainTab:CreateSection("Activation & Automation")
@@ -624,16 +639,20 @@ MainTab:CreateDropdown({
     Options       = {"Head", "HumanoidRootPart", "Torso", "Visible On Screen"},
     CurrentOption = {S.TargetPart},
     Flag          = "TargetPart",
-    Callback      = function(v) S.TargetPart = v[1]; S.ActivePartName = v[1] end
+    Callback      = function(v)
+        local opt = UnpackOption(v, "Head")
+        S.TargetPart = opt
+        S.ActivePartName = (opt ~= "Visible On Screen") and opt or "Head"
+    end
 })
 MainTab:CreateToggle({Name = "Randomize Hitboxes (Legit Variance)", CurrentValue = S.RandomizeHitboxEnabled, Flag = "RandomizeHitbox", Callback = function(v)
     S.RandomizeHitboxEnabled = v
 end})
 MainTab:CreateDropdown({Name = "Distance Sorting", Options = {"None", "Closest", "Farthest"}, CurrentOption = {S.PriorityMode}, Flag = "PriorityMode", Callback = function(v)
-    S.PriorityMode = v[1]
+    S.PriorityMode = UnpackOption(v, "None")
 end})
 MainTab:CreateDropdown({Name = "Health Sorting", Options = {"None", "Weakest (HP)", "Strongest (HP)"}, CurrentOption = {S.VitalityMode}, Flag = "VitalityMode", Callback = function(v)
-    S.VitalityMode = v[1]
+    S.VitalityMode = UnpackOption(v, "None")
 end})
 MainTab:CreateToggle({Name = "Prioritize Targets Near Screen Center", CurrentValue = S.TargetNearCenter, Flag = "TargetNearCenter", Callback = function(v)
     S.TargetNearCenter = v
@@ -759,7 +778,7 @@ VisualTab:CreateToggle({Name = "2D Bounding Boxes", CurrentValue = S.BoxModeEnab
 VisualTab:CreateToggle({Name = "Skeletal Mapping (R6/R15)", CurrentValue = S.SkeletonModeEnabled, Flag = "EnableSkeletonMode", Callback = function(v) S.SkeletonModeEnabled = v end})
 VisualTab:CreateToggle({Name = "Distance Snaplines", CurrentValue = S.SnaplinesEnabled, Flag = "SnaplinesEnabled", Callback = function(v) S.SnaplinesEnabled = v end})
 VisualTab:CreateDropdown({Name = "Snapline Origin Point", Options = {"Bottom", "Center"}, CurrentOption = {S.SnaplineOrigin}, Flag = "SnaplineOrigin", Callback = function(v)
-    S.SnaplineOrigin = v[1]
+    S.SnaplineOrigin = UnpackOption(v, "Bottom")
 end})
 VisualTab:CreateToggle({Name = "Off-Screen Indicators (OOF Arrows)", CurrentValue = S.OOFArrowsEnabled, Flag = "OOFArrowsEnabled", Callback = function(v) S.OOFArrowsEnabled = v end})
 VisualTab:CreateSlider({Name = "OOF Indicator Radius", Range = {50, 400}, Increment = 10, CurrentValue = S.OOFArrowRadius, Flag = "OOFArrowRadius", Callback = function(v) S.OOFArrowRadius = v end})
@@ -825,7 +844,9 @@ VisualTab:CreateDropdown({
     Options       = {"Screen Center", "Mouse Tracking"},
     CurrentOption = {S.AimReferenceMode},
     Flag          = "AimReferenceMode",
-    Callback      = function(v) S.AimReferenceMode = v[1] end
+    Callback      = function(v)
+        S.AimReferenceMode = UnpackOption(v, "Screen Center")
+    end
 })
 VisualTab:CreateToggle({Name = "Render Vector Crosshair", CurrentValue = S.EnableCrosshair, Flag = "UseCrosshair", Callback = function(v)
     S.EnableCrosshair = v
@@ -861,10 +882,10 @@ TriggerbotTab:CreateToggle({Name = "Enable Mouse Triggerbot", CurrentValue = S.A
     end
 end})
 TriggerbotTab:CreateDropdown({Name = "Click Simulation Engine", Options = {"Virtual", "Physical"}, CurrentOption = {S.TriggerbotClickMode}, Flag = "TriggerbotClickMode", Callback = function(v)
-    S.TriggerbotClickMode = v[1]
+    S.TriggerbotClickMode = UnpackOption(v, "Virtual")
 end})
 TriggerbotTab:CreateDropdown({Name = "Action Method", Options = {"Mash", "Hold"}, CurrentOption = {S.ClickMethod}, Flag = "ClickMethod", Callback = function(v)
-    S.ClickMethod = v[1]
+    S.ClickMethod = UnpackOption(v, "Mash")
 end})
 TriggerbotTab:CreateSlider({Name = "Mash Interval (ms)", Range = {1, 1000}, Increment = 1, CurrentValue = S.ClickInterval, Flag = "ClickInterval", Callback = function(v)
     S.ClickInterval = v
@@ -901,7 +922,7 @@ TriggerbotTab:CreateInput({
     end
 })
 TriggerbotTab:CreateDropdown({Name = "Key Action Method", Options = {"Single Press", "Mash", "Hold"}, CurrentOption = {S.KeyTriggerMode}, Flag = "KeyTriggerMode", Callback = function(v)
-    S.KeyTriggerMode = v[1]
+    S.KeyTriggerMode = UnpackOption(v, "Single Press")
 end})
 
 TriggerbotTab:CreateSection("Proximity Auto-Melee")
@@ -1690,6 +1711,14 @@ local STO_FLAG = {
     MasterSwitchKeybind = "MasterSwitchKeybind"
 }
 
+local DROPDOWN_FLAGS = {
+    AimMethod = true, TargetPart = true, PriorityMode = true,
+    VitalityMode = true, VisualMode = true, SnaplineOrigin = true,
+    AimReferenceMode = true, CrossStyle = true, TriggerbotClickMode = true,
+    ClickMethod = true, KeyTriggerMode = true, MarkMethod = true,
+    InstinctsMode = true, PerformanceMode = true, PriorityBehavior = true,
+}
+
 local function LoadPresetByName(presetName, silent)
     if not presetName or type(presetName) ~= "string" then return false end
     local data = S.SavedPresets and S.SavedPresets[presetName]
@@ -1704,12 +1733,46 @@ local function LoadPresetByName(presetName, silent)
             if colorFlag and Rayfield.Flags[colorFlag] then
                 pcall(function() Rayfield.Flags[colorFlag]:Set(color) end)
             end
-        elseif flag and Rayfield.Flags[flag] then
-            pcall(function() Rayfield.Flags[flag]:Set(value) end)
         else
+            -- 1. Always assign state directly so backend logic receives valid value immediately
             S[key] = value
+
+            -- 2. Synchronize UI element safely
+            if flag and Rayfield.Flags[flag] then
+                pcall(function()
+                    local flagObj = Rayfield.Flags[flag]
+                    if DROPDOWN_FLAGS[flag] or (flagObj and type(flagObj.CurrentOption) == "table") then
+                        local opt = type(value) == "table" and value or {tostring(value)}
+                        flagObj:Set(opt)
+                    else
+                        flagObj:Set(value)
+                    end
+                end)
+            end
         end
     end
+
+    -- 3. Explicitly maintain ActivePartName consistency
+    if type(S.TargetPart) == "string" and S.TargetPart ~= "" and S.TargetPart ~= "Visible On Screen" then
+        S.ActivePartName = S.TargetPart
+    else
+        S.ActivePartName = "Head"
+    end
+
+    -- 4. Ensure Mode is always valid
+    if type(S.Mode) ~= "string" or S.Mode == "" then
+        S.Mode = "Legit (Camera)"
+    end
+
+    -- 5. Invalidate runtime targeting & visibility caches so the new preset settings apply instantly
+    S.CurrentTarget = nil
+    S.LastCustomTargetData = nil
+    S.SilentAimTargetCache = nil
+    if S.VisibilityPrecomputed then table.clear(S.VisibilityPrecomputed) end
+    if S.VisibilityCache then table.clear(S.VisibilityCache) end
+    if S.VisibilityCacheTime then table.clear(S.VisibilityCacheTime) end
+    if S.AimbotCandidates then table.clear(S.AimbotCandidates) end
+    if S.TargetFirstSeenTimestamps then table.clear(S.TargetFirstSeenTimestamps) end
 
     S.ActivePresetName = presetName
     SelectedPresetToManage = presetName
@@ -2722,7 +2785,7 @@ SystemTab:CreateDropdown({
     MultipleOptions = false,
     Flag            = "PerformanceMode",
     Callback        = function(v)
-        S.PerformanceMode = v[1] or "Medium"
+        S.PerformanceMode = UnpackOption(v, "Medium")
         S.FrameCounters.HeavySystems = 0
         S.FrameCounters.NPCs         = 0
         S.FrameCounters.WorkspaceSweep = 0

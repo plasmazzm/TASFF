@@ -3261,7 +3261,11 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     -- Reads S.AimbotCandidates (written by Slot 1), sorts and picks target
     -- every frame so aimbot responsiveness is independent of performance mode.
     if MasterEnabled and AimbotActive and TargetingEnabled then
-        local TargetPart = S.TargetPart; local WallCheck = S.WallCheck
+        local TargetPart = (type(S.TargetPart) == "string" and S.TargetPart ~= "") and S.TargetPart or "Head"
+        local WallCheck = S.WallCheck
+        if not S.ActivePartName or S.ActivePartName == "" then
+            S.ActivePartName = (TargetPart ~= "Visible On Screen") and TargetPart or "Head"
+        end
         local previousTarget = S.CurrentTarget
         if previousTarget then
             local targetModel = previousTarget.Instance
@@ -3667,11 +3671,14 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     end
     UpdateEnvironmentalESP()
     if MasterEnabled then
-        local CT=S.CurrentTarget; local TP=S.TargetPart
+        local CT = S.CurrentTarget
+        local TP = (type(S.TargetPart) == "string" and S.TargetPart ~= "") and S.TargetPart or "Head"
         if CT and TargetingEnabled and AimbotActive and canAimWithTool then
             local TWP=nil
             local tv=CT.Root and CT.Root.AssemblyLinearVelocity or Vector3.new(0,0,0)
-            local isM=tv.Magnitude>1.5; local Mode=S.Mode; local PA=S.PredictionAmount or 0.16
+            local isM = tv.Magnitude > 1.5
+            local Mode = (type(S.Mode) == "string" and S.Mode ~= "") and S.Mode or "Legit (Camera)"
+            local PA = S.PredictionAmount or 0.16
             if S.DistancePredictionAdjustEnabled and CT.Root then
                 local targetDist = (CT.Root.Position - Camera.CFrame.Position).Magnitude
                 local maxPA = S.MaxAutoPrediction or 0.45

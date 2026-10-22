@@ -21,7 +21,7 @@ _G.TASFF_State = {
     DynamicFOVEnabled           = false,
     DynamicFOVMax                = 400,
     TargetPart                  = "Head",
-    VOSPriorityParts            = {},            -- parts to prefer first in VoS scan (e.g. {"Head","UpperTorso"})
+    VOSPriorityParts            = {"Head", "Torso"}, -- parts to prefer first in VoS scan
     Mode                        = "Legit (Camera)",
     Smoothness                  = 1.5,           -- used by Legit (Camera) and as fallback
     SmoothnessX                 = 1.5,           -- horizontal smoothness for Advanced Legit (Mouse)
@@ -76,6 +76,8 @@ _G.TASFF_State = {
     ExpertInstinctsIntensity    = 60,            -- 0=very smooth, 100=instant snap (see InstinctsMode)
     InstinctsMode               = "Blatant",     -- "Blatant" = direct CFrame snap/lerp; "Legit" = humanized smooth lerp (like aimbot)
     InstinctsInventoryCheck     = false,         -- scan inventory for defending weapons; suppress instincts if unarmed/fleeing
+    InstinctsAutoEquip          = false,         -- auto-equips defending weapon on instincts trigger
+    InstinctsFirstPersonCamera  = false,         -- forces camera into first person when instincts engages
     InstinctsBlacklist          = {},            -- list of tool names treated as non-weapons (ignored by instincts scan)
     InstinctsPrioritizedTools   = {},            -- list of tool names that immediately engage instincts
     InstinctsBlacklistFileName  = "TASFF_InstinctsBlacklist.json",

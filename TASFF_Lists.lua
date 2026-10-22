@@ -197,13 +197,15 @@ local FeatureList = {
     "Triggerbot Priority Target Filter",
     "Environmental ESP Distance Fade",
     "Quick Preset Profile Switching",
+    "Expert Instincts Auto-Equip",
+    "Expert Instincts First Person Camera",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 100  -- +2 (Enable Quick Preset Switching in PresetsTab & MiscTab)
+S.ToggleCount         = 102  -- +2 (InstinctsAutoEquip, InstinctsFirstPersonCamera)
 S.SliderCount         = 38   -- (EnvironmentalESPTransparency)
-S.DropdownCount       = 42   -- (InstinctsMode)
+S.DropdownCount       = 43   -- (VOSPriorityParts)
 S.ButtonCount         = 29   -- (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)
 S.KeybindCount        = 8    -- +1 (Master Switch Keybind in CombatTab)
 S.StatusDisplayCount  = 7    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status, Repository Status

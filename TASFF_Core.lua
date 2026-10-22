@@ -903,6 +903,13 @@ local function TriggerPanic()
     S.CurrentTarget = nil
     S.PanicLocked   = true   -- permanent lock — only cleared by re-execution
     SetADSState(false)
+    if S._PrevCameraMode then
+        pcall(function() Player.CameraMode = S._PrevCameraMode end)
+        S._PrevCameraMode = nil
+    end
+    S._ExpertInstinctsActive = false
+    S._ExpertInstinctsAttacker = nil
+    S._ExpertInstinctsTargetChar = nil
     if S.IsHoldingClick then
         S.IsHoldingClick = false
         pcall(function()
@@ -941,6 +948,13 @@ local function UnloadScript(isRestarting)
         S.AimbotActive  = false
         S.CurrentTarget = nil
         SetADSState(false)
+        if S._PrevCameraMode then
+            pcall(function() Player.CameraMode = S._PrevCameraMode end)
+            S._PrevCameraMode = nil
+        end
+        S._ExpertInstinctsActive = false
+        S._ExpertInstinctsAttacker = nil
+        S._ExpertInstinctsTargetChar = nil
         if S.IsHoldingClick then
             S.IsHoldingClick = false
             pcall(function()
@@ -1348,32 +1362,61 @@ local function IsVisibleCachedWrapper(model, partName, ignoreList)
 end
 S.IsVisibleCachedWrapper = IsVisibleCachedWrapper
 
+local VOS_PART_GROUPS = {
+    ["Head"] = { "Head" },
+    ["Torso"] = { "Torso", "UpperTorso", "LowerTorso" },
+    ["Right and Left Arm"] = {
+        "Right Arm", "RightUpperArm", "RightLowerArm", "RightHand",
+        "Left Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand"
+    },
+    ["Leg"] = {
+        "Right Leg", "RightUpperLeg", "RightLowerLeg", "RightFoot",
+        "Left Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot"
+    },
+    ["Right Arm"] = { "Right Arm", "RightUpperArm", "RightLowerArm", "RightHand" },
+    ["Left Arm"]  = { "Left Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand" },
+    ["Right Leg"] = { "Right Leg", "RightUpperLeg", "RightLowerLeg", "RightFoot" },
+    ["Left Leg"]  = { "Left Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot" },
+}
+
+local ALL_VOS_PARTS = {
+    "Head", "Torso", "UpperTorso", "LowerTorso",
+    "Right Arm", "RightUpperArm", "RightLowerArm", "RightHand",
+    "Left Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand",
+    "Right Leg", "RightUpperLeg", "RightLowerLeg", "RightFoot",
+    "Left Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+}
+
 local function FindVisibleOnScreenPart(model, ignoreList)
     if not model or not model.Parent then return nil end
     if not Camera then Camera = workspace.CurrentCamera end
     if not Camera then return nil end
 
-    local partNames = {}
-    for _, name in ipairs(S.VOSPriorityParts or {}) do
-        if type(name) == "string" and not table.find(partNames, name) then
-            table.insert(partNames, name)
+    local priorityNames = {}
+    local prioritySet = {}
+    local configured = (type(S.VOSPriorityParts) == "table" and #S.VOSPriorityParts > 0) and S.VOSPriorityParts or { "Head", "Torso" }
+    for _, item in ipairs(configured) do
+        local subParts = VOS_PART_GROUPS[item] or { item }
+        for _, partName in ipairs(subParts) do
+            if not prioritySet[partName] then
+                prioritySet[partName] = true
+                table.insert(priorityNames, partName)
+            end
         end
     end
-    for _, name in ipairs({
-        "Head", "Torso", "UpperTorso", "LowerTorso",
-        "Left Arm", "LeftUpperArm", "LeftLowerArm", "LeftHand",
-        "Right Arm", "RightUpperArm", "RightLowerArm", "RightHand",
-        "Left Leg", "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
-        "Right Leg", "RightUpperLeg", "RightLowerLeg", "RightFoot",
-    }) do
-        if not table.find(partNames, name) then
-            table.insert(partNames, name)
+
+    local fallbackNames = {}
+    for _, partName in ipairs(ALL_VOS_PARTS) do
+        if not prioritySet[partName] then
+            table.insert(fallbackNames, partName)
         end
     end
 
     local aimPosition = GetAimPosition()
-    local bestPart, bestDistance = nil, math.huge
-    for _, name in ipairs(partNames) do
+
+    -- Phase 1: Scan prioritized body parts first. If any priority part is visible, aim at the best priority part!
+    local bestPriorityPart, bestPriorityDistance = nil, math.huge
+    for _, name in ipairs(priorityNames) do
         local part = model:FindFirstChild(name)
         local ok, isVisible = false, false
         if part and part:IsA("BasePart") then
@@ -1383,18 +1426,48 @@ local function FindVisibleOnScreenPart(model, ignoreList)
             local point, onScreen = Camera:WorldToViewportPoint(part.Position)
             if onScreen then
                 local distance = (ApplyScreenCalibration(Vector2.new(point.X, point.Y)) - aimPosition).Magnitude
-                if distance < bestDistance then
-                    bestPart, bestDistance = part, distance
+                if distance < bestPriorityDistance then
+                    bestPriorityPart, bestPriorityDistance = part, distance
                 end
             end
         end
     end
-    return bestPart
+
+    if bestPriorityPart then
+        return bestPriorityPart
+    end
+
+    -- Phase 2: If none of the prioritized parts are visible, aim at any remaining visible body part (limbs)
+    local bestFallbackPart, bestFallbackDistance = nil, math.huge
+    for _, name in ipairs(fallbackNames) do
+        local part = model:FindFirstChild(name)
+        local ok, isVisible = false, false
+        if part and part:IsA("BasePart") then
+            ok, isVisible = pcall(IsVisibleWallcheck, model, name, ignoreList)
+        end
+        if ok and isVisible then
+            local point, onScreen = Camera:WorldToViewportPoint(part.Position)
+            if onScreen then
+                local distance = (ApplyScreenCalibration(Vector2.new(point.X, point.Y)) - aimPosition).Magnitude
+                if distance < bestFallbackDistance then
+                    bestFallbackPart, bestFallbackDistance = part, distance
+                end
+            end
+        end
+    end
+
+    return bestFallbackPart
 end
 
 local _lastFP = {}
 local function RegisterThreat(attackerName, isKill)
     if not attackerName or attackerName == Player.Name then return end
+    if S.TeamCheck and Player and Player.Team then
+        local pObj = Players:FindFirstChild(attackerName)
+        if pObj and pObj.Team and pObj.Team == Player.Team then
+            return
+        end
+    end
     if isKill then
         if S.NemesisEnabled then
             S.PlayerNemesisStrikes[attackerName] = (S.PlayerNemesisStrikes[attackerName] or 0) + 1
@@ -1725,6 +1798,70 @@ local function HasDefendingWeapon()
 end
 S.HasDefendingWeapon = HasDefendingWeapon
 
+local function EquipDefendingWeapon()
+    if not Player or not Player.Character then return false end
+    local hum = Player.Character:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+    local backpack = Player:FindFirstChildOfClass("Backpack")
+    local char = Player.Character
+
+    -- First, check if currently equipped tool is already a prioritized tool
+    local currentTool = char:FindFirstChildOfClass("Tool")
+    if currentTool and table.find(S.InstinctsPrioritizedTools or {}, currentTool.Name) then
+        return true -- already holding top priority weapon
+    end
+
+    -- Check Backpack for a prioritized tool first
+    if backpack and S.InstinctsPrioritizedTools then
+        for _, toolName in ipairs(S.InstinctsPrioritizedTools) do
+            local found = backpack:FindFirstChild(toolName)
+            if found and found:IsA("Tool") then
+                pcall(function() hum:EquipTool(found) end)
+                return true
+            end
+        end
+    end
+
+    -- If currently holding a valid (non-blacklisted) weapon or melee tool, keep it
+    if currentTool then
+        local isBlacklisted = (table.find(S.InstinctsBlacklist or {}, currentTool.Name) ~= nil)
+            or (table.find(S.ToolBlacklist or {}, currentTool.Name) ~= nil)
+        if not isBlacklisted then
+            local classification = S.ClassifyTool and S.ClassifyTool(currentTool.Name) or "Unknown"
+            if classification == "Weapon" or classification == "Melee" then
+                return true
+            end
+        end
+    end
+
+    -- Otherwise, find best weapon or melee in Backpack that isn't blacklisted
+    if backpack then
+        local candidate = nil
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                local isBlacklisted = (table.find(S.InstinctsBlacklist or {}, tool.Name) ~= nil)
+                    or (table.find(S.ToolBlacklist or {}, tool.Name) ~= nil)
+                if not isBlacklisted then
+                    local classification = S.ClassifyTool and S.ClassifyTool(tool.Name) or "Unknown"
+                    if classification == "Weapon" then
+                        candidate = tool
+                        break -- prioritize ranged Weapon over Melee
+                    elseif classification == "Melee" and not candidate then
+                        candidate = tool
+                    end
+                end
+            end
+        end
+        if candidate then
+            pcall(function() hum:EquipTool(candidate) end)
+            return true
+        end
+    end
+
+    return false
+end
+S.EquipDefendingWeapon = EquipDefendingWeapon
+
 local function FindLikelyAttacker(victimChar, victimPlayer)
     if not victimChar then return nil end
     local victimRoot = victimChar:FindFirstChild("HumanoidRootPart") or victimChar:FindFirstChild("Torso") or victimChar:FindFirstChild("UpperTorso")
@@ -1744,75 +1881,89 @@ local function FindLikelyAttacker(victimChar, victimPlayer)
 
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= victimPlayer and p.Character then
-            local pChar = p.Character
-            local pHum = pChar:FindFirstChildOfClass("Humanoid")
-            local pRoot = pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("Torso")
-            if pHum and pHum.Health > 0 and pRoot then
-                local dist = (pRoot.Position - victimPos).Magnitude
-                if dist <= maxScanRadius and dist > 0.1 then
-                    local heldTool = pChar:FindFirstChildOfClass("Tool")
-                    local hasWeapon = false
-                    local isRanged = false
-                    local isMelee = false
-                    if heldTool then
-                        local toolName = heldTool.Name
-                        local classification = S.ClassifyTool and S.ClassifyTool(toolName) or "Unknown"
-                        if classification == "Weapon" then
-                            hasWeapon = true
-                            isRanged = true
-                        elseif classification == "Melee" then
-                            hasWeapon = true
-                            isMelee = true
-                        elseif classification ~= "NonWeapon" then
-                            if heldTool:FindFirstChild("Handle") or heldTool:FindFirstChildWhichIsA("BasePart") then
+            -- Team check: candidate must not be a teammate of victim OR local player if TeamCheck is active
+            local skipCandidate = false
+            if S.TeamCheck then
+                if victimPlayer and victimPlayer.Team and p.Team and p.Team == victimPlayer.Team then
+                    skipCandidate = true
+                elseif Player and Player.Team and p.Team and p.Team == Player.Team then
+                    skipCandidate = true
+                elseif Player and p.Neutral == false and Player.Neutral == false and p.TeamColor == Player.TeamColor then
+                    skipCandidate = true
+                end
+            end
+
+            if not skipCandidate then
+                local pChar = p.Character
+                local pHum = pChar:FindFirstChildOfClass("Humanoid")
+                local pRoot = pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("Torso")
+                if pHum and pHum.Health > 0 and pRoot then
+                    local dist = (pRoot.Position - victimPos).Magnitude
+                    if dist <= maxScanRadius and dist > 0.1 then
+                        local heldTool = pChar:FindFirstChildOfClass("Tool")
+                        local hasWeapon = false
+                        local isRanged = false
+                        local isMelee = false
+                        if heldTool then
+                            local toolName = heldTool.Name
+                            local classification = S.ClassifyTool and S.ClassifyTool(toolName) or "Unknown"
+                            if classification == "Weapon" then
                                 hasWeapon = true
+                                isRanged = true
+                            elseif classification == "Melee" then
+                                hasWeapon = true
+                                isMelee = true
+                            elseif classification ~= "NonWeapon" then
+                                if heldTool:FindFirstChild("Handle") or heldTool:FindFirstChildWhichIsA("BasePart") then
+                                    hasWeapon = true
+                                end
                             end
                         end
-                    end
 
-                    local lookDir = pRoot.CFrame.LookVector
-                    local dirToVictim = (victimPos - pRoot.Position).Unit
-                    local dotAim = lookDir:Dot(dirToVictim)
+                        local lookDir = pRoot.CFrame.LookVector
+                        local dirToVictim = (victimPos - pRoot.Position).Unit
+                        local dotAim = lookDir:Dot(dirToVictim)
 
-                    local isPlausible = false
-                    if isRanged and dist <= maxScanRadius then
-                        -- Require weapon + tight aim alignment for ranged attribution
-                        isPlausible = hasWeapon and (dotAim >= 0.70)
-                    elseif isMelee and dist <= 18 then
-                        isPlausible = (dotAim >= 0.50)
-                    elseif hasWeapon and dist <= maxScanRadius then
-                        isPlausible = (dotAim >= 0.70)
-                    elseif not hasWeapon and dist <= 7 then
-                        -- Unarmed: very tight range and high alignment required
-                        isPlausible = (dotAim >= 0.65)
-                    end
+                        local isPlausible = false
+                        if isRanged and dist <= maxScanRadius then
+                            -- Require weapon + tight aim alignment for ranged attribution (>= 0.82)
+                            isPlausible = hasWeapon and (dotAim >= 0.82)
+                        elseif isMelee and dist <= 18 then
+                            isPlausible = (dotAim >= 0.50)
+                        elseif hasWeapon and dist <= maxScanRadius then
+                            isPlausible = (dotAim >= 0.82)
+                        elseif not hasWeapon and dist <= 6 then
+                            -- Unarmed: must be in extreme point-blank range (<= 6 studs) and directly facing victim (>= 0.85)
+                            isPlausible = (dotAim >= 0.85)
+                        end
 
-                    if isPlausible then
-                        local pHead = pChar:FindFirstChild("Head") or pRoot
-                        local rayOrigin = pHead.Position
-                        local rayDir = (victimPos - rayOrigin)
-                        local rayResult = workspace:Raycast(rayOrigin, rayDir, raycastParams)
-                        local losClear = false
-                        if not rayResult then
-                            losClear = true
-                        else
-                            local hitInstance = rayResult.Instance
-                            if hitInstance:IsDescendantOf(victimChar) or hitInstance:IsDescendantOf(pChar) or hitInstance.Transparency > 0.7 or not hitInstance.CanCollide then
+                        if isPlausible then
+                            local pHead = pChar:FindFirstChild("Head") or pRoot
+                            local rayOrigin = pHead.Position
+                            local rayDir = (victimPos - rayOrigin)
+                            local rayResult = workspace:Raycast(rayOrigin, rayDir, raycastParams)
+                            local losClear = false
+                            if not rayResult then
                                 losClear = true
+                            else
+                                local hitInstance = rayResult.Instance
+                                if hitInstance:IsDescendantOf(victimChar) or hitInstance:IsDescendantOf(pChar) or hitInstance.Transparency > 0.7 or not hitInstance.CanCollide then
+                                    losClear = true
+                                end
                             end
-                        end
 
-                        if losClear then
-                            local score = 0
-                            score = score + math.clamp(dotAim * 50, 0, 50)
-                            score = score + math.clamp((1 - (dist / maxScanRadius)) * 40, 0, 40)
-                            if hasWeapon then score = score + 40 end
-                            if isMelee and dist <= 12 then score = score + 30 end
+                            if losClear then
+                                local score = 0
+                                score = score + math.clamp(dotAim * 50, 0, 50)
+                                score = score + math.clamp((1 - (dist / maxScanRadius)) * 40, 0, 40)
+                                if hasWeapon then score = score + 40 end
+                                if isMelee and dist <= 12 then score = score + 30 end
 
-                            -- Raise threshold to 80 to require stronger evidence before flagging
-                            if score >= 80 and score > bestScore then
-                                bestScore = score
-                                bestCandidate = p
+                                -- Require strong confidence (score >= 95) before registering heuristic threat
+                                if score >= 95 and score > bestScore then
+                                    bestScore = score
+                                    bestCandidate = p
+                                end
                             end
                         end
                     end
@@ -1835,6 +1986,13 @@ local function HookThreatHealth(char)
     local function handleLocalDeath()
         if diedHandled then return end
         diedHandled = true
+        if S._PrevCameraMode then
+            pcall(function() Player.CameraMode = S._PrevCameraMode end)
+            S._PrevCameraMode = nil
+        end
+        S._ExpertInstinctsActive = false
+        S._ExpertInstinctsAttacker = nil
+        S._ExpertInstinctsTargetChar = nil
         ResolveKiller(Player, char, humanoid, function(killer)
             if killer then
                 RegisterThreat(killer.Name, true)
@@ -1852,18 +2010,28 @@ local function HookThreatHealth(char)
             if newHealth <= 0 then
                 handleLocalDeath()
             else
+                local healthDrop = lastHealth - newHealth
                 local creator = (S.DeepThreatScanEnabled ~= false and ScanForKillerTag(char, humanoid))
                     or humanoid:FindFirstChild("creator") or humanoid:FindFirstChild("creatorTag")
                 local pObj = ExtractPlayerFromValue(creator)
                 local attackerName = nil
                 local attackerObj = nil
                 if pObj and pObj ~= Player then
-                    attackerName = pObj.Name
-                    attackerObj = pObj
-                    if S.ThreatDetectorEnabled then
-                        RegisterThreat(pObj.Name, false)
+                    local isTeammate = false
+                    if S.TeamCheck and Player and Player.Team and pObj.Team and pObj.Team == Player.Team then
+                        isTeammate = true
+                    elseif S.TeamCheck and Player and pObj.Neutral == false and Player.Neutral == false and pObj.TeamColor == Player.TeamColor then
+                        isTeammate = true
                     end
-                else
+                    if not isTeammate then
+                        attackerName = pObj.Name
+                        attackerObj = pObj
+                        if S.ThreatDetectorEnabled then
+                            RegisterThreat(pObj.Name, false)
+                        end
+                    end
+                elseif healthDrop >= 6 then
+                    -- Only run heuristic scan if health drop is substantial (>= 6 HP) to prevent false positives from fall/chip damage
                     local likelyAttacker = FindLikelyAttacker(char, Player)
                     if likelyAttacker then
                         attackerName = likelyAttacker.Name
@@ -1876,13 +2044,42 @@ local function HookThreatHealth(char)
 
                 -- v2.2.5 Expert Instincts: Instant counter-reaction camera snap & lock-on
                 if S.ExpertInstinctsEnabled and attackerObj and attackerObj.Character then
+                    -- Verify attacker is not a teammate
+                    local isTeammate = false
+                    if S.TeamCheck and Player and Player.Team and attackerObj.Team and attackerObj.Team == Player.Team then
+                        isTeammate = true
+                    elseif S.TeamCheck and Player and attackerObj.Neutral == false and Player.Neutral == false and attackerObj.TeamColor == Player.TeamColor then
+                        isTeammate = true
+                    end
+                    if isTeammate then
+                        lastHealth = newHealth
+                        return
+                    end
+
                     -- Instincts Inventory Defense Check: suppress lock if unarmed/fleeing
                     if S.InstinctsInventoryCheck and not HasDefendingWeapon() then
                         if S.DebugMode then
                             print("[TASFF Instincts] Suppressed counter-lock: No defending weapon found in inventory (fleeing).")
                         end
+                        lastHealth = newHealth
                         return
                     end
+
+                    -- Auto-Equip Defending Weapon if enabled
+                    if S.InstinctsAutoEquip then
+                        EquipDefendingWeapon()
+                    end
+
+                    -- Auto First-Person Camera if enabled
+                    if S.InstinctsFirstPersonCamera and Player then
+                        if not S._PrevCameraMode then
+                            S._PrevCameraMode = Player.CameraMode
+                        end
+                        pcall(function()
+                            Player.CameraMode = Enum.CameraMode.LockFirstPerson
+                        end)
+                    end
+
                     local aChar = attackerObj.Character
                     local aRoot = aChar:FindFirstChild("HumanoidRootPart")
                     local aHum = aChar:FindFirstChildOfClass("Humanoid")
@@ -2617,7 +2814,10 @@ local function GetScreenAnchor(model, root, aimPosition)
         addName(configuredPart)
     end
     for _, name in ipairs(S.VOSPriorityParts or {}) do
-        addName(name)
+        local subParts = VOS_PART_GROUPS[name] or { name }
+        for _, sp in ipairs(subParts) do
+            addName(sp)
+        end
     end
     for _, name in ipairs(SCREEN_ANCHOR_PARTS) do
         addName(name)
@@ -2990,18 +3190,26 @@ local function HookNeutralization(p)
                 local creator = (S.DeepThreatScanEnabled ~= false and ScanForKillerTag(char, hum))
                     or hum:FindFirstChild("creator") or hum:FindFirstChild("creatorTag")
                 local attacker = ExtractPlayerFromValue(creator)
-                -- Only fall back to heuristic scan if no creator tag exists AND damage is meaningful (≥5 HP)
-                -- to avoid false positives from chip damage, explosions, or environmental sources.
-                if not attacker and healthDrop >= 5 then
+                -- Only fall back to heuristic scan if no creator tag exists AND damage is substantial (≥12 HP)
+                -- to avoid false positives from chip damage, fall damage, or environmental sources across the map.
+                if not attacker and healthDrop >= 12 then
                     attacker = FindLikelyAttacker(char, p)
                 end
                 if attacker and attacker ~= p and attacker ~= Player then
-                    local victimIntel = S.IntelPlayers and S.IntelPlayers[p.Name]
-                    local victimIsPrio = table.find(S.PriorityPlayers or {}, p.Name) ~= nil
-                    local isThreatVictim = (victimIntel ~= nil) or victimIsPrio
-                    local skipThreat = (S.IgnoreThreatVictims ~= false and isThreatVictim)
-                    if not skipThreat then
-                        RegisterThreat(attacker.Name, false)
+                    local isTeammate = false
+                    if S.TeamCheck and Player and Player.Team and attacker.Team and attacker.Team == Player.Team then
+                        isTeammate = true
+                    elseif S.TeamCheck and Player and attacker.Neutral == false and Player.Neutral == false and attacker.TeamColor == Player.TeamColor then
+                        isTeammate = true
+                    end
+                    if not isTeammate then
+                        local victimIntel = S.IntelPlayers and S.IntelPlayers[p.Name]
+                        local victimIsPrio = table.find(S.PriorityPlayers or {}, p.Name) ~= nil
+                        local isThreatVictim = (victimIntel ~= nil) or victimIsPrio
+                        local skipThreat = (S.IgnoreThreatVictims ~= false and isThreatVictim)
+                        if not skipThreat then
+                            RegisterThreat(attacker.Name, false)
+                        end
                     end
                 end
             end
@@ -3373,28 +3581,45 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 end)
                 -- v2.1.0: track new target lock for session stats
                 local prev = S.CurrentTarget
-                if S._ExpertInstinctsActive and (now < (S._ExpertInstinctsExpiry or 0)) and S._ExpertInstinctsTargetChar and S._ExpertInstinctsTargetChar.Parent then
-                    local aChar = S._ExpertInstinctsTargetChar
-                    local aHum = aChar:FindFirstChildOfClass("Humanoid")
-                    local aRoot = aChar:FindFirstChild("HumanoidRootPart")
-                    if aHum and aHum.Health > 0 and aRoot then
-                        local aimPos = (aChar:FindFirstChild(TargetPart) or aChar:FindFirstChild("Head") or aRoot).Position
-                        S.CurrentTarget = {
-                            Instance = aChar,
-                            Root = aRoot,
-                            Name = S._ExpertInstinctsAttacker and S._ExpertInstinctsAttacker.Name or aChar.Name,
-                            IsPlayer = true,
-                            Player = S._ExpertInstinctsAttacker,
-                            ScreenAnchor = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2),
-                            DistFromCenter = 0,
-                            Distance = (aimPos - Camera.CFrame.Position).Magnitude,
-                            Position = aimPos,
-                            ScreenPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2),
-                            Health = aHum.Health,
-                            TeamColor = S._ExpertInstinctsAttacker and S._ExpertInstinctsAttacker.TeamColor and S._ExpertInstinctsAttacker.TeamColor.Color or Color3.fromRGB(255, 60, 60)
-                        }
+                if S._ExpertInstinctsActive then
+                    if (now < (S._ExpertInstinctsExpiry or 0)) and S._ExpertInstinctsTargetChar and S._ExpertInstinctsTargetChar.Parent then
+                        local aChar = S._ExpertInstinctsTargetChar
+                        local aHum = aChar:FindFirstChildOfClass("Humanoid")
+                        local aRoot = aChar:FindFirstChild("HumanoidRootPart")
+                        if aHum and aHum.Health > 0 and aRoot then
+                            local aimPos = (aChar:FindFirstChild(TargetPart) or aChar:FindFirstChild("Head") or aRoot).Position
+                            S.CurrentTarget = {
+                                Instance = aChar,
+                                Root = aRoot,
+                                Name = S._ExpertInstinctsAttacker and S._ExpertInstinctsAttacker.Name or aChar.Name,
+                                IsPlayer = true,
+                                Player = S._ExpertInstinctsAttacker,
+                                ScreenAnchor = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2),
+                                DistFromCenter = 0,
+                                Distance = (aimPos - Camera.CFrame.Position).Magnitude,
+                                Position = aimPos,
+                                ScreenPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2),
+                                Health = aHum.Health,
+                                TeamColor = S._ExpertInstinctsAttacker and S._ExpertInstinctsAttacker.TeamColor and S._ExpertInstinctsAttacker.TeamColor.Color or Color3.fromRGB(255, 60, 60)
+                            }
+                        else
+                            S._ExpertInstinctsActive = false
+                            S._ExpertInstinctsAttacker = nil
+                            S._ExpertInstinctsTargetChar = nil
+                            if S._PrevCameraMode then
+                                pcall(function() Player.CameraMode = S._PrevCameraMode end)
+                                S._PrevCameraMode = nil
+                            end
+                            S.CurrentTarget = filtered[1]
+                        end
                     else
                         S._ExpertInstinctsActive = false
+                        S._ExpertInstinctsAttacker = nil
+                        S._ExpertInstinctsTargetChar = nil
+                        if S._PrevCameraMode then
+                            pcall(function() Player.CameraMode = S._PrevCameraMode end)
+                            S._PrevCameraMode = nil
+                        end
                         S.CurrentTarget = filtered[1]
                     end
                 else
@@ -3686,13 +3911,19 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 PA = PA + (maxPA - PA) * distFactor
             end
             if TP=="Visible On Screen" then
-                if S.LastCustomTargetData and S.LastCustomTargetData.Part and S.LastCustomTargetData.Part.Parent and S.LastCustomTargetData.Part:IsDescendantOf(CT.Instance) then
-                    local lvPart = S.LastCustomTargetData.Part
+                local lvPart = S.LastCustomTargetData and S.LastCustomTargetData.Part
+                if not (lvPart and lvPart.Parent and lvPart:IsDescendantOf(CT.Instance)) then
+                    lvPart = FindVisibleOnScreenPart(CT.Instance, cachedIgnoreList)
+                    if lvPart then
+                        S.LastCustomTargetData = {Part = lvPart, Position = lvPart.Position}
+                    end
+                end
+                if lvPart and lvPart.Parent then
                     local screenPoint, onScreen = Camera:WorldToViewportPoint(lvPart.Position)
                     if onScreen and IsVisibleCachedWrapper(CT.Instance, lvPart.Name, cachedIgnoreList) then
                         TWP = lvPart.Position + (lvPart.AssemblyLinearVelocity * PA)
                     end
-                else TWP=nil end
+                end
             else
                 local bn=TP
                 if Mode=="Legit (Camera)" or Mode=="Advanced Legit (Mouse)" then
@@ -3774,17 +4005,27 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 
             -- Expert Instincts: update last-known-pos each frame while attacker is visible,
             -- then fall back to it when attacker hides (TWP == nil but instincts still active).
-            if S._ExpertInstinctsActive and tick() < (S._ExpertInstinctsExpiry or 0) then
-                local aChar = S._ExpertInstinctsTargetChar
-                if aChar then
-                    local liveRoot = aChar:FindFirstChild("HumanoidRootPart")
-                    local livePart = (S.TargetPart and aChar:FindFirstChild(S.TargetPart)) or aChar:FindFirstChild("Head") or liveRoot
-                    if livePart then
-                        S._ExpertInstinctsLastKnownPos = livePart.Position
+            if S._ExpertInstinctsActive then
+                if tick() >= (S._ExpertInstinctsExpiry or 0) then
+                    S._ExpertInstinctsActive = false
+                    S._ExpertInstinctsAttacker = nil
+                    S._ExpertInstinctsTargetChar = nil
+                    if S._PrevCameraMode then
+                        pcall(function() Player.CameraMode = S._PrevCameraMode end)
+                        S._PrevCameraMode = nil
                     end
-                end
-                if TWP == nil and S._ExpertInstinctsLastKnownPos then
-                    TWP = S._ExpertInstinctsLastKnownPos
+                else
+                    local aChar = S._ExpertInstinctsTargetChar
+                    if aChar then
+                        local liveRoot = aChar:FindFirstChild("HumanoidRootPart")
+                        local livePart = (S.TargetPart and aChar:FindFirstChild(S.TargetPart)) or aChar:FindFirstChild("Head") or liveRoot
+                        if livePart then
+                            S._ExpertInstinctsLastKnownPos = livePart.Position
+                        end
+                    end
+                    if TWP == nil and S._ExpertInstinctsLastKnownPos then
+                        TWP = S._ExpertInstinctsLastKnownPos
+                    end
                 end
             end
 
@@ -3829,6 +4070,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                         S._ExpertInstinctsActive = false
                         S._ExpertInstinctsAttacker = nil
                         S._ExpertInstinctsTargetChar = nil
+                        if S._PrevCameraMode then
+                            pcall(function() Player.CameraMode = S._PrevCameraMode end)
+                            S._PrevCameraMode = nil
+                        end
                     end
                 end
                 if Mode=="Legit (Camera)" then

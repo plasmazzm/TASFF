@@ -426,6 +426,8 @@ local function BuildStatusContent(category)
         check("Threat Detector",        S.ThreatDetectorEnabled)
         check("Universal Damage Track", S.OtherPlayersDamageTracking)
         check("Expert Instincts",       S.ExpertInstinctsEnabled)
+        check("Instincts Auto-Equip",   S.InstinctsAutoEquip)
+        check("Instincts First-Person", S.InstinctsFirstPersonCamera)
         check("Nemesis System",         S.NemesisEnabled)
         check("Click-to-Mark",          S.ClickToMarkEnabled)
         check("Focus Mode ESP",         S.FocusMode)
@@ -643,6 +645,41 @@ MainTab:CreateDropdown({
         local opt = UnpackOption(v, "Head")
         S.TargetPart = opt
         S.ActivePartName = (opt ~= "Visible On Screen") and opt or "Head"
+    end
+})
+MainTab:CreateDropdown({
+    Name            = "Visible On Screen Priorities",
+    Options         = {"Head", "Torso", "Right and Left Arm", "Leg"},
+    CurrentOption   = (type(S.VOSPriorityParts) == "table" and #S.VOSPriorityParts > 0) and S.VOSPriorityParts or {"Head", "Torso"},
+    MultipleOptions = true,
+    Flag            = "VOSPriorityParts",
+    Callback        = function(v)
+        local selected = {}
+        if type(v) == "table" then
+            if #v > 0 then
+                for _, name in ipairs(v) do
+                    if type(name) == "string" and name ~= "" and not table.find(selected, name) then
+                        table.insert(selected, name)
+                    end
+                end
+            else
+                for k, val in pairs(v) do
+                    if type(val) == "boolean" and val then
+                        if type(k) == "string" and k ~= "" and not table.find(selected, k) then
+                            table.insert(selected, k)
+                        end
+                    elseif type(val) == "string" and val ~= "" and not table.find(selected, val) then
+                        table.insert(selected, val)
+                    end
+                end
+            end
+        elseif type(v) == "string" and v ~= "" then
+            table.insert(selected, v)
+        end
+        if #selected == 0 then
+            selected = {"Head", "Torso"}
+        end
+        S.VOSPriorityParts = selected
     end
 })
 MainTab:CreateToggle({Name = "Randomize Hitboxes (Legit Variance)", CurrentValue = S.RandomizeHitboxEnabled, Flag = "RandomizeHitbox", Callback = function(v)
@@ -1056,7 +1093,7 @@ IntelTab:CreateDropdown({
     CurrentOption = {S.PriorityBehavior or "Boost"},
     Flag          = "PriorityBehavior",
     Callback      = function(v)
-        local val = type(v) == "table" and v[1] or v
+        local val = UnpackOption(v, "Boost")
         S.PriorityBehavior = val
         S.StrictPrioritize = (val == "Exclusive")
     end
@@ -1131,6 +1168,12 @@ IntelTab:CreateDropdown({
 })
 IntelTab:CreateToggle({Name = "Expert Instincts Weapon Check (Flee When Unarmed)", CurrentValue = S.InstinctsInventoryCheck, Flag = "InstinctsInventoryCheck", Callback = function(v)
     S.InstinctsInventoryCheck = v
+end})
+IntelTab:CreateToggle({Name = "Expert Instincts Auto-Equip Weapon", CurrentValue = S.InstinctsAutoEquip, Flag = "InstinctsAutoEquip", Callback = function(v)
+    S.InstinctsAutoEquip = v
+end})
+IntelTab:CreateToggle({Name = "Expert Instincts Auto First-Person Camera", CurrentValue = S.InstinctsFirstPersonCamera, Flag = "InstinctsFirstPersonCamera", Callback = function(v)
+    S.InstinctsFirstPersonCamera = v
 end})
 
 local SelectedInstinctsBlacklistTool = nil
@@ -1579,7 +1622,7 @@ PresetsTab:CreateButton({
             S.SavedPresets[PresetInputName] = {
                 -- Core & Combat
                 MasterEnabled = S.MasterEnabled, TargetingEnabled = S.TargetingEnabled, Mode = S.Mode,
-                TargetPart = S.TargetPart, PriorityMode = S.PriorityMode, VitalityMode = S.VitalityMode,
+                TargetPart = S.TargetPart, VOSPriorityParts = S.VOSPriorityParts, PriorityMode = S.PriorityMode, VitalityMode = S.VitalityMode,
                 TargetNearCenter = S.TargetNearCenter, Smoothness = S.Smoothness, PredictionAmount = S.PredictionAmount,
                 SilentAimEnabled = S.SilentAimEnabled, DynamicRecoilEnabled = S.DynamicRecoilEnabled,
                 RandomizeHitboxEnabled = S.RandomizeHitboxEnabled, TargetSwitchDelayEnabled = S.TargetSwitchDelayEnabled,
@@ -1617,7 +1660,10 @@ PresetsTab:CreateButton({
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
                 InstinctsMode = S.InstinctsMode,
                 InstinctsInventoryCheck = S.InstinctsInventoryCheck,
+                InstinctsAutoEquip = S.InstinctsAutoEquip,
+                InstinctsFirstPersonCamera = S.InstinctsFirstPersonCamera,
                 AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
+                PriorityBehavior = S.PriorityBehavior or (S.StrictPrioritize and "Exclusive" or "Boost"),
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 FoliageConcealmentCheck = S.FoliageConcealmentCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
@@ -1663,7 +1709,7 @@ PresetDropdownRef = PresetsTab:CreateDropdown({
 
 local STO_FLAG = {
     MasterEnabled = "MasterSwitch", TargetingEnabled = "TargetSystemToggle", Mode = "AimMethod",
-    AimbotKeybind = "AimbotKeybind", TargetPart = "TargetPart", PriorityMode = "PriorityMode",
+    AimbotKeybind = "AimbotKeybind", TargetPart = "TargetPart", VOSPriorityParts = "VOSPriorityParts", PriorityMode = "PriorityMode",
     VitalityMode = "VitalityMode", TargetNearCenter = "TargetNearCenter", Smoothness = "SmoothSpeed",
     PredictionAmount = "PredIntense", SilentAimEnabled = "SilentAimEnabled", DynamicRecoilEnabled = "DynamicRecoil",
     RandomizeHitboxEnabled = "RandomizeHitbox", TargetSwitchDelayEnabled = "TargetSwitchDelay", SwitchDelayMs = "SwitchDelayMs",
@@ -1683,7 +1729,7 @@ local STO_FLAG = {
     KeyTriggerbotEnabled = "KeyTriggerbotToggle", KeyTriggerMode = "KeyTriggerMode", MeleeModeEnabled = "EnableMeleeMode",
     MeleeDetectionRange = "MeleeRange", MeleeClickInterval = "MeleeClickInterval", ThreatDetectorEnabled = "ThreatDetector",
     NemesisEnabled = "NemesisEnabled", ThreatTimeout = "ThreatTimeout", BlacklistExpiredThreats = "BlacklistExpiredThreats",
-    ClickToMarkEnabled = "ClickToMark", MarkMethod = "MarkMethod", StrictPrioritize = "StrictPrioritize", WallCheck = "WallCheck",
+    ClickToMarkEnabled = "ClickToMark", MarkMethod = "MarkMethod", PriorityBehavior = "PriorityBehavior", StrictPrioritize = "StrictPrioritize", WallCheck = "WallCheck",
     KillCountThreatEnabled = "KillCountThreat", KillFeedEnabled = "KillFeedEnabled", KillsBeforeThreat = "KillsBeforeThreat",
     ContinuousKillsPermanent = "ContinuousKillsPermanent", KillsBeforeNemesis = "KillsBeforeNemesis", ThreatNeutralizationEnabled = "ThreatNeutralization",
     NoCollisionCheck = "NoCollisionCheck", TransparencyCheck = "TransparencyCheck", TransparencyThreshold = "TransparencyThreshold",
@@ -1702,6 +1748,7 @@ local STO_FLAG = {
     EnvironmentalESPMaxParts = "EnvironmentalESPMaxParts", FoliageConcealmentCheck = "FoliageConcealmentCheck",
     OtherPlayersDamageTracking = "OtherPlayersDamageTracking", ExpertInstinctsEnabled = "ExpertInstinctsEnabled",
     ExpertInstinctsIntensity = "ExpertInstinctsIntensity", InstinctsInventoryCheck = "InstinctsInventoryCheck",
+    InstinctsAutoEquip = "InstinctsAutoEquip", InstinctsFirstPersonCamera = "InstinctsFirstPersonCamera",
     InstinctsMode = "InstinctsMode",
     AutoUpdateCheckerEnabled = "AutoUpdateChecker",
     RapidModeCycleEnabled = "RapidModeCycle",
@@ -1712,7 +1759,7 @@ local STO_FLAG = {
 }
 
 local DROPDOWN_FLAGS = {
-    AimMethod = true, TargetPart = true, PriorityMode = true,
+    AimMethod = true, TargetPart = true, VOSPriorityParts = true, PriorityMode = true,
     VitalityMode = true, VisualMode = true, SnaplineOrigin = true,
     AimReferenceMode = true, CrossStyle = true, TriggerbotClickMode = true,
     ClickMethod = true, KeyTriggerMode = true, MarkMethod = true,
@@ -1762,6 +1809,29 @@ local function LoadPresetByName(presetName, silent)
     -- 4. Ensure Mode is always valid
     if type(S.Mode) ~= "string" or S.Mode == "" then
         S.Mode = "Legit (Camera)"
+    end
+
+    -- 5. Ensure VOSPriorityParts is always valid
+    if type(S.VOSPriorityParts) ~= "table" or #S.VOSPriorityParts == 0 then
+        S.VOSPriorityParts = {"Head", "Torso"}
+    end
+
+    -- 6. Ensure PriorityBehavior & StrictPrioritize synchronization
+    if S.PriorityBehavior then
+        S.StrictPrioritize = (S.PriorityBehavior == "Exclusive")
+    elseif S.StrictPrioritize ~= nil then
+        S.PriorityBehavior = S.StrictPrioritize and "Exclusive" or "Boost"
+    else
+        S.PriorityBehavior = "Boost"
+        S.StrictPrioritize = false
+    end
+    if Rayfield and Rayfield.Flags then
+        if Rayfield.Flags["PriorityBehavior"] then
+            pcall(function() Rayfield.Flags["PriorityBehavior"]:Set({S.PriorityBehavior}) end)
+        end
+        if Rayfield.Flags["StrictPrioritize"] then
+            pcall(function() Rayfield.Flags["StrictPrioritize"]:Set(S.StrictPrioritize) end)
+        end
     end
 
     -- 5. Invalidate runtime targeting & visibility caches so the new preset settings apply instantly
@@ -1892,7 +1962,7 @@ PresetsTab:CreateButton({
             S.SavedPresets[selected] = {
                 -- Core & Combat
                 MasterEnabled = S.MasterEnabled, TargetingEnabled = S.TargetingEnabled, Mode = S.Mode,
-                TargetPart = S.TargetPart, PriorityMode = S.PriorityMode, VitalityMode = S.VitalityMode,
+                TargetPart = S.TargetPart, VOSPriorityParts = S.VOSPriorityParts, PriorityMode = S.PriorityMode, VitalityMode = S.VitalityMode,
                 TargetNearCenter = S.TargetNearCenter, Smoothness = S.Smoothness, PredictionAmount = S.PredictionAmount,
                 SilentAimEnabled = S.SilentAimEnabled, DynamicRecoilEnabled = S.DynamicRecoilEnabled,
                 RandomizeHitboxEnabled = S.RandomizeHitboxEnabled, TargetSwitchDelayEnabled = S.TargetSwitchDelayEnabled,
@@ -1930,7 +2000,10 @@ PresetsTab:CreateButton({
                 OtherPlayersDamageTracking = S.OtherPlayersDamageTracking, ExpertInstinctsEnabled = S.ExpertInstinctsEnabled, ExpertInstinctsIntensity = S.ExpertInstinctsIntensity,
                 InstinctsMode = S.InstinctsMode,
                 InstinctsInventoryCheck = S.InstinctsInventoryCheck,
+                InstinctsAutoEquip = S.InstinctsAutoEquip,
+                InstinctsFirstPersonCamera = S.InstinctsFirstPersonCamera,
                 AutoUpdateCheckerEnabled = S.AutoUpdateCheckerEnabled,
+                PriorityBehavior = S.PriorityBehavior or (S.StrictPrioritize and "Exclusive" or "Boost"),
                 StrictPrioritize = S.StrictPrioritize, WallCheck = S.WallCheck, NoCollisionCheck = S.NoCollisionCheck,
                 FoliageConcealmentCheck = S.FoliageConcealmentCheck,
                 TransparencyCheck = S.TransparencyCheck, TransparencyThreshold = S.TransparencyThreshold, DecalsCheck = S.DecalsCheck,
@@ -2053,6 +2126,8 @@ local function BuildPresetStatusContent(profileName, category)
         if data.InstinctsMode then
             contentLines[#contentLines + 1] = "  Instincts Mode: " .. tostring(data.InstinctsMode)
         end
+        check("Instincts Auto-Equip",   data.InstinctsAutoEquip)
+        check("Instincts First-Person", data.InstinctsFirstPersonCamera)
         check("Nemesis System",         data.NemesisEnabled)
         check("Click-to-Mark",          data.ClickToMarkEnabled)
         check("Focus Mode ESP",         data.FocusMode)
@@ -3182,7 +3257,7 @@ local booleanSettings = {
     "HumanTremorEnabled", "TargetInertiaTracking", "HitboxOffsetDrift",
     "IgnoreThreatVictims", "OOFArrowsPriorityOnly",
     "DistancePredictionAdjustEnabled", "OtherPlayersDamageTracking", "ExpertInstinctsEnabled",
-    "AutoUpdateCheckerEnabled", "InstinctsInventoryCheck",
+    "AutoUpdateCheckerEnabled", "InstinctsInventoryCheck", "InstinctsAutoEquip", "InstinctsFirstPersonCamera",
     "CoverAnticipationEnabled", "FoliageConcealmentCheck",
     "EnvironmentalESPEnabled", "EnvironmentalESPPriorityOnly",
     "EnvironmentalESPDistanceFade", "EnvironmentalESPAutoScaling",
@@ -3269,7 +3344,11 @@ for _, key in ipairs({"BlacklistedPlayers", "PriorityPlayers", "ToolBlacklist", 
                 correctedSettings = true
             end
         end
-        S[key] = clean
+        if key == "VOSPriorityParts" and #clean == 0 then
+            S[key] = {"Head", "Torso"}
+        else
+            S[key] = clean
+        end
     end
 end
 

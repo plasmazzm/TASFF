@@ -135,10 +135,9 @@ local function Notify(options)
         rayfieldOk = ok
     end
 
-    -- Secondary fallback: for important/bypass notifications when Rayfield is closed or failed,
-    -- surface through the native Roblox HUD notification so critical alerts (preset loaded, panic, etc.)
-    -- are always visible regardless of UI window state.
-    if (not rayfieldOk or isBypass) and isBypass then
+    -- Secondary fallback: when Rayfield notification fails or is unavailable,
+    -- surface through the native Roblox HUD notification as a fail-safe.
+    if not rayfieldOk then
         pcall(function()
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title    = mat.Title,

@@ -353,7 +353,7 @@ _G.TASFF_State = {
     CalibrationOffsetX          = 0,
     CalibrationOffsetY          = 0,
 
-    -- // ── Overlay & Interface Modifiers (v2.3.0) ──────────────── // --
+    -- // ── Overlay & Interface Modifiers (v2.3.0+) ─────────────── // --
     HUDStripEnabled             = true,      -- persistent HUD strip at top of screen
     RadarEnabled                = false,     -- threat radar mini-map overlay
     SidebarEnabled              = true,      -- notification history feed
@@ -372,6 +372,30 @@ _G.TASFF_State = {
     SmoothnessX                 = 0.1,
     SmoothnessY                 = 0.1,
     BlatantSnapSpeed            = 15,
+
+    -- // ── Modern Suite Additions (v2.3.0+) ───────────────────── // --
+    AudioFeedbackEnabled        = true,      -- tactile UI click / toggle sound effects
+    AudioFeedbackVolume         = 0.5,       -- volume scale (0.0 to 1.0)
+    TargetCardEnabled           = true,      -- floating target inspection hologram card
+    CompactHUDEnabled           = false,     -- compact floating pill when main UI is closed
+    KeystrokesEnabled           = false,     -- live combat keystroke visualizer widget
+    SparklineGraphEnabled       = true,      -- real-time FPS/ping sparkline in HUD strip
+    LiveFOVPulseEnabled         = true,      -- temporary FOV pulse while dragging slider
+    HUDStripPosX                = nil,       -- custom draggable X offset
+    HUDStripPosY                = nil,       -- custom draggable Y offset
+    RadarPosX                   = nil,       -- custom draggable radar X offset
+    RadarPosY                   = nil,       -- custom draggable radar Y offset
+    TargetCardPosX              = nil,
+    TargetCardPosY              = nil,
+    KeystrokesPosX              = nil,
+    KeystrokesPosY              = nil,
+    CompactHUDPosX              = nil,
+    CompactHUDPosY              = nil,
+    NotificationDrawerOpen      = false,
+    NotificationHistory         = {},        -- persistent notification drawer entries
+    SessionStartTime            = tick(),
+    SessionTargetsNeutralized   = 0,
+    SessionTotalLockTime        = 0,
 
     -- // ── Presets ────────────────────────────────────────────── // --
     SavedPresets                = {},

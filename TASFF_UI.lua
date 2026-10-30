@@ -305,12 +305,8 @@ local HomeTab = Window:CreateTab("Home", "home")
 
 HomeTab:CreateSection("Welcome")
 HomeTab:CreateParagraph({
-    Title   = "TASFF v2.3.0 — The Aimbot Script Final Form",
-    Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
-           .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
-           .. "Controls: " .. tostring(S.ToggleCount or 109) .. " Toggles | " .. tostring(S.SliderCount or 40) .. " Sliders | " .. tostring(S.DropdownCount or 44) .. " Dropdowns | " .. tostring(S.ButtonCount or 36) .. " Buttons | " .. tostring(S.ParagraphCount or 73) .. " Paragraphs\n"
-           .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI\n"
-           .. "Access Tier: " .. (S.KeyVerified and "Full Access (Key Active)" or "Free Tier")
+    Title   = "Operator: " .. (Player and Player.DisplayName or "Operator") .. " (@" .. (Player and Player.Name or "User") .. ")",
+    Content = "Pipeline active: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or 123) .. " features  |  Tier: " .. (S.KeyVerified and "Full Access (Key Active)" or "Free Tier") .. "  |  Engine: 4-Slot Pipeline"
 })
 
 HomeTab:CreateSection("Server Info")
@@ -337,11 +333,8 @@ task.spawn(function()
         end)
         pcall(function()
             serverInfoLabel:Set({
-                Title   = "Game Server",
-                Content = string.format(
-                    "Game    : %s\nPlace   : %d\nJob     : %s...\nPlayers : %d / %d",
-                    gameName, game.PlaceId, serverId, playerCount, maxPlayers
-                )
+                Title   = "Game Server (" .. tostring(playerCount) .. "/" .. tostring(maxPlayers) .. " Players)",
+                Content = string.format("%s  |  Place: %d  |  Server: %s", gameName, game.PlaceId, serverId)
             })
         end)
     end
@@ -355,8 +348,8 @@ end)
 
 HomeTab:CreateSection("Quick Feature Status")
 HomeTab:CreateParagraph({
-    Title   = "How to Read",
-    Content = "Select a category from the dropdown below. Enabled features appear first ([V]), then disabled ([X]). Changes made in other tabs are reflected on next category switch."
+    Title   = "Feature Overview",
+    Content = "Active features are marked [V], inactive [X]. Select a category from the dropdown below."
 })
 
 local function BuildStatusContent(category)

@@ -3428,7 +3428,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 
     local screenCenter  = GetAimPosition()
     local shouldShowFOV = S.ShowFOV and not S.InvisibleFOV
-        and MasterEnabled and AimbotActive and TargetingEnabled
+        and ((MasterEnabled and AimbotActive and TargetingEnabled) or (S.LiveFOVPulseActive and S.LiveFOVPulseEnabled ~= false))
         and not IsHiddenFromRecording("FOV Circle")   -- Cloak: suppress when hidden from recording
     if S.FOVCircle then
         if shouldShowFOV then

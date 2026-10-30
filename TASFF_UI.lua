@@ -48,7 +48,7 @@ local TASFFTheme = TASFFEnv.Theme or {}
 -- controls will display the lock prefix. In the key build this is
 -- identical behavior — the UI just shows the name once verified.
 local function KeyName(name)
-    return "🔒 " .. name
+    return "[KEY] " .. name
 end
 
 -- Forward-declared references populated in their respective sections
@@ -351,6 +351,13 @@ HomeTab:CreateParagraph({
     Title   = "Feature Overview",
     Content = "Active features are marked [V], inactive [X]. Select a category from the dropdown below."
 })
+
+-- UI Element Breakdown paragraph (counts populated by TASFF_Theme PatchRayfieldDOM)
+local FeatureOverviewParagraph = HomeTab:CreateParagraph({
+    Title   = "UI Element Breakdown",
+    Content = "Scanning elements..."
+})
+S.FeatureOverviewParagraph = FeatureOverviewParagraph
 
 local function BuildStatusContent(category)
     local on, off = {}, {}
@@ -2686,7 +2693,7 @@ local function UpdateWindowTitle(themeName)
     local topbar = main and main:FindFirstChild("Topbar")
     local title = topbar and topbar:FindFirstChild("Title")
     if title and title:IsA("TextLabel") then
-        title.Text = "TASFF 2.2.6 " .. themeName
+        title.Text = "TASFF " .. (S.CurrentVersion or "2.3.0") .. " - " .. themeName
     end
 end
 local function ColorFromHex(hex)

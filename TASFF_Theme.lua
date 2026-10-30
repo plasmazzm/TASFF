@@ -240,12 +240,59 @@ local LocalPlayer = Players.LocalPlayer
 local OverlayGui = Instance.new("ScreenGui")
 OverlayGui.Name = "TASFF_OverlayGui"
 OverlayGui.ResetOnSpawn = false
+OverlayGui.IgnoreGuiInset = true
 OverlayGui.DisplayOrder = 999999999
-pcall(function()
-    if syn and syn.protect_gui then syn.protect_gui(OverlayGui); OverlayGui.Parent = CoreGui
-    elseif gethui then OverlayGui.Parent = gethui()
-    else OverlayGui.Parent = CoreGui end
-end)
+OverlayGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local function EnsureOverlayParented()
+    if OverlayGui.Parent and OverlayGui.Parent.Parent then return true end
+
+    -- 1. Try gethui()
+    pcall(function()
+        if typeof(gethui) == "function" then
+            local h = gethui()
+            if h then OverlayGui.Parent = h end
+        end
+    end)
+    if OverlayGui.Parent then return true end
+
+    -- 2. Try syn.protect_gui + CoreGui
+    pcall(function()
+        if syn and typeof(syn.protect_gui) == "function" then
+            syn.protect_gui(OverlayGui)
+            OverlayGui.Parent = CoreGui
+        end
+    end)
+    if OverlayGui.Parent then return true end
+
+    -- 3. Try CoreGui directly
+    pcall(function()
+        OverlayGui.Parent = CoreGui
+    end)
+    if OverlayGui.Parent then return true end
+
+    -- 4. Try CoreGui.RobloxGui
+    pcall(function()
+        local rg = CoreGui:FindFirstChild("RobloxGui")
+        if rg then OverlayGui.Parent = rg end
+    end)
+    if OverlayGui.Parent then return true end
+
+    -- 5. Fallback to LocalPlayer.PlayerGui
+    pcall(function()
+        local lp = Players.LocalPlayer or game:GetService("Players").LocalPlayer
+        local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
+        if pg then OverlayGui.Parent = pg end
+    end)
+    return (OverlayGui.Parent ~= nil)
+end
+
+EnsureOverlayParented()
+if OverlayGui.Parent then
+    print("[TASFF Theme] Overlay ScreenGui mounted to " .. tostring(OverlayGui.Parent.Name))
+else
+    warn("[TASFF Theme] Warning: Could not parent Overlay ScreenGui.")
+end
 
 -- ── 1. Persistent HUD Strip ──────────────────────────────────────
 local HUDStrip = Instance.new("Frame")
@@ -502,42 +549,67 @@ TooltipBody.TextXAlignment = Enum.TextXAlignment.Left
 TooltipBody.TextYAlignment = Enum.TextYAlignment.Top
 
 local function ShowTooltip(ctrlName, desc, mousePos)
+    if not (OverlayGui and OverlayGui.Parent) then EnsureOverlayParented() end
     TooltipTitle.Text = ctrlName
     TooltipBody.Text = desc
-    TooltipFrame.Position = UDim2.new(0, mousePos.X + 15, 0, mousePos.Y + 10)
+    local cam = workspace.CurrentCamera
+    local vp = (cam and cam.ViewportSize) or Vector2.new(1920, 1080)
+    local posX = math.clamp(mousePos.X + 15, 10, math.max(10, vp.X - 250))
+    local posY = math.clamp(mousePos.Y + 10, 10, math.max(10, vp.Y - 65))
+    TooltipFrame.Position = UDim2.new(0, posX, 0, posY)
     TooltipFrame.Visible = true
 end
 local function HideTooltip()
     TooltipFrame.Visible = false
 end
+
 -- ── 5. Rayfield DOM Tree Patch Engine ────────────────────────────
 local function FindRayfieldGui()
-    local candidates = {}
+    local containers = {}
     pcall(function()
         if typeof(gethui) == "function" then
             local h = gethui()
-            if h then table.insert(candidates, h) end
+            if h then table.insert(containers, h) end
         end
     end)
-    local ok1, cg = pcall(function() return game:GetService("CoreGui") end)
-    if ok1 and cg then table.insert(candidates, cg) end
-    local ok2, pg = pcall(function() return Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui") end)
-    if ok2 and pg then table.insert(candidates, pg) end
+    pcall(function()
+        local cg = game:GetService("CoreGui")
+        if cg then
+            table.insert(containers, cg)
+            local rg = cg:FindFirstChild("RobloxGui")
+            if rg then table.insert(containers, rg) end
+        end
+    end)
+    pcall(function()
+        local lp = Players.LocalPlayer or game:GetService("Players").LocalPlayer
+        local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
+        if pg then table.insert(containers, pg) end
+    end)
 
-    for _, container in ipairs(candidates) do
+    for _, container in ipairs(containers) do
+        -- 1. Try finding Main frame recursively
+        local main = container:FindFirstChild("Main", true)
+        if main and main:IsA("GuiObject") and main:FindFirstChild("Topbar") and main:FindFirstChild("Elements") then
+            local sg = main:FindFirstAncestorWhichIsA("ScreenGui")
+            if sg and sg.Name ~= "TASFF_OverlayGui" and sg.Name ~= "TASFF_Overlay" then
+                return sg
+            end
+            if main.Parent and main.Parent:IsA("ScreenGui") then return main.Parent end
+        end
+        -- 2. Try by direct child
         for _, child in ipairs(container:GetChildren()) do
-            if child:IsA("ScreenGui") and child.Name ~= "TASFF_OverlayGui" then
-                if child:FindFirstChild("Main") and child.Main:FindFirstChild("Topbar") and child.Main:FindFirstChild("Elements") then
+            if child:IsA("ScreenGui") and child.Name ~= "TASFF_OverlayGui" and child.Name ~= "TASFF_Overlay" then
+                local m = child:FindFirstChild("Main")
+                if m and m:IsA("GuiObject") and m:FindFirstChild("Topbar") and m:FindFirstChild("Elements") then
                     return child
                 end
             end
         end
-    end
-    for _, container in ipairs(candidates) do
+        -- 3. Try by name
         for _, child in ipairs(container:GetChildren()) do
-            if child:IsA("ScreenGui") and child.Name ~= "TASFF_OverlayGui" then
+            if child:IsA("ScreenGui") and child.Name ~= "TASFF_OverlayGui" and child.Name ~= "TASFF_Overlay" then
                 local n = child.Name:lower()
-                if n:find("rayfield") or n:find("sirius") or n:find("tasff") then
+                if n:find("rayfield") or n:find("sirius") then
                     return child
                 end
             end
@@ -617,12 +689,15 @@ local function PatchRayfieldDOM()
         resizeHandle.Name = "ResizeHandle"
         resizeHandle.Size = UDim2.new(0, 18, 0, 18)
         resizeHandle.Position = UDim2.new(1, -18, 1, -18)
-        resizeHandle.BackgroundTransparency = 1
+        resizeHandle.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+        resizeHandle.BackgroundTransparency = 0.4
+        resizeHandle.BorderSizePixel = 0
         resizeHandle.Font = Enum.Font.GothamBold
         resizeHandle.TextSize = 12
-        resizeHandle.TextColor3 = Color3.fromRGB(150, 150, 160)
+        resizeHandle.TextColor3 = Color3.fromRGB(180, 180, 200)
         resizeHandle.Text = "⇲"
         resizeHandle.ZIndex = 50
+        Instance.new("UICorner", resizeHandle).CornerRadius = UDim.new(0, 4)
         resizeHandle.Parent = mainFrame
 
         local _resizing = false
@@ -730,6 +805,7 @@ local function PatchRayfieldDOM()
     end
 
     -- 4. Walk Elements and inject Section collapse, Tooltips, and Live Dots
+    local hookedTooltips = 0
     for _, desc in ipairs(mainFrame:GetDescendants()) do
         -- Section Header Collapse/Expand Injection
         if desc:IsA("GuiObject") and (desc.Name == "SectionTitle" or desc.Name:find("Section")) then
@@ -778,6 +854,7 @@ local function PatchRayfieldDOM()
                 local hookTag = Instance.new("BoolValue")
                 hookTag.Name = "TooltipHooked"
                 hookTag.Parent = desc
+                hookedTooltips = hookedTooltips + 1
 
                 local function onHoverEnter()
                     local mPos = UserInputService:GetMouseLocation()
@@ -800,10 +877,11 @@ local function PatchRayfieldDOM()
                 desc.MouseEnter:Connect(onHoverEnter)
                 desc.MouseLeave:Connect(onHoverLeave)
 
-                local interact = desc:FindFirstChild("Interact")
-                if interact and interact:IsA("GuiObject") then
-                    interact.MouseEnter:Connect(onHoverEnter)
-                    interact.MouseLeave:Connect(onHoverLeave)
+                for _, child in ipairs(desc:GetDescendants()) do
+                    if child:IsA("GuiObject") then
+                        child.MouseEnter:Connect(onHoverEnter)
+                        child.MouseLeave:Connect(onHoverLeave)
+                    end
                 end
             end
         end
@@ -898,13 +976,12 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
--- Defer initial DOM patch until Rayfield creates its window
+-- Defer initial DOM patch until Rayfield creates its window and keep syncing across tabs
 task.spawn(function()
-    for i = 1, 20 do
-        task.wait(0.5)
+    for i = 1, 15 do
+        task.wait(0.6)
         if PatchRayfieldDOM() then
             S.ThemePatchDone = true
-            break
         end
     end
 end)

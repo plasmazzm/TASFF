@@ -3444,14 +3444,17 @@ local UpdateLogTab = Window:CreateTab("Update Log", "history")
 UpdateLogTab:CreateSection("Recent Releases & Updates")
 
 UpdateLogTab:CreateParagraph({
-    Title   = "Version 2.3.0 (Architecture Stabilization, Tab Synchronization & Preset Engine)",
-    Content = "• Preset Notification Throttle Bypass: profile switch confirmations now bypass notification rate-limiting and silence filters, guaranteeing instant feedback upon keybind cycle.\n" ..
-              "• Profile Switch Callback Silencing: individual setting notifications are suppressed during profile loads, eliminating intermediate notification spam.\n" ..
-              "• Tab Visibility & Desynchronization Watchdog: active tab state enforcement prevents background label updates from bleeding into or rendering over inactive tabs when reopening UI via keybind.\n" ..
-              "• Drawing Memory Leak Elimination: wrapper disposal explicitly removes dead drawings from the global runtime collection, preventing heap bloat.\n" ..
-              "• State Table Reference Hardening: replaced table reassignments with table.clear to maintain reference stability across coroutines.\n" ..
-              "• Duplicate UI Control Consolidation: purged redundant duplicate preset toggle and keybind definitions between PresetsTab and MiscTab.\n" ..
-              "• Render-Loop Camera Nil Guarding: added fallback camera assignment to protect targeting passes against player respawn frame drops."
+    Title   = "Version 2.3.0 (Comprehensive UI Redesign, Overlays & Architecture Overhaul)",
+    Content = "• Complete UI Redesign: restructured interface into 9 clean tabs (Home, Combat, Triggerbot, Visuals, Intel, Settings, Theming, Presets, Update Log); retired deprecated Advanced and Misc tabs into Settings and Visuals.\n" ..
+              "• Runtime GUI Tree Engine (TASFF_Theme): real-time search filter injected into every tab container; accordion-style section collapse/expand buttons; live state dot indicators on all toggle controls; interactive cursor-anchored hover tooltips on controls with live definitions.\n" ..
+              "• Window Controls & Opacity: bottom-right window resize grip (⇲) supporting custom window scaling (440x340 to 1000x850); dynamic window opacity slider (0.3–1.0) with Ctrl+MouseWheel shortcut; tab notification badge counters wired to active threats.\n" ..
+              "• Standalone Overlays (TASFF_OverlayGui): persistent HUD Status Strip (aim status, silent/human mode, active target, threat count, active profile, live FPS); draggable circular Threat Radar Mini-Map with camera-relative blips; draggable Notification Sidebar Feed with auto-fading pills.\n" ..
+              "• Combat & Aim Engine: independent horizontal (SmoothnessX) and vertical (SmoothnessY) aim smoothness axes; blatant snap speed slider; dynamic inverse-distance FOV scaling; health threshold gating; auto-disable on player death; intelligent equip filter and weapon-type gating.\n" ..
+              "• Visuals & Tactical Overlays: dedicated Crosshair section with multiple geometry styles and sizing; screen cloaking controls unified under Visuals; kill confirmation screen flash with duration tuning; frustum-culled OOF directional arrows with smoothed angles.\n" ..
+              "• Threat Intelligence & Leaderboard: Threat Leaderboard panel ranking active threats by score and kills; 4-tier threat confidence badges (●●●● to ●○○○); lowered damage tracking threshold to 4 HP for accurate hit detection.\n" ..
+              "• Preset Engine & Schema v2.3.0: 29 new configuration keys synchronized across profiles; live Configuration Diff Viewer comparing active settings against loaded profiles; eliminated duplicate native Roblox notifications during preset cycling.\n" ..
+              "• Theming & Home Suite: 19 global theme palettes with live Window.ModifyTheme repainting; Definitions & Glossary inspector on Home tab; Quick Actions row (Emergency Panic, Reload Presets, Clear Caches); Session Event Log tracking combat milestones.\n" ..
+              "• Pipeline & Memory Optimization: active tab container watchdog preventing element bleeding; drawing wrapper cleanup explicitly disposing dead drawings; state table reference stability using table.clear."
 })
 
 UpdateLogTab:CreateParagraph({
@@ -3856,6 +3859,9 @@ for _, entry in ipairs(TabRegistry) do
                 end
             end
             _tabSyncGuard = false
+            if TASFFTheme and TASFFTheme.PatchRayfieldDOM then
+                task.defer(TASFFTheme.PatchRayfieldDOM)
+            end
         end))
     end
 end

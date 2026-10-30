@@ -1439,20 +1439,10 @@ local function PatchRayfieldDOM()
         cyberStroke.Color = GetThemeAccentColor()
     end
 
-    -- 0b. Ambient Glass Drop-Shadow
-    if not mainFrame:FindFirstChild("GlassShadow") then
-        local shadow = Instance.new("ImageLabel")
-        shadow.Name = "GlassShadow"
-        shadow.Size = UDim2.new(1, 36, 1, 36)
-        shadow.Position = UDim2.new(0, -18, 0, -18)
-        shadow.BackgroundTransparency = 1
-        shadow.Image = "rbxassetid://1316045217"
-        shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-        shadow.ImageTransparency = 0.55
-        shadow.ScaleType = Enum.ScaleType.Slice
-        shadow.SliceCenter = Rect.new(10, 10, 118, 118)
-        shadow.ZIndex = math.max(1, mainFrame.ZIndex - 1)
-        shadow.Parent = mainFrame
+    -- 0b. Remove intrusive custom shadow (Rayfield native shadow Main.Shadow handles this cleanly)
+    local existingShadow = mainFrame:FindFirstChild("GlassShadow")
+    if existingShadow then
+        existingShadow:Destroy()
     end
 
     -- 0c. Topbar User Profile Banner & Notification Center Bell
@@ -1463,7 +1453,7 @@ local function PatchRayfieldDOM()
             bellBtn = Instance.new("TextButton", topbar)
             bellBtn.Name = "NotifBellBtn"
             bellBtn.Size = UDim2.new(0, 22, 0, 22)
-            bellBtn.Position = UDim2.new(1, -128, 0.5, -11)
+            bellBtn.Position = UDim2.new(1, -165, 0.5, -11)
             bellBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
             bellBtn.BackgroundTransparency = 0.3
             bellBtn.BorderSizePixel = 0
@@ -1509,6 +1499,8 @@ local function PatchRayfieldDOM()
                     TASFFEnv.Theme.ToggleNotificationDrawer()
                 end
             end)
+        else
+            bellBtn.Position = UDim2.new(1, -165, 0.5, -11)
         end
 
         local uBanner = topbar:FindFirstChild("UserProfileBanner")
@@ -1516,7 +1508,7 @@ local function PatchRayfieldDOM()
             uBanner = Instance.new("Frame", topbar)
             uBanner.Name = "UserProfileBanner"
             uBanner.Size = UDim2.new(0, 134, 0, 22)
-            uBanner.Position = UDim2.new(1, -266, 0.5, -11)
+            uBanner.Position = UDim2.new(1, -305, 0.5, -11)
             uBanner.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
             uBanner.BackgroundTransparency = 0.35
             uBanner.ZIndex = 40
@@ -1546,6 +1538,8 @@ local function PatchRayfieldDOM()
             uName.ZIndex = 41
             local exec = (identifyexecutor and identifyexecutor()) or "Client"
             uName.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. " (" .. exec .. ")"
+        else
+            uBanner.Position = UDim2.new(1, -305, 0.5, -11)
         end
     end
 
@@ -1691,12 +1685,6 @@ local function PatchRayfieldDOM()
             cStroke.Enabled = isVis
         end
 
-        -- Ambient Glass Drop Shadow
-        local gShadow = mainFrame:FindFirstChild("GlassShadow")
-        if gShadow then
-            gShadow.ImageTransparency = math.clamp(0.55 + mainTrans * 0.45, 0, 1)
-            gShadow.Visible = isVis
-        end
 
         -- Topbar Profile Banner
         local uBanner = topbar and topbar:FindFirstChild("UserProfileBanner")

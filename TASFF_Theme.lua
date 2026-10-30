@@ -958,7 +958,7 @@ end)
 local NotificationDrawer = Instance.new("Frame")
 NotificationDrawer.Name = "NotificationDrawer"
 NotificationDrawer.Size = UDim2.new(0, 240, 0, 320)
-NotificationDrawer.Position = UDim2.new(1, -260, 0, 45)
+NotificationDrawer.Position = UDim2.new(1, -260, 0, 45)  -- default; repositioned on open
 NotificationDrawer.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 NotificationDrawer.BackgroundTransparency = 0.15
 NotificationDrawer.BorderSizePixel = 0
@@ -967,7 +967,7 @@ NotificationDrawer.ZIndex = 120
 NotificationDrawer.Parent = OverlayGui
 Instance.new("UICorner", NotificationDrawer).CornerRadius = UDim.new(0, 8)
 local ndStroke = Instance.new("UIStroke", NotificationDrawer)
-ndStroke.Color = GetThemeAccentColor()
+ndStroke.Color = GetThemeAccentColor()  -- theme-synced, not hardcoded cyan
 ndStroke.Thickness = 1.2
 MakeDraggable(NotificationDrawer, NotificationDrawer, nil, nil)
 
@@ -1084,14 +1084,22 @@ TASFFEnv.Theme.LogNotification = LogNotification
 
 local function UpdateDrawerPosition()
     pcall(function()
+        -- Re-sync stroke color to current theme on every open
+        ndStroke.Color = GetThemeAccentColor()
+
         local rGui = FindRayfieldGui and FindRayfieldGui()
         if rGui then
-            local topbar = rGui:FindFirstChild("Topbar", true)
-            local bellBtn = topbar and topbar:FindFirstChild("NotifBellBtn")
-            if bellBtn then
-                local bPos = bellBtn.AbsolutePosition
-                local bSize = bellBtn.AbsoluteSize
-                NotificationDrawer.Position = UDim2.new(0, math.clamp(bPos.X + bSize.X - 240, 10, 3000), 0, bPos.Y + bSize.Y + 8)
+            local mFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
+            if mFrame then
+                local mPos  = mFrame.AbsolutePosition
+                local mSize = mFrame.AbsoluteSize
+                -- Position the drawer flush against the RIGHT side of the menu, vertically centered-ish
+                local drawerX = mPos.X + mSize.X + 8   -- 8px gap to the right of the menu
+                local drawerY = mPos.Y + 45             -- align with topbar bottom
+                -- Clamp so it stays on screen
+                drawerX = math.clamp(drawerX, 0, math.max(0, workspace.CurrentCamera.ViewportSize.X - 248))
+                drawerY = math.clamp(drawerY, 4, math.max(4, workspace.CurrentCamera.ViewportSize.Y - 324))
+                NotificationDrawer.Position = UDim2.new(0, drawerX, 0, drawerY)
                 return
             end
         end
@@ -1397,18 +1405,29 @@ end
 TASFFEnv.Theme.SetTabBadge = SetTabBadge
 
 -- Carbon Weave Texture & Control Hover Glow Helpers
-local function AttachCarbonOverlay(targetFrame, transparency)
+-- PRIMARY texture: carbon fiber weave for paragraphs, buttons, toggles, dropdowns
+local TEXTURE_PRIMARY   = "rbxassetid://2151741365"  -- carbon weave tile
+-- SECONDARY texture: metal grid / crosshatch for sliders, dropdown buttons, toggle tracks
+local TEXTURE_SECONDARY = "rbxassetid://6031075938"  -- pixel dot / crosshatch
+
+local function AttachCarbonOverlay(targetFrame, transparency, useSecondary)
     if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
     local carbon = Instance.new("ImageLabel")
     carbon.Name = "CarbonOverlay"
     carbon.Size = UDim2.new(1, 0, 1, 0)
     carbon.Position = UDim2.new(0, 0, 0, 0)
     carbon.BackgroundTransparency = 1
-    carbon.Image = "rbxassetid://2151741365"
-    carbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
+    if useSecondary then
+        carbon.Image = TEXTURE_SECONDARY
+        carbon.ImageColor3 = Color3.fromRGB(180, 200, 230)
+        carbon.TileSize = UDim2.new(0, 6, 0, 6)
+    else
+        carbon.Image = TEXTURE_PRIMARY
+        carbon.ImageColor3 = Color3.fromRGB(200, 210, 230)
+        carbon.TileSize = UDim2.new(0, 12, 0, 12)
+    end
     carbon.ScaleType = Enum.ScaleType.Tile
-    carbon.TileSize = UDim2.new(0, 16, 0, 16)
-    carbon.ImageTransparency = transparency or 0.80
+    carbon.ImageTransparency = transparency or 0.72
     carbon.ZIndex = math.max(1, targetFrame.ZIndex)
     Instance.new("UICorner", carbon).CornerRadius = UDim.new(0, 6)
     carbon.Parent = targetFrame
@@ -1482,22 +1501,23 @@ local function PatchRayfieldDOM()
         end)
     end
 
-    -- 0a. Tactical Carbon Mesh on Window Background
-    if not mainFrame:FindFirstChild("MainCarbonMesh") then
-        local mCarbon = Instance.new("ImageLabel")
-        mCarbon.Name = "MainCarbonMesh"
-        mCarbon.Size = UDim2.new(1, 0, 1, 0)
-        mCarbon.Position = UDim2.new(0, 0, 0, 0)
-        mCarbon.BackgroundTransparency = 1
-        mCarbon.Image = "rbxassetid://2151741365"
-        mCarbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
-        mCarbon.ScaleType = Enum.ScaleType.Tile
-        mCarbon.TileSize = UDim2.new(0, 16, 0, 16)
-        mCarbon.ImageTransparency = 0.80
-        mCarbon.ZIndex = 1
-        Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
-        mCarbon.Parent = mainFrame
-    end
+    -- 0a. Atmospheric Scanline Grid on Window Background (visible carbon weave)
+    local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
+    if existingMesh then existingMesh:Destroy() end  -- always recreate so settings apply fresh
+    local mCarbon = Instance.new("ImageLabel")
+    mCarbon.Name = "MainCarbonMesh"
+    mCarbon.Size = UDim2.new(1, 0, 1, 0)
+    mCarbon.Position = UDim2.new(0, 0, 0, 0)
+    mCarbon.BackgroundTransparency = 1
+    -- Scanline grid: rbxassetid://6031075938 is a pixel dot; use 3px tile for grid look
+    mCarbon.Image = "rbxassetid://2151741365"  -- carbon fiber weave
+    mCarbon.ImageColor3 = Color3.fromRGB(200, 210, 230)
+    mCarbon.ScaleType = Enum.ScaleType.Tile
+    mCarbon.TileSize = UDim2.new(0, 12, 0, 12)
+    mCarbon.ImageTransparency = 0.60  -- clearly visible atmospheric texture
+    mCarbon.ZIndex = 2
+    Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
+    mCarbon.Parent = mainFrame
 
     -- 0b. Animated Cyber Neon Border with Rotating Gradient
     local cyberStroke = mainFrame:FindFirstChild("CyberStroke")
@@ -1558,6 +1578,8 @@ local function PatchRayfieldDOM()
     -- 0d. Topbar Clean Accent Line & Notification Center Bell (Shifted clear of Search)
     local topbar = mainFrame:FindFirstChild("Topbar", true)
     if topbar then
+        -- Reset topbar to Rayfield default height (prevent accidental oversizing)
+        topbar.Size = UDim2.new(1, 0, 0, 45)
         local topbarLine = topbar:FindFirstChild("TopbarAccentLine")
         if not topbarLine then
             topbarLine = Instance.new("Frame", topbar)
@@ -1583,6 +1605,9 @@ local function PatchRayfieldDOM()
         if oldPill then oldPill:Destroy() end
         local oldBanner = topbar:FindFirstChild("UserProfileBanner")
         if oldBanner then oldBanner:Destroy() end
+
+        -- Sync notification drawer stroke to current theme accent
+        if ndStroke then ndStroke.Color = GetThemeAccentColor() end
 
         local bellBtn = topbar:FindFirstChild("NotifBellBtn")
         if not bellBtn then
@@ -1640,134 +1665,143 @@ local function PatchRayfieldDOM()
         end
     end
 
-    -- Relocated Operator Profile & Live System Monitor into Sleek Bottom Dock
-    local bottomDock = mainFrame:FindFirstChild("BottomDock")
-    if not bottomDock then
-        bottomDock = Instance.new("Frame", mainFrame)
-        bottomDock.Name = "BottomDock"
-        bottomDock.Size = UDim2.new(1, -36, 0, 22)
-        bottomDock.Position = UDim2.new(0, 10, 1, -25)
-        bottomDock.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
-        bottomDock.BackgroundTransparency = 0.35
-        bottomDock.BorderSizePixel = 0
-        bottomDock.ZIndex = 50
-        Instance.new("UICorner", bottomDock).CornerRadius = UDim.new(0, 5)
-        local dockStroke = Instance.new("UIStroke", bottomDock)
-        dockStroke.Color = Color3.fromRGB(42, 42, 54)
-        dockStroke.Thickness = 1
+    -- Operator Profile & Live System Monitor: External Bottom Bar (sibling of mainFrame in ScreenGui)
+    -- Destroy any old BottomDock parented inside mainFrame from previous versions
+    local oldInnerDock = mainFrame:FindFirstChild("BottomDock")
+    if oldInnerDock then oldInnerDock:Destroy() end
 
-        AttachCarbonOverlay(bottomDock, 0.74)
+    local screenGui = mainFrame.Parent
+    local bottomBar = screenGui and screenGui:FindFirstChild("TASFF_BottomBar")
+    if not bottomBar and screenGui then
+        bottomBar = Instance.new("Frame", screenGui)
+        bottomBar.Name = "TASFF_BottomBar"
+        bottomBar.AnchorPoint = Vector2.new(0.5, 0)  -- anchor from top-center
+        -- Position is set dynamically below; size matches mainFrame width
+        bottomBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 30)
+        bottomBar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
+        bottomBar.BackgroundTransparency = 0.10
+        bottomBar.BorderSizePixel = 0
+        bottomBar.ZIndex = 100
+        Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 6)
+        local barStroke = Instance.new("UIStroke", bottomBar)
+        barStroke.Color = GetThemeAccentColor()
+        barStroke.Thickness = 1
+        barStroke.Transparency = 0.5
 
-        -- Left: Operator Avatar & Identity Badge
-        local opAvatar = Instance.new("ImageLabel", bottomDock)
+        -- Carbon texture on bottom bar
+        local barCarbon = Instance.new("ImageLabel", bottomBar)
+        barCarbon.Name = "BarCarbon"
+        barCarbon.Size = UDim2.new(1, 0, 1, 0)
+        barCarbon.BackgroundTransparency = 1
+        barCarbon.Image = "rbxassetid://2151741365"
+        barCarbon.ImageColor3 = Color3.fromRGB(200, 210, 230)
+        barCarbon.ScaleType = Enum.ScaleType.Tile
+        barCarbon.TileSize = UDim2.new(0, 12, 0, 12)
+        barCarbon.ImageTransparency = 0.62
+        barCarbon.ZIndex = 101
+        Instance.new("UICorner", barCarbon).CornerRadius = UDim.new(0, 6)
+
+        -- Accent separator line at top of bar (mirrors topbar bottom line)
+        local barLine = Instance.new("Frame", bottomBar)
+        barLine.Name = "BarAccentLine"
+        barLine.Size = UDim2.new(1, 0, 0, 1.5)
+        barLine.Position = UDim2.new(0, 0, 0, 0)
+        barLine.BorderSizePixel = 0
+        barLine.BackgroundColor3 = GetThemeAccentColor()
+        barLine.ZIndex = 102
+        local barLineGrad = Instance.new("UIGradient", barLine)
+        barLineGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0,   Color3.fromRGB(10, 10, 15)),
+            ColorSequenceKeypoint.new(0.5, GetThemeAccentColor()),
+            ColorSequenceKeypoint.new(1,   Color3.fromRGB(10, 10, 15)),
+        })
+
+        -- Left: Avatar + Player Name + Executor
+        local opAvatar = Instance.new("ImageLabel", bottomBar)
         opAvatar.Name = "OpAvatar"
-        opAvatar.Size = UDim2.new(0, 16, 0, 16)
-        opAvatar.Position = UDim2.new(0, 4, 0.5, -8)
+        opAvatar.Size = UDim2.new(0, 20, 0, 20)
+        opAvatar.Position = UDim2.new(0, 6, 0.5, -10)
         opAvatar.BackgroundTransparency = 1
         opAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
-        opAvatar.ZIndex = 51
+        opAvatar.ZIndex = 103
         Instance.new("UICorner", opAvatar).CornerRadius = UDim.new(1, 0)
 
-        local opName = Instance.new("TextLabel", bottomDock)
+        local opName = Instance.new("TextLabel", bottomBar)
         opName.Name = "OpName"
-        opName.Size = UDim2.new(0, 220, 1, 0)
-        opName.Position = UDim2.new(0, 25, 0, 0)
+        opName.Size = UDim2.new(0, 260, 1, 0)
+        opName.Position = UDim2.new(0, 30, 0, 0)
         opName.BackgroundTransparency = 1
         opName.Font = Enum.Font.GothamBold
-        opName.TextSize = 9
-        opName.TextColor3 = Color3.fromRGB(220, 220, 230)
+        opName.TextSize = 10
+        opName.TextColor3 = Color3.fromRGB(225, 225, 235)
         opName.TextXAlignment = Enum.TextXAlignment.Left
         opName.TextTruncate = Enum.TextTruncate.AtEnd
-        opName.ZIndex = 51
+        opName.ZIndex = 103
         local exec = (identifyexecutor and identifyexecutor()) or "Client"
-        opName.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. " (" .. exec .. ")"
+        opName.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [" .. exec .. "]"
 
-        -- Right: Live Status Monitor (FPS & Latency Ping)
-        local statContainer = Instance.new("Frame", bottomDock)
+        -- Right: FPS / Ping monitor
+        local statContainer = Instance.new("Frame", bottomBar)
         statContainer.Name = "StatContainer"
-        statContainer.Size = UDim2.new(0, 150, 1, 0)
-        statContainer.Position = UDim2.new(1, -155, 0, 0)
+        statContainer.Size = UDim2.new(0, 170, 1, 0)
+        statContainer.Position = UDim2.new(1, -195, 0, 0)
         statContainer.BackgroundTransparency = 1
-        statContainer.ZIndex = 51
+        statContainer.ZIndex = 103
 
         local led = Instance.new("Frame", statContainer)
         led.Name = "LED"
-        led.Size = UDim2.new(0, 6, 0, 6)
+        led.Size = UDim2.new(0, 7, 0, 7)
         led.Position = UDim2.new(0, 4, 0.5, -3)
         led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
         led.BorderSizePixel = 0
-        led.ZIndex = 52
+        led.ZIndex = 104
         Instance.new("UICorner", led).CornerRadius = UDim.new(1, 0)
 
         local sText = Instance.new("TextLabel", statContainer)
         sText.Name = "StatusText"
-        sText.Size = UDim2.new(1, -14, 1, 0)
-        sText.Position = UDim2.new(0, 14, 0, 0)
+        sText.Size = UDim2.new(1, -16, 1, 0)
+        sText.Position = UDim2.new(0, 16, 0, 0)
         sText.BackgroundTransparency = 1
         sText.Font = Enum.Font.GothamBold
-        sText.TextSize = 9
+        sText.TextSize = 10
         sText.TextColor3 = Color3.fromRGB(190, 215, 220)
         sText.TextXAlignment = Enum.TextXAlignment.Left
-        sText.Text = "60 FPS  |  Ping: 0ms"
-        sText.ZIndex = 52
+        sText.Text = "60 FPS  |  0ms"
+        sText.ZIndex = 104
 
-        task.spawn(function()
-            while bottomDock and bottomDock.Parent do
-                local fps = math.floor(1 / math.max(0.001, RunService.RenderStepped:Wait()))
-                if sText and sText.Parent then
-                    local ping = 0
-                    pcall(function()
-                        ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
-                    end)
-                    sText.Text = tostring(math.clamp(fps, 0, 999)) .. " FPS  |  " .. tostring(ping) .. "ms"
-                    if fps >= 50 then
-                        led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
-                    elseif fps >= 30 then
-                        led.BackgroundColor3 = Color3.fromRGB(255, 185, 50)
-                    else
-                        led.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-                    end
-                end
-                task.wait(0.5)
-            end
-        end)
-    end
-
-    -- 1. Window Resize Handle (Modern Vector Grip with Smooth Fade Sync)
-    if not mainFrame:FindFirstChild("ResizeHandle") then
-        local resizeHandle = Instance.new("Frame")
+        -- Resize grip at bottom-right corner of the bottom bar
+        local resizeHandle = Instance.new("Frame", bottomBar)
         resizeHandle.Name = "ResizeHandle"
-        resizeHandle.Size = UDim2.new(0, 20, 0, 20)
-        resizeHandle.Position = UDim2.new(1, -20, 1, -20)
+        resizeHandle.Size = UDim2.new(0, 22, 0, 22)
+        resizeHandle.Position = UDim2.new(1, -22, 0, 0)
         resizeHandle.BackgroundTransparency = 1
         resizeHandle.BorderSizePixel = 0
-        resizeHandle.ZIndex = 60
-        resizeHandle.Parent = mainFrame
+        resizeHandle.ZIndex = 110
 
         local grip1 = Instance.new("Frame", resizeHandle)
         grip1.Name = "Grip1"
-        grip1.Size = UDim2.new(0, 11, 0, 2)
-        grip1.Position = UDim2.new(0, 6, 0, 12)
+        grip1.Size = UDim2.new(0, 12, 0, 2)
+        grip1.Position = UDim2.new(0, 5, 0, 12)
         grip1.Rotation = -45
         grip1.BackgroundColor3 = Color3.fromRGB(160, 160, 175)
         grip1.BorderSizePixel = 0
-        grip1.ZIndex = 61
+        grip1.ZIndex = 111
 
         local grip2 = Instance.new("Frame", resizeHandle)
         grip2.Name = "Grip2"
-        grip2.Size = UDim2.new(0, 6, 0, 2)
-        grip2.Position = UDim2.new(0, 11, 0, 15)
+        grip2.Size = UDim2.new(0, 7, 0, 2)
+        grip2.Position = UDim2.new(0, 10, 0, 16)
         grip2.Rotation = -45
         grip2.BackgroundColor3 = Color3.fromRGB(160, 160, 175)
         grip2.BorderSizePixel = 0
-        grip2.ZIndex = 61
+        grip2.ZIndex = 111
 
         local hitArea = Instance.new("TextButton", resizeHandle)
         hitArea.Name = "HitArea"
         hitArea.Size = UDim2.new(1, 0, 1, 0)
         hitArea.BackgroundTransparency = 1
         hitArea.Text = ""
-        hitArea.ZIndex = 62
+        hitArea.ZIndex = 112
 
         hitArea.MouseEnter:Connect(function()
             local accent = GetThemeAccentColor()
@@ -1803,7 +1837,52 @@ local function PatchRayfieldDOM()
                 S.DesiredWindowHeight = newH
             end
         end)
+
+        -- Live stats loop
+        task.spawn(function()
+            while bottomBar and bottomBar.Parent do
+                local fps = math.floor(1 / math.max(0.001, RunService.RenderStepped:Wait()))
+                if sText and sText.Parent then
+                    local ping = 0
+                    pcall(function()
+                        ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+                    end)
+                    sText.Text = tostring(math.clamp(fps, 0, 999)) .. " FPS  |  " .. tostring(ping) .. "ms"
+                    if fps >= 50 then
+                        led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
+                    elseif fps >= 30 then
+                        led.BackgroundColor3 = Color3.fromRGB(255, 185, 50)
+                    else
+                        led.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+                    end
+                end
+                task.wait(0.5)
+            end
+        end)
     end
+
+    -- Dynamically position the bottom bar just below mainFrame every frame
+    if bottomBar and screenGui then
+        local function SyncBottomBarPosition()
+            if not (mainFrame and mainFrame.Parent and bottomBar and bottomBar.Parent) then return end
+            local mAbsPos  = mainFrame.AbsolutePosition
+            local mAbsSize = mainFrame.AbsoluteSize
+            -- mainFrame has AnchorPoint (0.5,0.5), so its top-left is AbsolutePosition
+            bottomBar.Position = UDim2.new(0, mAbsPos.X + mAbsSize.X / 2, 0, mAbsPos.Y + mAbsSize.Y + 4)
+            bottomBar.Size     = UDim2.new(0, mAbsSize.X, 0, 30)
+        end
+        SyncBottomBarPosition()
+        if not mainFrame:FindFirstChild("BottomBarSyncHooked") then
+            local bbHook = Instance.new("BoolValue", mainFrame)
+            bbHook.Name = "BottomBarSyncHooked"
+            mainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(SyncBottomBarPosition)
+            mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncBottomBarPosition)
+        end
+    end
+
+    -- 1. Window Resize Handle is now on TASFF_BottomBar (external). Remove any legacy one inside mainFrame.
+    local legacyResize = mainFrame:FindFirstChild("ResizeHandle")
+    if legacyResize then legacyResize:Destroy() end
 
     -- 2. Inject Tab Notification Badges, Glowing Active Indicator & Tab Feedback
     local tabList = mainFrame:FindFirstChild("TabList", true)
@@ -1911,26 +1990,35 @@ local function PatchRayfieldDOM()
         local mMesh = mainFrame:FindFirstChild("MainCarbonMesh")
         if mMesh then
             mMesh.Visible = (isVis and isExpanded)
-            mMesh.ImageTransparency = math.clamp(0.80 + mainTrans * 0.20, 0, 1)
+            mMesh.ImageTransparency = math.clamp(0.60 + mainTrans * 0.40, 0, 1)
         end
 
-        -- Relocated Tactical Bottom Dock Sync
-        local bDock = mainFrame:FindFirstChild("BottomDock")
-        if bDock then
-            bDock.Visible = (isVis and isExpanded)
-            bDock.BackgroundTransparency = math.clamp(0.35 + mainTrans * 0.65, 0, 1)
-            local dStroke = bDock:FindFirstChildOfClass("UIStroke")
-            if dStroke then dStroke.Transparency = mainTrans end
-            local opA = bDock:FindFirstChild("OpAvatar")
+        -- External TASFF_BottomBar sync (sibling of mainFrame in ScreenGui)
+        local screenGui2 = mainFrame.Parent
+        local bBar = screenGui2 and screenGui2:FindFirstChild("TASFF_BottomBar")
+        if bBar then
+            bBar.Visible = (isVis and isExpanded)
+            bBar.BackgroundTransparency = math.clamp(0.10 + mainTrans * 0.90, 0, 1)
+            local bStroke2 = bBar:FindFirstChildOfClass("UIStroke")
+            if bStroke2 then bStroke2.Transparency = math.clamp(0.5 + mainTrans * 0.5, 0, 1) end
+            local opA = bBar:FindFirstChild("OpAvatar")
             if opA then opA.ImageTransparency = mainTrans end
-            local opN = bDock:FindFirstChild("OpName")
+            local opN = bBar:FindFirstChild("OpName")
             if opN then opN.TextTransparency = mainTrans end
-            local sCont = bDock:FindFirstChild("StatContainer")
+            local sCont = bBar:FindFirstChild("StatContainer")
             if sCont then
                 local led = sCont:FindFirstChild("LED")
                 if led then led.BackgroundTransparency = mainTrans end
                 local st = sCont:FindFirstChild("StatusText")
                 if st then st.TextTransparency = mainTrans end
+            end
+            local rh = bBar:FindFirstChild("ResizeHandle")
+            if rh then
+                rh.Visible = (isVis and isExpanded)
+                local g1 = rh:FindFirstChild("Grip1")
+                local g2 = rh:FindFirstChild("Grip2")
+                if g1 then g1.BackgroundTransparency = mainTrans end
+                if g2 then g2.BackgroundTransparency = mainTrans end
             end
         end
 
@@ -1945,16 +2033,6 @@ local function PatchRayfieldDOM()
             if bIcon then bIcon.ImageTransparency = topTrans end
             local bDot = bBtn:FindFirstChild("BellDot")
             if bDot then bDot.BackgroundTransparency = topTrans end
-        end
-
-        -- Resize Handle
-        local rHandle = mainFrame:FindFirstChild("ResizeHandle")
-        if rHandle then
-            rHandle.Visible = (isVis and isExpanded)
-            local g1 = rHandle:FindFirstChild("Grip1")
-            local g2 = rHandle:FindFirstChild("Grip2")
-            if g1 then g1.BackgroundTransparency = mainTrans end
-            if g2 then g2.BackgroundTransparency = mainTrans end
         end
 
         -- Drawer & Tooltip Auto-Hide on window hide/minimize
@@ -1988,11 +2066,29 @@ local function PatchRayfieldDOM()
     }
 
     local hookedTooltips = 0
+    -- Element type counters (restored for Home tab summary display)
+    local cToggles, cButtons, cSliders, cDropdowns, cKeybinds, cParagraphs, cColorPickers = 0,0,0,0,0,0,0
     for _, desc in ipairs(mainFrame:GetDescendants()) do
         -- STRICT: Skip Rayfield internal templates entirely
         if desc.Name == "Template" or desc:FindFirstAncestor("Template") then
             -- Skip uninstantiated template objects
         else
+        -- Count element types for Home tab summary (only direct UI elements, not nested helpers)
+        if desc:IsA("GuiObject") and desc.Parent and desc.Parent.Name == "Elements" then
+            if desc:FindFirstChild("Switch")      then cToggles      = cToggles + 1 end
+            if desc:FindFirstChild("Interact") and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider") then cButtons = cButtons + 1 end
+            if desc:FindFirstChild("Slider")      then cSliders      = cSliders + 1 end
+            if desc:FindFirstChild("Dropdown")    then cDropdowns    = cDropdowns + 1 end
+            if desc:FindFirstChild("Keybind")     then cKeybinds     = cKeybinds + 1 end
+            if desc:FindFirstChild("ColorPicker") then cColorPickers = cColorPickers + 1 end
+            -- Paragraph: has Content+Title but none of the interactive children
+            if desc:IsA("Frame") and desc:FindFirstChild("Content") and desc:FindFirstChild("Title")
+               and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider")
+               and not desc:FindFirstChild("ColorPicker") and not desc:FindFirstChild("Keybind")
+               and not desc:FindFirstChild("Dropdown") then
+                cParagraphs = cParagraphs + 1
+            end
+        end
         -- Theme signature colors in global preset dropdown list
         local function DecorateThemeOption(opt)
             if not opt or not opt:IsA("GuiObject") then return end
@@ -2167,6 +2263,8 @@ local function PatchRayfieldDOM()
                     }):Play()
                     PlayUISound(isCol and "toggle_off" or "toggle_on")
                     local container = secFrame.Parent
+                    -- Show/hide collapsed placeholder rectangle
+                    local colPlaceholder = secFrame.Parent and secFrame.Parent:FindFirstChild("SectionCollapsedBar_" .. tostring(secFrame))
                     if container then
                         local pastSec = false
                         for _, child in ipairs(container:GetChildren()) do
@@ -2180,9 +2278,81 @@ local function PatchRayfieldDOM()
                             end
                         end
                     end
+                    -- Manage the collapsed bar visibility
+                    local collBar = secFrame:FindFirstChild("CollapsedBar")
+                    if collBar then collBar.Visible = isCol end
                 end
 
                 toggleBtn.MouseButton1Click:Connect(toggleCollapse)
+
+                -- Section Element Box: dark fill + black outline wrapping all elements in the section
+                -- Build the box after a short defer so Rayfield has laid out all children first
+                task.defer(function()
+                    if not (secFrame and secFrame.Parent) then return end
+                    local boxContainer = secFrame.Parent
+                    if not boxContainer then return end
+
+                    -- Collect all sibling elements that belong to this section
+                    local sectionElements = {}
+                    local pastSec2 = false
+                    for _, child in ipairs(boxContainer:GetChildren()) do
+                        if child == secFrame then
+                            pastSec2 = true
+                        elseif pastSec2 then
+                            if child.Name == "SectionTitle" then break end
+                            if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
+                                table.insert(sectionElements, child)
+                            end
+                        end
+                    end
+
+                    if #sectionElements == 0 then return end
+
+                    -- Inject a thin left accent bar on the secFrame to visually connect to the box
+                    if not secFrame:FindFirstChild("SectionLeftBar") then
+                        local leftBar = Instance.new("Frame", secFrame)
+                        leftBar.Name = "SectionLeftBar"
+                        leftBar.Size = UDim2.new(0, 2, 1, 0)
+                        leftBar.Position = UDim2.new(0, 0, 0, 0)
+                        leftBar.BackgroundColor3 = GetThemeAccentColor()
+                        leftBar.BorderSizePixel = 0
+                        leftBar.ZIndex = secFrame.ZIndex + 1
+                        Instance.new("UICorner", leftBar).CornerRadius = UDim.new(0, 2)
+                    end
+
+                    -- Collapsed placeholder bar: thin dark rectangle that appears when section is collapsed
+                    if not secFrame:FindFirstChild("CollapsedBar") then
+                        local collBar = Instance.new("Frame", secFrame)
+                        collBar.Name = "CollapsedBar"
+                        collBar.Size = UDim2.new(1, -40, 0, 4)
+                        collBar.Position = UDim2.new(0, 4, 1, 2)  -- just below the section header
+                        collBar.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+                        collBar.BackgroundTransparency = 0.3
+                        collBar.BorderSizePixel = 0
+                        collBar.Visible = false  -- only shown when collapsed
+                        collBar.ZIndex = secFrame.ZIndex + 1
+                        Instance.new("UICorner", collBar).CornerRadius = UDim.new(0, 2)
+                        local collStroke = Instance.new("UIStroke", collBar)
+                        collStroke.Color = Color3.fromRGB(0, 0, 0)
+                        collStroke.Thickness = 1
+                        collStroke.Transparency = 0.4
+                    end
+
+                    -- Inject a UIStroke (black outline) on each element if not already present
+                    for _, elem in ipairs(sectionElements) do
+                        if not elem:FindFirstChild("SectionBoxStroke") then
+                            local sboxStroke = Instance.new("UIStroke", elem)
+                            sboxStroke.Name = "SectionBoxStroke"
+                            sboxStroke.Color = Color3.fromRGB(0, 0, 0)
+                            sboxStroke.Thickness = 1.5
+                            sboxStroke.Transparency = 0.3
+                        end
+                        -- Deepen the element background for the dark fill effect
+                        if elem:IsA("Frame") and elem.BackgroundTransparency > 0.6 then
+                            elem.BackgroundTransparency = 0.55
+                        end
+                    end
+                end)
 
                 -- Ensure all elements under this section start 100% visible and expanded upon initial load
                 secFrame:SetAttribute("IsCollapsed", false)
@@ -2390,8 +2560,21 @@ local function PatchRayfieldDOM()
             if IsParagraphFrame(desc) then
                 local oldBar = desc:FindFirstChild("ParaAccentBar")
                 if oldBar then oldBar:Destroy() end
+                -- Remove any carbon overlay from paragraphs - adding child ImageLabel to UIListLayout breaks layout
                 local oldCarbon = desc:FindFirstChild("CarbonOverlay")
                 if oldCarbon then oldCarbon:Destroy() end
+                -- Instead: apply a visible UIStroke tint + slightly visible background to paragraph cards
+                if not desc:FindFirstChild("ParaBoxStroke") then
+                    local pStroke = Instance.new("UIStroke", desc)
+                    pStroke.Name = "ParaBoxStroke"
+                    pStroke.Color = GetThemeAccentColor()
+                    pStroke.Thickness = 1
+                    pStroke.Transparency = 0.55
+                end
+                -- Deepen paragraph card background slightly so the carbon mesh shows through
+                if desc.BackgroundTransparency > 0.4 then
+                    desc.BackgroundTransparency = 0.50
+                end
 
                 local title = desc:FindFirstChild("Title")
                 local content = desc:FindFirstChild("Content")
@@ -2404,19 +2587,50 @@ local function PatchRayfieldDOM()
             -- Only attach carbon overlays to non-paragraph interactive elements
             -- AND skip if this desc is a child of a paragraph frame (to avoid UIListLayout corruption)
             elseif not IsParagraphFrame(desc.Parent) then
-                -- Toggle Carbon Background
+                -- Toggle row: primary carbon texture on the row frame
                 if desc:FindFirstChild("Switch") then
-                    AttachCarbonOverlay(desc, 0.82)
+                    AttachCarbonOverlay(desc, 0.72, false)
+                    -- Secondary texture on the Switch track itself (different feel)
+                    local sw = desc:FindFirstChild("Switch")
+                    if sw and not sw:FindFirstChild("CarbonOverlay") then
+                        AttachCarbonOverlay(sw, 0.60, true)
+                    end
                 end
 
-                -- Button Carbon Weave
+                -- Button rows: primary texture
                 if desc:FindFirstChild("Interact") and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider") then
-                    AttachCarbonOverlay(desc, 0.80)
+                    AttachCarbonOverlay(desc, 0.72, false)
                 end
 
-                -- Slider Carbon Weave
+                -- Dropdown container row: primary texture on the row
+                if desc:FindFirstChild("Dropdown") then
+                    AttachCarbonOverlay(desc, 0.72, false)
+                    -- Secondary texture on all option frames inside the dropdown
+                    local dd = desc:FindFirstChild("Dropdown")
+                    if dd then
+                        for _, child in ipairs(dd:GetDescendants()) do
+                            if child:IsA("Frame") and not child:FindFirstChild("CarbonOverlay")
+                               and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding"
+                               and child:FindFirstChildOfClass("TextLabel") then
+                                AttachCarbonOverlay(child, 0.62, true)
+                            end
+                        end
+                    end
+                end
+
+                -- Slider rows: secondary texture (crosshatch / different feel)
                 if desc:FindFirstChild("Slider") then
-                    AttachCarbonOverlay(desc, 0.82)
+                    AttachCarbonOverlay(desc, 0.65, true)
+                end
+
+                -- Keybind rows: primary texture
+                if desc:FindFirstChild("Keybind") then
+                    AttachCarbonOverlay(desc, 0.72, false)
+                end
+
+                -- ColorPicker rows: primary texture
+                if desc:FindFirstChild("ColorPicker") then
+                    AttachCarbonOverlay(desc, 0.72, false)
                 end
             end
         end
@@ -2464,6 +2678,19 @@ local function PatchRayfieldDOM()
             end
         end
         end
+    end
+
+    -- Update the Feature Overview paragraph with live element counts
+    if S.FeatureOverviewParagraph and S.FeatureOverviewParagraph.Set then
+        pcall(function()
+            S.FeatureOverviewParagraph:Set({
+                Title   = "UI Element Breakdown",
+                Content = string.format(
+                    "Toggles: %d  |  Buttons: %d  |  Sliders: %d\nDropdowns: %d  |  Keybinds: %d  |  ColorPickers: %d  |  Paragraphs: %d",
+                    cToggles, cButtons, cSliders, cDropdowns, cKeybinds, cColorPickers, cParagraphs
+                )
+            })
+        end)
     end
 
     return true

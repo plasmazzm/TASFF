@@ -273,9 +273,8 @@ HomeTab:CreateParagraph({
     Content = "Welcome back, " .. (Player and Player.DisplayName or "operator") .. ".\n"
            .. "Total features available: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or "...") .. "\n"
            .. "Controls: " .. tostring(S.ToggleCount or 109) .. " Toggles | " .. tostring(S.SliderCount or 40) .. " Sliders | " .. tostring(S.DropdownCount or 44) .. " Dropdowns | " .. tostring(S.ButtonCount or 36) .. " Buttons | " .. tostring(S.ParagraphCount or 73) .. " Paragraphs\n"
-           .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI"
-           .. "
-Access Tier: " .. (S.KeyVerified and "Full Access (Key Active)" or "Free Tier")
+           .. "Engine: 4-Slot Pipeline  |  Modules: State · Lists · Core · UI\n"
+           .. "Access Tier: " .. (S.KeyVerified and "Full Access (Key Active)" or "Free Tier")
 })
 
 HomeTab:CreateSection("Server Info")

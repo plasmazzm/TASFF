@@ -2744,7 +2744,7 @@ GlobalThemeMonitor = CustomizationTab:CreateParagraph({
     Title = "Preset Preview — " .. selectedGlobalTheme,
     Content = "Select a theme to preview its visual and interface colors.",
 })
-CustomizationTab:CreateDropdown({
+local ThemeDropdown = CustomizationTab:CreateDropdown({
     Name = "Preset global UI themes",
     Options = GlobalThemeOptions,
     CurrentOption = {selectedGlobalTheme},
@@ -2761,6 +2761,16 @@ CustomizationTab:CreateDropdown({
         ScheduleColorSettingsSave()
     end,
 })
+
+-- Immediately trigger DOM styling on the global theme dropdown options
+task.spawn(function()
+    task.wait(0.2)
+    pcall(function()
+        if TASFFEnv and TASFFEnv.Theme and TASFFEnv.Theme.PatchRayfieldDOM then
+            TASFFEnv.Theme.PatchRayfieldDOM()
+        end
+    end)
+end)
 UpdateGlobalThemeMonitor(selectedGlobalTheme)
 UpdateWindowTitle(selectedGlobalTheme)
 CustomizationTab:CreateButton({

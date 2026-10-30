@@ -58,6 +58,8 @@ _G.TASFF_State = {
     ThreatDetectorEnabled       = false,
     ThreatMemory                = {},
     ThreatTimeout               = 10,
+    ThreatFPCooldown            = 1.5,           -- false-positive cooldown between threat detections (seconds)
+    ThreatProximityRadius       = 80,            -- studs radius used by proximity-based threat scanner
     BlacklistExpiredThreats     = false,
     NemesisEnabled              = true,
     NemesisMemory               = {},
@@ -215,6 +217,8 @@ _G.TASFF_State = {
     NemesisHighlightColor       = Color3.fromRGB(180, 100, 255),  -- nemesis
     KillFlashColor              = Color3.fromRGB(255, 255, 255),  -- white flash on kill
     KillFlashDuration           = 0.8,                            -- seconds for flash to fade
+    KillConfirmFlashEnabled     = false,                          -- enable kill-confirmation screen flash
+    ShowLockIndicators          = false,                          -- show [LOCKED]/[SILENT] tag on ESP info-tag
     OOFArrowColor               = Color3.fromRGB(200, 200, 200),
     ChamsColor                  = Color3.fromRGB(180, 180, 180),
     BoxColor                    = Color3.fromRGB(200, 200, 200),
@@ -256,17 +260,30 @@ _G.TASFF_State = {
     ScriptInitialized           = false,
     DisableNotifications        = false,
     NotificationDuration        = 3,     -- global notification duration override (seconds)
+    NotifyMaxPer3s              = 5,     -- max notifications shown per 3-second window (throttle)
     SuppressRayfieldAds         = false, -- hide Rayfield periodic ad notifications
+    AntiAFKEnabled              = false, -- anti-AFK auto-jump to prevent idle kick
+    FPSWatcherEnabled           = false, -- auto-tune PerformanceMode based on live FPS
+    _LoadingPreset              = false, -- true while preset data is applying; silences noisy UI callback notifications
+    _CurrentActiveTab           = "Home",-- tracks active Rayfield tab to prevent container overlap
+    _PrevCameraMode             = nil,   -- restores previous camera mode after Expert Instincts expires
     DebugMode                   = false,     -- Feature 27: verbose console output
     PresetFileName              = "TASFF_V1.5.5_Presets.json",
     ColorSettingsFileName       = "TASFF_ColorSettings.json",
     ToolBlacklistFileName       = "TASFF_ToolBlacklist.json",
-    CurrentVersion              = "2.2.6",
+    CurrentVersion              = "2.3.0",
     AutoUpdateCheckerEnabled    = true,      -- automatically check repository for updates
     UpdateAvailable             = false,     -- set true when a newer version or commit is detected
     RemoteVersion               = nil,       -- remote version string if detected
     _SessionBaselineCommitSHA   = nil,       -- baseline commit SHA of current running session
     UpdateCheckInterval         = 180,       -- periodic check interval in seconds (3 minutes)
+
+    -- // ── Key System (v2.3.0) ──────────────────────────────────── // --
+    -- KeyStatus: "none" | "verifying" | "valid" | "invalid"
+    TASFFKey                    = "",        -- stored key string
+    KeyStatus                   = "none",   -- current verification state
+    KeyVerified                 = false,    -- true when key is confirmed valid
+    KeyFileName                 = "TASFF_Key.dat", -- file to persist key across sessions
 
     -- // ── Session Statistics (v2.1.0) ─────────────────────────── // --
     SessionStartTime            = 0,
@@ -281,6 +298,10 @@ _G.TASFF_State = {
 
     -- // ── v2.1.0 Feature Flags ─────────────────────────────────── // --
     HideBlacklistedESP          = false,     -- false = show [BLACKLISTED] tag; true = fully hide
+    ESPWhitelistEnabled         = false,     -- when true: only ESP-render players in the whitelist
+    AutoDisableOnDeath          = false,     -- auto-disable aimbot toggle when local player dies
+    HealthThresholdEnabled      = false,     -- skip targets below a minimum HP percentage
+    HealthThreshold             = 0,         -- minimum HP percentage threshold (0 = disabled)
     IntelligentEquipFilter      = true,      -- use keyword classifier before auto-enabling aimbot
     WeaponTypeGating            = true,      -- gate triggerbot/melee by classified weapon type
     DashboardCategory           = "Combat",  -- home tab status panel active tab
@@ -406,7 +427,6 @@ _G.TASFF_State = {
     IsNonWeapon                 = nil,
     FeatureCount                = 0,     -- populated by TASFF_Lists.lua on load
     StatusDisplayCount          = 6,     -- populated by TASFF_Lists.lua on load
-    PresetGameConfigs           = {},    -- populated by TASFF_Lists.lua on load
 }
 
 

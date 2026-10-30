@@ -1085,7 +1085,7 @@ local function RebuildCloakStatus()
     local lines = {}
     for _, feat in ipairs(CloakableFeatures) do
         local hidden = S.HiddenFromRecording and S.HiddenFromRecording[feat]
-        table.insert(lines, (hidden and "ðŸ”´ [HIDDEN] " or "ðŸŸ¢ [VISIBLE] ") .. feat)
+        table.insert(lines, (hidden and "[HIDDEN] " or "[VISIBLE] ") .. feat)
     end
     local anyHidden = false
     if S.HiddenFromRecording then
@@ -1114,7 +1114,7 @@ VisualTab:CreateDropdown({
 
 -- Button: Hide selected from recording
 VisualTab:CreateButton({
-    Name     = "ðŸ”´  Hide Selected from Roblox Screen Recording",
+    Name     = "[HIDE] Hide Selected from Screen Recording",
     Callback = function()
         if #SelectedCloakFeatures == 0 then
             if S.Notify then S.Notify({Title="Cloaking", Content="No visuals selected. Use the dropdown above.", Duration=2, Image="alert-circle"}) end
@@ -1138,7 +1138,7 @@ VisualTab:CreateButton({
 
 -- Button: Show selected (remove from cloak)
 VisualTab:CreateButton({
-    Name     = "ðŸŸ¢  Show Selected (Restore from Cloak)",
+    Name     = "[RESTORE] Show Selected (Restore from Cloak)",
     Callback = function()
         if #SelectedCloakFeatures == 0 then
             if S.Notify then S.Notify({Title="Cloaking", Content="No visuals selected. Use the dropdown above.", Duration=2, Image="alert-circle"}) end
@@ -3190,7 +3190,7 @@ task.spawn(function()
             pcall(function()
                 diagParagraph:Set({
                     Title = "Client Diagnostics",
-                    Content = string.format("Script Memory: ~%d MB  â€¢  Drawings: %d  â€¢  Connections: %d", memMb, drwCount, connCount)
+                    Content = string.format("Script Memory: ~%d MB  |  Drawings: %d  |  Connections: %d", memMb, drwCount, connCount)
                 })
             end)
         end

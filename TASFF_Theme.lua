@@ -1396,6 +1396,48 @@ local function SetTabBadge(tabName, count)
 end
 TASFFEnv.Theme.SetTabBadge = SetTabBadge
 
+-- Carbon Weave Texture & Control Hover Glow Helpers
+local function AttachCarbonOverlay(targetFrame, transparency)
+    if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
+    local carbon = Instance.new("ImageLabel")
+    carbon.Name = "CarbonOverlay"
+    carbon.Size = UDim2.new(1, 0, 1, 0)
+    carbon.Position = UDim2.new(0, 0, 0, 0)
+    carbon.BackgroundTransparency = 1
+    carbon.Image = "rbxassetid://2151741365"
+    carbon.ScaleType = Enum.ScaleType.Tile
+    carbon.TileSize = UDim2.new(0, 14, 0, 14)
+    carbon.ImageTransparency = transparency or 0.92
+    carbon.ZIndex = math.max(1, targetFrame.ZIndex)
+    Instance.new("UICorner", carbon).CornerRadius = UDim.new(0, 6)
+    carbon.Parent = targetFrame
+end
+
+local function AttachHoverGlow(card)
+    if not card or card:FindFirstChild("HoverGlowHooked") then return end
+    local hHook = Instance.new("BoolValue", card)
+    hHook.Name = "HoverGlowHooked"
+    local stroke = card:FindFirstChildOfClass("UIStroke")
+    if stroke then
+        local origColor = stroke.Color
+        card.MouseEnter:Connect(function()
+            local acc = GetThemeAccentColor()
+            TweenService:Create(stroke, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Color = Color3.fromRGB(
+                    math.clamp(math.floor(origColor.R * 255 * 0.4 + acc.R * 255 * 0.6), 0, 255),
+                    math.clamp(math.floor(origColor.G * 255 * 0.4 + acc.G * 255 * 0.6), 0, 255),
+                    math.clamp(math.floor(origColor.B * 255 * 0.4 + acc.B * 255 * 0.6), 0, 255)
+                )
+            }):Play()
+        end)
+        card.MouseLeave:Connect(function()
+            TweenService:Create(stroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                Color = origColor
+            }):Play()
+        end)
+    end
+end
+
 -- Patch sections, tooltips, search bar, state dots, tab badges, and resize handle
 local function PatchRayfieldDOM()
     local rGui = FindRayfieldGui()
@@ -1408,7 +1450,32 @@ local function PatchRayfieldDOM()
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
     end
 
-    -- 0a. Animated Cyber Neon Border with Rotating Gradient
+    -- 0. Window Width Expansion (ensures generous spacing for Title, Profile Banner, Bell, and Controls)
+    if not mainFrame:FindFirstChild("SizeInitialized") then
+        local sInit = Instance.new("BoolValue", mainFrame)
+        sInit.Name = "SizeInitialized"
+        if mainFrame.AbsoluteSize.X < 530 then
+            mainFrame.Size = UDim2.new(0, 545, 0, math.max(420, mainFrame.AbsoluteSize.Y))
+        end
+    end
+
+    -- 0a. Subtle Aerospace Carbon Mesh on Window Background
+    if not mainFrame:FindFirstChild("MainCarbonMesh") then
+        local mCarbon = Instance.new("ImageLabel")
+        mCarbon.Name = "MainCarbonMesh"
+        mCarbon.Size = UDim2.new(1, 0, 1, 0)
+        mCarbon.Position = UDim2.new(0, 0, 0, 0)
+        mCarbon.BackgroundTransparency = 1
+        mCarbon.Image = "rbxassetid://2151741365"
+        mCarbon.ScaleType = Enum.ScaleType.Tile
+        mCarbon.TileSize = UDim2.new(0, 22, 0, 22)
+        mCarbon.ImageTransparency = 0.96
+        mCarbon.ZIndex = 1
+        Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
+        mCarbon.Parent = mainFrame
+    end
+
+    -- 0b. Animated Cyber Neon Border with Rotating Gradient
     local cyberStroke = mainFrame:FindFirstChild("CyberStroke")
     if not cyberStroke then
         cyberStroke = Instance.new("UIStroke")
@@ -1439,15 +1506,105 @@ local function PatchRayfieldDOM()
         cyberStroke.Color = GetThemeAccentColor()
     end
 
-    -- 0b. Remove intrusive custom shadow (Rayfield native shadow Main.Shadow handles this cleanly)
-    local existingShadow = mainFrame:FindFirstChild("GlassShadow")
-    if existingShadow then
-        existingShadow:Destroy()
+    -- 0c. True Ambient Glass Aura (Parented strictly behind Main in ScreenGui - 0% occlusion of controls)
+    local ambientAura = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
+    if mainFrame.Parent and not ambientAura then
+        ambientAura = Instance.new("ImageLabel")
+        ambientAura.Name = "TASFF_AmbientAura"
+        ambientAura.BackgroundTransparency = 1
+        ambientAura.Image = "rbxassetid://1316045217"
+        ambientAura.ImageColor3 = GetThemeAccentColor()
+        ambientAura.ImageTransparency = 0.72
+        ambientAura.ScaleType = Enum.ScaleType.Slice
+        ambientAura.SliceCenter = Rect.new(10, 10, 118, 118)
+        ambientAura.ZIndex = 0
+        ambientAura.Parent = mainFrame.Parent
+    elseif ambientAura then
+        ambientAura.ImageColor3 = GetThemeAccentColor()
     end
 
-    -- 0c. Topbar User Profile Banner & Notification Center Bell
+    -- Clean up any residual legacy GlassShadow directly on mainFrame
+    local legacyShadow = mainFrame:FindFirstChild("GlassShadow")
+    if legacyShadow then legacyShadow:Destroy() end
+
+    -- 0d. Topbar User Profile Banner, Live Status Pill & Notification Center Bell
     local topbar = mainFrame:FindFirstChild("Topbar", true)
     if topbar then
+        local topbarLine = topbar:FindFirstChild("TopbarAccentLine")
+        if not topbarLine then
+            topbarLine = Instance.new("Frame", topbar)
+            topbarLine.Name = "TopbarAccentLine"
+            topbarLine.Size = UDim2.new(1, 0, 0, 1.5)
+            topbarLine.Position = UDim2.new(0, 0, 1, -1.5)
+            topbarLine.BorderSizePixel = 0
+            topbarLine.BackgroundColor3 = GetThemeAccentColor()
+            topbarLine.ZIndex = 35
+
+            local lineGrad = Instance.new("UIGradient", topbarLine)
+            lineGrad.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 20, 25)),
+                ColorSequenceKeypoint.new(0.5, GetThemeAccentColor()),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 20, 25))
+            })
+        else
+            topbarLine.BackgroundColor3 = GetThemeAccentColor()
+        end
+
+        -- Live Tactical Status Monitor (FPS & Ping)
+        local statusPill = topbar:FindFirstChild("StatusPill")
+        if not statusPill then
+            statusPill = Instance.new("Frame", topbar)
+            statusPill.Name = "StatusPill"
+            statusPill.Size = UDim2.new(0, 68, 0, 18)
+            statusPill.Position = UDim2.new(0, 168, 0.5, -9)
+            statusPill.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+            statusPill.BackgroundTransparency = 0.35
+            statusPill.BorderSizePixel = 0
+            statusPill.ZIndex = 40
+            Instance.new("UICorner", statusPill).CornerRadius = UDim.new(0, 4)
+            local spStroke = Instance.new("UIStroke", statusPill)
+            spStroke.Color = Color3.fromRGB(48, 48, 60)
+            spStroke.Thickness = 1
+
+            local led = Instance.new("Frame", statusPill)
+            led.Name = "LED"
+            led.Size = UDim2.new(0, 5, 0, 5)
+            led.Position = UDim2.new(0, 6, 0.5, -2.5)
+            led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
+            led.BorderSizePixel = 0
+            led.ZIndex = 41
+            Instance.new("UICorner", led).CornerRadius = UDim.new(1, 0)
+
+            local sText = Instance.new("TextLabel", statusPill)
+            sText.Name = "StatusText"
+            sText.Size = UDim2.new(1, -16, 1, 0)
+            sText.Position = UDim2.new(0, 15, 0, 0)
+            sText.BackgroundTransparency = 1
+            sText.Font = Enum.Font.GothamBold
+            sText.TextSize = 8
+            sText.TextColor3 = Color3.fromRGB(190, 215, 220)
+            sText.TextXAlignment = Enum.TextXAlignment.Left
+            sText.Text = "60 FPS"
+            sText.ZIndex = 41
+
+            task.spawn(function()
+                while statusPill and statusPill.Parent do
+                    local fps = math.floor(1 / math.max(0.001, RunService.RenderStepped:Wait()))
+                    if sText and sText.Parent then
+                        sText.Text = tostring(math.clamp(fps, 0, 999)) .. " FPS"
+                        if fps >= 50 then
+                            led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
+                        elseif fps >= 30 then
+                            led.BackgroundColor3 = Color3.fromRGB(255, 185, 50)
+                        else
+                            led.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+                        end
+                    end
+                    task.wait(0.5)
+                end
+            end)
+        end
+
         local bellBtn = topbar:FindFirstChild("NotifBellBtn")
         if not bellBtn then
             bellBtn = Instance.new("TextButton", topbar)
@@ -1606,7 +1763,7 @@ local function PatchRayfieldDOM()
         UserInputService.InputChanged:Connect(function(input)
             if _resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
                 local delta = input.Position - _rStart
-                local newW = math.clamp(_rSizeStart.X + delta.X, 440, 1000)
+                local newW = math.clamp(_rSizeStart.X + delta.X, 480, 1000)
                 local newH = math.clamp(_rSizeStart.Y + delta.Y, 340, 850)
                 mainFrame.Size = UDim2.new(0, newW, 0, newH)
             end
@@ -1634,11 +1791,25 @@ local function PatchRayfieldDOM()
         for _, tabBtn in ipairs(tabList:GetChildren()) do
             if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" and tabBtn.Name ~= "ActiveTabGlowBar" then
                 local tName = tabBtn.Name
+                local tabPod = tabBtn:FindFirstChild("TabGlowPod")
+                if not tabPod then
+                    tabPod = Instance.new("Frame", tabBtn)
+                    tabPod.Name = "TabGlowPod"
+                    tabPod.Size = UDim2.new(1, -8, 0, 2)
+                    tabPod.Position = UDim2.new(0, 4, 1, -2)
+                    tabPod.BackgroundColor3 = GetThemeAccentColor()
+                    tabPod.BackgroundTransparency = 1
+                    tabPod.BorderSizePixel = 0
+                    tabPod.ZIndex = tabBtn.ZIndex + 1
+                    Instance.new("UICorner", tabPod).CornerRadius = UDim.new(1, 0)
+                end
+
                 if not tabBtn:FindFirstChild("BadgeFrame") then
                     local bFrame = Instance.new("Frame")
                     bFrame.Name = "BadgeFrame"
-                    bFrame.Size = UDim2.new(0, 16, 0, 16)
-                    bFrame.Position = UDim2.new(1, -20, 0.5, -8)
+                    bFrame.Size = UDim2.new(0, 14, 0, 14)
+                    bFrame.AnchorPoint = Vector2.new(1, 0)
+                    bFrame.Position = UDim2.new(1, -2, 0, 2)
                     bFrame.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
                     bFrame.BorderSizePixel = 0
                     bFrame.Visible = false
@@ -1650,7 +1821,7 @@ local function PatchRayfieldDOM()
                     bLabel.Size = UDim2.new(1, 0, 1, 0)
                     bLabel.BackgroundTransparency = 1
                     bLabel.Font = Enum.Font.GothamBold
-                    bLabel.TextSize = 9
+                    bLabel.TextSize = 8
                     bLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
                     bLabel.Text = "0"
                     _tabBadges[tName] = bLabel
@@ -1659,6 +1830,16 @@ local function PatchRayfieldDOM()
                         if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
                             bFrame.Visible = false
                             PlayUISound("tab")
+                            for _, otherTab in ipairs(tabList:GetChildren()) do
+                                local oPod = otherTab:FindFirstChild("TabGlowPod")
+                                if oPod then
+                                    TweenService:Create(oPod, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 1}):Play()
+                                end
+                            end
+                            if tabPod then
+                                tabPod.BackgroundColor3 = GetThemeAccentColor()
+                                TweenService:Create(tabPod, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 0.2}):Play()
+                            end
                             TweenService:Create(activeGlow, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
                                 Position = UDim2.new(0, 2, 0, tabBtn.Position.Y.Offset + 2),
                                 Size = UDim2.new(0, 3, 0, math.max(16, tabBtn.Size.Y.Offset - 4)),
@@ -1683,6 +1864,36 @@ local function PatchRayfieldDOM()
         if cStroke then
             cStroke.Transparency = math.clamp(mainTrans, 0, 1)
             cStroke.Enabled = isVis
+        end
+
+        -- Ambient Glass Aura Sync (strictly behind Main, tracks window position & size)
+        local aAura = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
+        if aAura then
+            aAura.Visible = (isVis and isExpanded)
+            aAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 22, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 22)
+            aAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 44, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 44)
+            aAura.ImageColor3 = GetThemeAccentColor()
+            aAura.ImageTransparency = math.clamp(0.72 + mainTrans * 0.28, 0, 1)
+        end
+
+        -- Main Window Carbon Mesh
+        local mMesh = mainFrame:FindFirstChild("MainCarbonMesh")
+        if mMesh then
+            mMesh.Visible = (isVis and isExpanded)
+            mMesh.ImageTransparency = math.clamp(0.96 + mainTrans * 0.04, 0, 1)
+        end
+
+        -- Live Status Pill
+        local sPill = topbar and topbar:FindFirstChild("StatusPill")
+        if sPill then
+            sPill.Visible = (isVis and isExpanded)
+            sPill.BackgroundTransparency = math.clamp(0.35 + topTrans * 0.65, 0, 1)
+            local spS = sPill:FindFirstChildOfClass("UIStroke")
+            if spS then spS.Transparency = topTrans end
+            local spT = sPill:FindFirstChild("StatusText")
+            if spT then spT.TextTransparency = topTrans end
+            local spL = sPill:FindFirstChild("LED")
+            if spL then spL.BackgroundTransparency = topTrans end
         end
 
 
@@ -1741,6 +1952,7 @@ local function PatchRayfieldDOM()
         mainFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
         mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
         mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncRayfieldFade)
+        mainFrame:GetPropertyChangedSignal("Position"):Connect(SyncRayfieldFade)
         if topbar then
             topbar:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
             topbar:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
@@ -2101,7 +2313,40 @@ local function PatchRayfieldDOM()
             end
         end
 
-        -- Live State Dot on Toggles
+        -- 3b. Atmospheric Carbon Weave & Card Hover Glow Injection
+        if desc:IsA("GuiObject") and desc.Parent and (desc.Parent.Name == "Elements" or desc.Parent:FindFirstChild("UIListLayout")) then
+            AttachHoverGlow(desc)
+
+            -- Paragraph Terminal Carbon Weave & Accent Prompt
+            if desc:FindFirstChild("Content") and not desc:FindFirstChild("ParaAccentBar") then
+                AttachCarbonOverlay(desc, 0.90)
+                local pBar = Instance.new("Frame", desc)
+                pBar.Name = "ParaAccentBar"
+                pBar.Size = UDim2.new(0, 2.5, 1, -8)
+                pBar.Position = UDim2.new(0, 2, 0, 4)
+                pBar.BackgroundColor3 = GetThemeAccentColor()
+                pBar.BorderSizePixel = 0
+                pBar.ZIndex = desc.ZIndex + 1
+                Instance.new("UICorner", pBar).CornerRadius = UDim.new(1, 0)
+            end
+
+            -- Toggle Carbon Background
+            if desc:FindFirstChild("Switch") then
+                AttachCarbonOverlay(desc, 0.93)
+            end
+
+            -- Button Carbon Weave
+            if desc:FindFirstChild("Interact") and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider") then
+                AttachCarbonOverlay(desc, 0.91)
+            end
+
+            -- Slider Carbon Weave
+            if desc:FindFirstChild("Slider") then
+                AttachCarbonOverlay(desc, 0.93)
+            end
+        end
+
+        -- Live State Dot on Toggles & Neon Glow Switch Track
         if desc:IsA("GuiObject") and desc:FindFirstChild("Switch") and not desc:FindFirstChild("LiveDot") then
             local dot = Instance.new("Frame")
             dot.Name = "LiveDot"
@@ -2115,10 +2360,19 @@ local function PatchRayfieldDOM()
             local switch = desc:FindFirstChild("Switch")
             local function updateDot()
                 local ind = switch and switch:FindFirstChild("Indicator")
-                if ind and ind.Position.X.Offset > -30 then
-                    dot.BackgroundColor3 = Color3.fromRGB(0, 230, 100)
+                local isNowOn = ind and (ind.Position.X.Offset > -30)
+                if isNowOn then
+                    dot.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
+                    if switch then
+                        switch.BackgroundColor3 = GetThemeAccentColor()
+                        switch.BackgroundTransparency = 0.25
+                    end
                 else
                     dot.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+                    if switch then
+                        switch.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+                        switch.BackgroundTransparency = 0
+                    end
                 end
             end
             task.delay(0.2, updateDot)

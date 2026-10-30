@@ -4037,6 +4037,7 @@ for _, entry in ipairs(TabRegistry) do
     end
 end
 
+S.UIInitialized = true
 print("[TASFF UI] Interface constructed. Configuration loaded.")
 
 -- Trigger theme runtime patch immediately upon UI creation

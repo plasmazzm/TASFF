@@ -1451,13 +1451,35 @@ local function PatchRayfieldDOM()
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
     end
 
-    -- 0. Window Width Expansion (generous spacing for Title, Profile Banner, Monitor, Bell, and Controls)
-    if not mainFrame:FindFirstChild("SizeInitialized") then
-        local sInit = Instance.new("BoolValue", mainFrame)
-        sInit.Name = "SizeInitialized"
-        if mainFrame.AbsoluteSize.X < 630 then
-            mainFrame.Size = UDim2.new(0, 640, 0, math.max(460, mainFrame.AbsoluteSize.Y))
-        end
+    -- 0. Window Dimensions State & Persistent Size Preserver across Open/Close
+    S.DesiredWindowWidth = S.DesiredWindowWidth or 640
+    S.DesiredWindowHeight = S.DesiredWindowHeight or 480
+
+    if mainFrame.AbsoluteSize.X < 600 and mainFrame.AbsoluteSize.Y > 100 then
+        mainFrame.Size = UDim2.new(0, S.DesiredWindowWidth, 0, math.max(S.DesiredWindowHeight, mainFrame.AbsoluteSize.Y))
+    end
+
+    if not mainFrame:FindFirstChild("SizePreserverHooked") then
+        local spHook = Instance.new("BoolValue", mainFrame)
+        spHook.Name = "SizePreserverHooked"
+
+        local _sizeDebounce = false
+        mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            if _resizing or _sizeDebounce then return end
+            -- Rayfield resets to 500px width whenever user toggles/opens the window
+            if mainFrame.Visible and mainFrame.AbsoluteSize.Y > 120 and mainFrame.AbsoluteSize.X < 590 then
+                _sizeDebounce = true
+                task.defer(function()
+                    if mainFrame and mainFrame.Parent and mainFrame.Visible and mainFrame.AbsoluteSize.Y > 120 then
+                        local tw = S.DesiredWindowWidth or 640
+                        local th = S.DesiredWindowHeight or math.max(480, mainFrame.AbsoluteSize.Y)
+                        mainFrame.Size = UDim2.new(0, tw, 0, th)
+                    end
+                    task.wait(0.2)
+                    _sizeDebounce = false
+                end)
+            end
+        end)
     end
 
     -- 0a. Tactical Carbon Mesh on Window Background
@@ -1468,10 +1490,10 @@ local function PatchRayfieldDOM()
         mCarbon.Position = UDim2.new(0, 0, 0, 0)
         mCarbon.BackgroundTransparency = 1
         mCarbon.Image = "rbxassetid://2151741365"
-        mCarbon.ImageColor3 = Color3.fromRGB(225, 225, 245)
+        mCarbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
         mCarbon.ScaleType = Enum.ScaleType.Tile
-        mCarbon.TileSize = UDim2.new(0, 18, 0, 18)
-        mCarbon.ImageTransparency = 0.84
+        mCarbon.TileSize = UDim2.new(0, 16, 0, 16)
+        mCarbon.ImageTransparency = 0.80
         mCarbon.ZIndex = 1
         Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
         mCarbon.Parent = mainFrame
@@ -1516,17 +1538,18 @@ local function PatchRayfieldDOM()
         ambientAura.BackgroundTransparency = 1
         ambientAura.Image = "rbxassetid://1316045217"
         ambientAura.ImageColor3 = GetThemeAccentColor()
-        ambientAura.ImageTransparency = 0.65
+        ambientAura.ImageTransparency = 0.58
         ambientAura.ScaleType = Enum.ScaleType.Slice
         ambientAura.SliceCenter = Rect.new(10, 10, 118, 118)
-        ambientAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 9, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 9)
-        ambientAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 18, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 18)
+        ambientAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 7, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 7)
+        ambientAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 14, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 14)
         ambientAura.ZIndex = 0
         ambientAura.Parent = mainFrame.Parent
     elseif ambientAura then
         ambientAura.ImageColor3 = GetThemeAccentColor()
-        ambientAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 9, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 9)
-        ambientAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 18, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 18)
+        ambientAura.ImageTransparency = 0.58
+        ambientAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 7, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 7)
+        ambientAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 14, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 14)
     end
 
     -- Clean up any residual legacy GlassShadow directly on mainFrame
@@ -1556,62 +1579,11 @@ local function PatchRayfieldDOM()
             topbarLine.BackgroundColor3 = GetThemeAccentColor()
         end
 
-        -- Live Tactical Status Monitor (FPS & Ping)
-        local statusPill = topbar:FindFirstChild("StatusPill")
-        if not statusPill then
-            statusPill = Instance.new("Frame", topbar)
-            statusPill.Name = "StatusPill"
-            statusPill.Size = UDim2.new(0, 68, 0, 20)
-            statusPill.Position = UDim2.new(1, -220, 0.5, -10)
-            statusPill.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-            statusPill.BackgroundTransparency = 0.35
-            statusPill.BorderSizePixel = 0
-            statusPill.ZIndex = 40
-            Instance.new("UICorner", statusPill).CornerRadius = UDim.new(0, 4)
-            local spStroke = Instance.new("UIStroke", statusPill)
-            spStroke.Color = Color3.fromRGB(48, 48, 60)
-            spStroke.Thickness = 1
-
-            local led = Instance.new("Frame", statusPill)
-            led.Name = "LED"
-            led.Size = UDim2.new(0, 5, 0, 5)
-            led.Position = UDim2.new(0, 6, 0.5, -2.5)
-            led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
-            led.BorderSizePixel = 0
-            led.ZIndex = 41
-            Instance.new("UICorner", led).CornerRadius = UDim.new(1, 0)
-
-            local sText = Instance.new("TextLabel", statusPill)
-            sText.Name = "StatusText"
-            sText.Size = UDim2.new(1, -16, 1, 0)
-            sText.Position = UDim2.new(0, 15, 0, 0)
-            sText.BackgroundTransparency = 1
-            sText.Font = Enum.Font.GothamBold
-            sText.TextSize = 8
-            sText.TextColor3 = Color3.fromRGB(190, 215, 220)
-            sText.TextXAlignment = Enum.TextXAlignment.Left
-            sText.Text = "60 FPS"
-            sText.ZIndex = 41
-
-            task.spawn(function()
-                while statusPill and statusPill.Parent do
-                    local fps = math.floor(1 / math.max(0.001, RunService.RenderStepped:Wait()))
-                    if sText and sText.Parent then
-                        sText.Text = tostring(math.clamp(fps, 0, 999)) .. " FPS"
-                        if fps >= 50 then
-                            led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
-                        elseif fps >= 30 then
-                            led.BackgroundColor3 = Color3.fromRGB(255, 185, 50)
-                        else
-                            led.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-                        end
-                    end
-                    task.wait(0.5)
-                end
-            end)
-        else
-            statusPill.Position = UDim2.new(1, -220, 0.5, -10)
-        end
+        -- Clean up topbar: strictly remove StatusPill and UserProfileBanner so Title has 100% unobstructed room
+        local oldPill = topbar:FindFirstChild("StatusPill")
+        if oldPill then oldPill:Destroy() end
+        local oldBanner = topbar:FindFirstChild("UserProfileBanner")
+        if oldBanner then oldBanner:Destroy() end
 
         local bellBtn = topbar:FindFirstChild("NotifBellBtn")
         if not bellBtn then
@@ -1667,45 +1639,99 @@ local function PatchRayfieldDOM()
         else
             bellBtn.Position = UDim2.new(1, -145, 0.5, -11)
         end
+    end
 
-        local uBanner = topbar:FindFirstChild("UserProfileBanner")
-        if not uBanner then
-            uBanner = Instance.new("Frame", topbar)
-            uBanner.Name = "UserProfileBanner"
-            uBanner.Size = UDim2.new(0, 136, 0, 22)
-            uBanner.Position = UDim2.new(1, -364, 0.5, -11)
-            uBanner.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
-            uBanner.BackgroundTransparency = 0.35
-            uBanner.ZIndex = 40
-            Instance.new("UICorner", uBanner).CornerRadius = UDim.new(0, 5)
-            local uStroke = Instance.new("UIStroke", uBanner)
-            uStroke.Color = Color3.fromRGB(45, 45, 55)
+    -- Relocated Operator Profile & Live System Monitor into Sleek Bottom Dock
+    local bottomDock = mainFrame:FindFirstChild("BottomDock")
+    if not bottomDock then
+        bottomDock = Instance.new("Frame", mainFrame)
+        bottomDock.Name = "BottomDock"
+        bottomDock.Size = UDim2.new(1, -36, 0, 22)
+        bottomDock.Position = UDim2.new(0, 10, 1, -25)
+        bottomDock.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
+        bottomDock.BackgroundTransparency = 0.35
+        bottomDock.BorderSizePixel = 0
+        bottomDock.ZIndex = 50
+        Instance.new("UICorner", bottomDock).CornerRadius = UDim.new(0, 5)
+        local dockStroke = Instance.new("UIStroke", bottomDock)
+        dockStroke.Color = Color3.fromRGB(42, 42, 54)
+        dockStroke.Thickness = 1
 
-            local uAvatar = Instance.new("ImageLabel", uBanner)
-            uAvatar.Name = "Avatar"
-            uAvatar.Size = UDim2.new(0, 18, 0, 18)
-            uAvatar.Position = UDim2.new(0, 2, 0.5, -9)
-            uAvatar.BackgroundTransparency = 1
-            uAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
-            uAvatar.ZIndex = 41
-            Instance.new("UICorner", uAvatar).CornerRadius = UDim.new(1, 0)
+        AttachCarbonOverlay(bottomDock, 0.74)
 
-            local uName = Instance.new("TextLabel", uBanner)
-            uName.Name = "Username"
-            uName.Size = UDim2.new(1, -24, 1, 0)
-            uName.Position = UDim2.new(0, 22, 0, 0)
-            uName.BackgroundTransparency = 1
-            uName.Font = Enum.Font.GothamBold
-            uName.TextSize = 9
-            uName.TextColor3 = Color3.fromRGB(215, 215, 225)
-            uName.TextXAlignment = Enum.TextXAlignment.Left
-            uName.TextTruncate = Enum.TextTruncate.AtEnd
-            uName.ZIndex = 41
-            local exec = (identifyexecutor and identifyexecutor()) or "Client"
-            uName.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. " (" .. exec .. ")"
-        else
-            uBanner.Position = UDim2.new(1, -364, 0.5, -11)
-        end
+        -- Left: Operator Avatar & Identity Badge
+        local opAvatar = Instance.new("ImageLabel", bottomDock)
+        opAvatar.Name = "OpAvatar"
+        opAvatar.Size = UDim2.new(0, 16, 0, 16)
+        opAvatar.Position = UDim2.new(0, 4, 0.5, -8)
+        opAvatar.BackgroundTransparency = 1
+        opAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
+        opAvatar.ZIndex = 51
+        Instance.new("UICorner", opAvatar).CornerRadius = UDim.new(1, 0)
+
+        local opName = Instance.new("TextLabel", bottomDock)
+        opName.Name = "OpName"
+        opName.Size = UDim2.new(0, 220, 1, 0)
+        opName.Position = UDim2.new(0, 25, 0, 0)
+        opName.BackgroundTransparency = 1
+        opName.Font = Enum.Font.GothamBold
+        opName.TextSize = 9
+        opName.TextColor3 = Color3.fromRGB(220, 220, 230)
+        opName.TextXAlignment = Enum.TextXAlignment.Left
+        opName.TextTruncate = Enum.TextTruncate.AtEnd
+        opName.ZIndex = 51
+        local exec = (identifyexecutor and identifyexecutor()) or "Client"
+        opName.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. " (" .. exec .. ")"
+
+        -- Right: Live Status Monitor (FPS & Latency Ping)
+        local statContainer = Instance.new("Frame", bottomDock)
+        statContainer.Name = "StatContainer"
+        statContainer.Size = UDim2.new(0, 150, 1, 0)
+        statContainer.Position = UDim2.new(1, -155, 0, 0)
+        statContainer.BackgroundTransparency = 1
+        statContainer.ZIndex = 51
+
+        local led = Instance.new("Frame", statContainer)
+        led.Name = "LED"
+        led.Size = UDim2.new(0, 6, 0, 6)
+        led.Position = UDim2.new(0, 4, 0.5, -3)
+        led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
+        led.BorderSizePixel = 0
+        led.ZIndex = 52
+        Instance.new("UICorner", led).CornerRadius = UDim.new(1, 0)
+
+        local sText = Instance.new("TextLabel", statContainer)
+        sText.Name = "StatusText"
+        sText.Size = UDim2.new(1, -14, 1, 0)
+        sText.Position = UDim2.new(0, 14, 0, 0)
+        sText.BackgroundTransparency = 1
+        sText.Font = Enum.Font.GothamBold
+        sText.TextSize = 9
+        sText.TextColor3 = Color3.fromRGB(190, 215, 220)
+        sText.TextXAlignment = Enum.TextXAlignment.Left
+        sText.Text = "60 FPS  |  Ping: 0ms"
+        sText.ZIndex = 52
+
+        task.spawn(function()
+            while bottomDock and bottomDock.Parent do
+                local fps = math.floor(1 / math.max(0.001, RunService.RenderStepped:Wait()))
+                if sText and sText.Parent then
+                    local ping = 0
+                    pcall(function()
+                        ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+                    end)
+                    sText.Text = tostring(math.clamp(fps, 0, 999)) .. " FPS  |  " .. tostring(ping) .. "ms"
+                    if fps >= 50 then
+                        led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
+                    elseif fps >= 30 then
+                        led.BackgroundColor3 = Color3.fromRGB(255, 185, 50)
+                    else
+                        led.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+                    end
+                end
+                task.wait(0.5)
+            end
+        end)
     end
 
     -- 1. Window Resize Handle (Modern Vector Grip with Smooth Fade Sync)
@@ -1774,6 +1800,8 @@ local function PatchRayfieldDOM()
                 local newW = math.clamp(_rSizeStart.X + delta.X, 480, 1000)
                 local newH = math.clamp(_rSizeStart.Y + delta.Y, 340, 850)
                 mainFrame.Size = UDim2.new(0, newW, 0, newH)
+                S.DesiredWindowWidth = newW
+                S.DesiredWindowHeight = newH
             end
         end)
     end
@@ -1862,44 +1890,37 @@ local function PatchRayfieldDOM()
         local aAura = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
         if aAura then
             aAura.Visible = (isVis and isExpanded)
-            aAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 9, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 9)
-            aAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 18, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 18)
+            aAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 7, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 7)
+            aAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 14, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 14)
             aAura.ImageColor3 = GetThemeAccentColor()
-            aAura.ImageTransparency = math.clamp(0.65 + mainTrans * 0.35, 0, 1)
+            aAura.ImageTransparency = math.clamp(0.58 + mainTrans * 0.42, 0, 1)
         end
 
         -- Main Window Carbon Mesh
         local mMesh = mainFrame:FindFirstChild("MainCarbonMesh")
         if mMesh then
             mMesh.Visible = (isVis and isExpanded)
-            mMesh.ImageTransparency = math.clamp(0.84 + mainTrans * 0.16, 0, 1)
+            mMesh.ImageTransparency = math.clamp(0.80 + mainTrans * 0.20, 0, 1)
         end
 
-        -- Live Status Pill
-        local sPill = topbar and topbar:FindFirstChild("StatusPill")
-        if sPill then
-            sPill.Visible = (isVis and isExpanded)
-            sPill.BackgroundTransparency = math.clamp(0.35 + topTrans * 0.65, 0, 1)
-            local spS = sPill:FindFirstChildOfClass("UIStroke")
-            if spS then spS.Transparency = topTrans end
-            local spT = sPill:FindFirstChild("StatusText")
-            if spT then spT.TextTransparency = topTrans end
-            local spL = sPill:FindFirstChild("LED")
-            if spL then spL.BackgroundTransparency = topTrans end
-        end
-
-
-        -- Topbar Profile Banner
-        local uBanner = topbar and topbar:FindFirstChild("UserProfileBanner")
-        if uBanner then
-            uBanner.Visible = isVis
-            uBanner.BackgroundTransparency = math.clamp(0.35 + topTrans * 0.65, 0, 1)
-            local uStroke = uBanner:FindFirstChildOfClass("UIStroke")
-            if uStroke then uStroke.Transparency = topTrans end
-            local uAvatar = uBanner:FindFirstChild("Avatar")
-            if uAvatar then uAvatar.ImageTransparency = topTrans end
-            local uName = uBanner:FindFirstChild("Username")
-            if uName then uName.TextTransparency = topTrans end
+        -- Relocated Tactical Bottom Dock Sync
+        local bDock = mainFrame:FindFirstChild("BottomDock")
+        if bDock then
+            bDock.Visible = (isVis and isExpanded)
+            bDock.BackgroundTransparency = math.clamp(0.35 + mainTrans * 0.65, 0, 1)
+            local dStroke = bDock:FindFirstChildOfClass("UIStroke")
+            if dStroke then dStroke.Transparency = mainTrans end
+            local opA = bDock:FindFirstChild("OpAvatar")
+            if opA then opA.ImageTransparency = mainTrans end
+            local opN = bDock:FindFirstChild("OpName")
+            if opN then opN.TextTransparency = mainTrans end
+            local sCont = bDock:FindFirstChild("StatContainer")
+            if sCont then
+                local led = sCont:FindFirstChild("LED")
+                if led then led.BackgroundTransparency = mainTrans end
+                local st = sCont:FindFirstChild("StatusText")
+                if st then st.TextTransparency = mainTrans end
+            end
         end
 
         -- Topbar Bell Button
@@ -2305,12 +2326,12 @@ local function PatchRayfieldDOM()
 
             -- Paragraph Terminal Carbon Weave, Accent Bar & Dynamic Compact Height
             if desc:IsA("Frame") and desc:FindFirstChild("Content") and desc:FindFirstChild("Title") and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider") and not desc:FindFirstChild("ColorPicker") and not desc:FindFirstChild("Keybind") and not desc:FindFirstChild("Dropdown") then
-                AttachCarbonOverlay(desc, 0.78)
+                AttachCarbonOverlay(desc, 0.74)
                 if not desc:FindFirstChild("ParaAccentBar") then
                     local pBar = Instance.new("Frame", desc)
                     pBar.Name = "ParaAccentBar"
-                    pBar.Size = UDim2.new(0, 3, 1, -8)
-                    pBar.Position = UDim2.new(0, 3, 0, 4)
+                    pBar.Size = UDim2.new(0, 2.5, 1, -6)
+                    pBar.Position = UDim2.new(0, 3, 0, 3)
                     pBar.BackgroundColor3 = GetThemeAccentColor()
                     pBar.BorderSizePixel = 0
                     pBar.ZIndex = desc.ZIndex + 1
@@ -2323,16 +2344,31 @@ local function PatchRayfieldDOM()
                     local sizerHook = Instance.new("BoolValue", desc)
                     sizerHook.Name = "ParaSizerHooked"
 
+                    desc.AutomaticSize = Enum.AutomaticSize.None
+                    title.AutomaticSize = Enum.AutomaticSize.None
+                    content.AutomaticSize = Enum.AutomaticSize.None
+
+                    title.Font = Enum.Font.GothamBold
+                    title.TextSize = 11
+                    title.TextColor3 = GetThemeAccentColor()
                     title.TextXAlignment = Enum.TextXAlignment.Left
+                    title.Position = UDim2.new(0, 10, 0, 3)
+                    title.Size = UDim2.new(1, -16, 0, 14)
+
+                    content.Font = Enum.Font.GothamMedium
+                    content.TextSize = 10
+                    content.TextColor3 = Color3.fromRGB(185, 190, 200)
                     content.TextXAlignment = Enum.TextXAlignment.Left
                     content.TextWrapped = true
 
                     local function ResizePara()
-                        local tw = desc.AbsoluteSize.X > 50 and (desc.AbsoluteSize.X - 24) or 420
-                        local tH = TextService:GetTextSize(title.Text, title.TextSize, title.Font, Vector2.new(tw, 1000)).Y
-                        local cH = TextService:GetTextSize(content.Text, content.TextSize, content.Font, Vector2.new(tw, 2000)).Y
-                        local totalH = math.clamp(math.ceil(tH + cH + 16), 34, 400)
-                        desc.Size = UDim2.new(desc.Size.X.Scale, desc.Size.X.Offset, 0, totalH)
+                        local tw = desc.AbsoluteSize.X > 50 and (desc.AbsoluteSize.X - 22) or 380
+                        local tH = 14
+                        local cH = TextService:GetTextSize(content.Text, 10, Enum.Font.GothamMedium, Vector2.new(tw, 2000)).Y
+                        local totalH = math.clamp(math.ceil(tH + cH + 8), 26, 260)
+                        desc.Size = UDim2.new(1, -10, 0, totalH)
+                        content.Position = UDim2.new(0, 10, 0, 18)
+                        content.Size = UDim2.new(1, -16, 0, cH)
                     end
 
                     task.defer(ResizePara)

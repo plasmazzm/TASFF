@@ -1636,6 +1636,45 @@ local function PatchRayfieldDOM()
         else
             activeGlow.BackgroundColor3 = GetThemeAccentColor()
         end
+
+        for _, tabBtn in ipairs(tabList:GetChildren()) do
+            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" and tabBtn.Name ~= "ActiveTabGlowBar" then
+                local tName = tabBtn.Name
+                if not tabBtn:FindFirstChild("BadgeFrame") then
+                    local bFrame = Instance.new("Frame")
+                    bFrame.Name = "BadgeFrame"
+                    bFrame.Size = UDim2.new(0, 16, 0, 16)
+                    bFrame.Position = UDim2.new(1, -20, 0.5, -8)
+                    bFrame.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+                    bFrame.BorderSizePixel = 0
+                    bFrame.Visible = false
+                    bFrame.ZIndex = 25
+                    bFrame.Parent = tabBtn
+
+                    Instance.new("UICorner", bFrame).CornerRadius = UDim.new(1, 0)
+                    local bLabel = Instance.new("TextLabel", bFrame)
+                    bLabel.Size = UDim2.new(1, 0, 1, 0)
+                    bLabel.BackgroundTransparency = 1
+                    bLabel.Font = Enum.Font.GothamBold
+                    bLabel.TextSize = 9
+                    bLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    bLabel.Text = "0"
+                    _tabBadges[tName] = bLabel
+
+                    tabBtn.InputBegan:Connect(function(inp)
+                        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+                            bFrame.Visible = false
+                            PlayUISound("tab")
+                            TweenService:Create(activeGlow, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+                                Position = UDim2.new(0, 2, 0, tabBtn.Position.Y.Offset + 2),
+                                Size = UDim2.new(0, 3, 0, math.max(16, tabBtn.Size.Y.Offset - 4)),
+                                BackgroundColor3 = GetThemeAccentColor()
+                            }):Play()
+                        end
+                    end)
+                end
+            end
+        end
     end
 
     -- Centralized Full Fading & Window State Synchronizer
@@ -1720,46 +1759,6 @@ local function PatchRayfieldDOM()
         end
     end
     SyncRayfieldFade()
-
-        for _, tabBtn in ipairs(tabList:GetChildren()) do
-            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" and tabBtn.Name ~= "ActiveTabGlowBar" then
-                local tName = tabBtn.Name
-                if not tabBtn:FindFirstChild("BadgeFrame") then
-                    local bFrame = Instance.new("Frame")
-                    bFrame.Name = "BadgeFrame"
-                    bFrame.Size = UDim2.new(0, 16, 0, 16)
-                    bFrame.Position = UDim2.new(1, -20, 0.5, -8)
-                    bFrame.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-                    bFrame.BorderSizePixel = 0
-                    bFrame.Visible = false
-                    bFrame.ZIndex = 25
-                    bFrame.Parent = tabBtn
-
-                    Instance.new("UICorner", bFrame).CornerRadius = UDim.new(1, 0)
-                    local bLabel = Instance.new("TextLabel", bFrame)
-                    bLabel.Size = UDim2.new(1, 0, 1, 0)
-                    bLabel.BackgroundTransparency = 1
-                    bLabel.Font = Enum.Font.GothamBold
-                    bLabel.TextSize = 9
-                    bLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    bLabel.Text = "0"
-                    _tabBadges[tName] = bLabel
-
-                    tabBtn.InputBegan:Connect(function(inp)
-                        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-                            bFrame.Visible = false
-                            PlayUISound("tab")
-                            TweenService:Create(activeGlow, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-                                Position = UDim2.new(0, 2, 0, tabBtn.Position.Y.Offset + 2),
-                                Size = UDim2.new(0, 3, 0, math.max(16, tabBtn.Size.Y.Offset - 4)),
-                                BackgroundColor3 = GetThemeAccentColor()
-                            }):Play()
-                        end
-                    end)
-                end
-            end
-        end
-    end
 
     -- 3. Walk Elements and inject Section collapse, Stepper Buttons, Keycaps, Definition Badges, and Live Dots
     local hotkeyNames = {
@@ -1897,7 +1896,12 @@ local function PatchRayfieldDOM()
                 toggleBtn.Parent = secFrame
 
                 local isCollapsed = false
+                local _tDebounce = false
                 local function toggleCollapse()
+                    if _tDebounce then return end
+                    _tDebounce = true
+                    task.delay(0.15, function() _tDebounce = false end)
+
                     isCollapsed = not isCollapsed
                     local targetRot = isCollapsed and -90 or 0
                     local targetCol = isCollapsed and GetThemeAccentColor() or Color3.fromRGB(180, 180, 195)
@@ -1924,14 +1928,20 @@ local function PatchRayfieldDOM()
 
                 toggleBtn.MouseButton1Click:Connect(toggleCollapse)
 
-                if not secFrame:FindFirstChild("HeaderClickBound") then
-                    local headerClickTag = Instance.new("BoolValue", secFrame)
-                    headerClickTag.Name = "HeaderClickBound"
-                    secFrame.InputBegan:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                            toggleCollapse()
+                -- Ensure all elements under this section are 100% visible and expanded upon initial load
+                local container = secFrame.Parent
+                if container then
+                    local pastSec = false
+                    for _, child in ipairs(container:GetChildren()) do
+                        if child == secFrame then
+                            pastSec = true
+                        elseif pastSec then
+                            if child.Name == "SectionTitle" then break end
+                            if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
+                                child.Visible = true
+                            end
                         end
-                    end)
+                    end
                 end
 
                 local function syncCollapseFade()

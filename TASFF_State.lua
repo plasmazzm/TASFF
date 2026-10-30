@@ -353,6 +353,26 @@ _G.TASFF_State = {
     CalibrationOffsetX          = 0,
     CalibrationOffsetY          = 0,
 
+    -- // ── Overlay & Interface Modifiers (v2.3.0) ──────────────── // --
+    HUDStripEnabled             = true,      -- persistent HUD strip at top of screen
+    RadarEnabled                = false,     -- threat radar mini-map overlay
+    SidebarEnabled              = true,      -- notification history feed
+    KeyboardNavEnabled          = true,      -- keyboard navigation (arrows/enter)
+    CompactModeEnabled          = false,     -- compact UI mode
+    MobileModeEnabled           = false,     -- mobile touch mode
+    UIOpacity                   = 1.0,       -- window opacity (0.3 to 1.0)
+    EventLog                    = {},        -- session event log entries
+    LastTouchedDef              = "Master Switch",
+    LastTouchedDefText          = "Global killswitch for all combat systems.",
+    ThemeBadgeCounts            = {},
+    DynamicFOVEnabled           = false,
+    DynamicFOVMax               = 400,
+    HealthThresholdEnabled      = false,
+    HealthThreshold             = 0,
+    SmoothnessX                 = 0.1,
+    SmoothnessY                 = 0.1,
+    BlatantSnapSpeed            = 15,
+
     -- // ── Presets ────────────────────────────────────────────── // --
     SavedPresets                = {},
     SelectedPresetToManage      = "",

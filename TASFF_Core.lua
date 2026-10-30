@@ -96,23 +96,56 @@ S.GetKeyCode = GetKeyCode
 local _notifyCount = 0
 local _notifyWindowStart = tick()
 local function Notify(options)
-    if S.DisableNotifications then return end
     options = options or {}
-    -- Feature 23: Notification Throttle
+    local isBypass = (options.BypassThrottle == true) or (options.Important == true)
+    if S.DisableNotifications and not options.BypassSilence and not isBypass then return end
+
+    -- Feature 23: Notification Throttle (bypassed for critical/profile notifications)
     local now = tick()
     if now - _notifyWindowStart >= 3 then
         _notifyWindowStart = now; _notifyCount = 0
     end
     local limit = S.NotifyMaxPer3s or 5
-    if _notifyCount >= limit then return end  -- drop excess
-    _notifyCount = _notifyCount + 1
-    -- Apply global notification duration override
-    if S.NotificationDuration and S.NotificationDuration > 0 then
-        options = setmetatable({}, {__index = options})
-        options.Duration = S.NotificationDuration
+    if not isBypass then
+        if _notifyCount >= limit then return end  -- drop excess non-critical notifications
+        _notifyCount = _notifyCount + 1
     end
+
+    -- Build a clean, fully materialized options table so Rayfield's internal
+    -- builder (which may use pairs/ipairs or table.clone) receives all keys directly
+    -- instead of resolving through a __index metatable chain.
+    local mat = {
+        Title          = options.Title          or "",
+        Content        = options.Content        or "",
+        Duration       = options.Duration,
+        Image          = options.Image,
+        BypassThrottle = options.BypassThrottle,
+        Important      = options.Important,
+        BypassSilence  = options.BypassSilence,
+    }
+    -- Apply global notification duration override
+    if S.NotificationDuration and S.NotificationDuration > 0 and not mat.Duration then
+        mat.Duration = S.NotificationDuration
+    end
+
+    -- Primary: Rayfield notification
+    local rayfieldOk = false
     if Rayfield and Rayfield.Notify then
-        pcall(function() Rayfield:Notify(options) end)
+        local ok = pcall(function() Rayfield:Notify(mat) end)
+        rayfieldOk = ok
+    end
+
+    -- Secondary fallback: for important/bypass notifications when Rayfield is closed or failed,
+    -- surface through the native Roblox HUD notification so critical alerts (preset loaded, panic, etc.)
+    -- are always visible regardless of UI window state.
+    if (not rayfieldOk or isBypass) and isBypass then
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title    = mat.Title,
+                Text     = mat.Content,
+                Duration = mat.Duration or 3,
+            })
+        end)
     end
 end
 S.Notify = Notify
@@ -125,16 +158,24 @@ task.spawn(function()
     local origNotify = Rayfield.Notify
     if not origNotify then return end
     Rayfield.Notify = function(self, opts)
+        -- Support both Rayfield:Notify(opts) and Rayfield.Notify(opts)
+        local options = opts
+        local target = self
+        if opts == nil and type(self) == "table" and (self.Title or self.Content) then
+            options = self
+            target = Rayfield
+        end
+
         -- Block notifications that originate from Rayfield's own advertising
-        if S.SuppressRayfieldAds then
-            local t = (opts and opts.Title) or ""
-            local c = (opts and opts.Content) or ""
+        if S.SuppressRayfieldAds and options then
+            local t = tostring(options.Title or "")
+            local c = tostring(options.Content or "")
             if t:find("Rayfield") or t:find("sirius") or t:find("advertisement") or
                c:find("sirius.menu") or c:find("Loving this") or c:find("ui library") then
                 return
             end
         end
-        return origNotify(self, opts)
+        return origNotify(target, options)
     end
 end)
 
@@ -298,8 +339,13 @@ local function NewDrawing(className)
         __index = function(self, key)
             if key == "Remove" then
                 return function(instance)
-                    if instance.Frame then instance.Frame:Destroy() end
+                    if instance.Frame then pcall(function() instance.Frame:Destroy() end) end
                     instance.Frame = nil
+                    local env = GetTASFFEnv()
+                    if env and type(env.Drawings) == "table" then
+                        local idx = table.find(env.Drawings, instance)
+                        if idx then table.remove(env.Drawings, idx) end
+                    end
                 end
             end
             return self.Values[key]
@@ -1009,7 +1055,7 @@ local function UnloadScript(isRestarting)
     for _, parent in ipairs(parentsToClean) do
         pcall(function()
             for _, child in ipairs(parent:GetChildren()) do
-                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") or child.Name == "TASFF_Overlay" then
+                if child.Name:find("TASFF") or child.Name:find("Rayfield") or child.Name:find("Sirius") then
                     pcall(function() child:Destroy() end)
                 end
             end
@@ -1105,6 +1151,10 @@ S.GetIntelSortedList = GetIntelSortedList
 local function RebuildIntelMonitor()
     if not S.IntelMonitorLabel then return end
     local sorted = GetIntelSortedList()
+    local envTheme = (getgenv and getgenv().TASFF and getgenv().TASFF.Theme)
+    if envTheme and envTheme.SetTabBadge then
+        pcall(function() envTheme.SetTabBadge("Intel", #sorted) end)
+    end
     if #sorted == 0 then
         pcall(function() S.IntelMonitorLabel:Set({Title="Intel Monitor (0 tracked)", Content="No tracked players."}) end)
         return
@@ -1123,7 +1173,17 @@ local function RebuildIntelMonitor()
         local pkills = (S.PriorityPlayerKills or {})[name]
         local killSuffix = pkills and pkills > 0 and ("  ☠ " .. pkills .. "k") or ""
         local permSuffix = data.permanent and " [PERM]" or ""
-        table.insert(lines, name .. displaySuffix .. "  [" .. src .. "]" .. permSuffix .. "  " .. pts .. " pts" .. killSuffix .. selected)
+        local conf = "●●○○"
+        if src == "Kill Count" or src == "Nemesis" or data.permanent then
+            conf = "●●●●"
+        elseif src == "Damage" or src:find("Damage") then
+            conf = "●●●○"
+        elseif src == "Instincts" or src:find("Instinct") then
+            conf = "●●○○"
+        else
+            conf = "●○○○"
+        end
+        table.insert(lines, string.format("%s %s%s  [%s]%s  %d pts%s%s", conf, name, displaySuffix, src, permSuffix, pts, killSuffix, selected))
         if pts > mostDangerousPts then mostDangerousPts = pts; mostDangerousName = name end
     end
     local heatmap = ""
@@ -1873,7 +1933,7 @@ local function FindLikelyAttacker(victimChar, victimPlayer)
     local bestScore = 0
 
     local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     local ignoreList = {victimChar}
     if Camera then table.insert(ignoreList, Camera) end
     raycastParams.FilterDescendantsInstances = ignoreList
@@ -2358,12 +2418,16 @@ table.insert(getgenv().TASFF.Connections, UserInputService.InputBegan:Connect(fu
             end
         end
 
-        -- Quick Preset Switching Keybind
+        -- Quick Preset Switching Keybind — debounced to prevent double-fire on key repeat
         if not gpe and S.QuickPresetSwitchEnabled then
             local switchKey = GetKeyCode(S.QuickPresetSwitchKey)
             if switchKey and input.KeyCode == switchKey then
-                if S.CycleToNextPreset then
-                    S.CycleToNextPreset()
+                local now2 = tick()
+                if not S._LastPresetSwitchTime or (now2 - S._LastPresetSwitchTime) >= 0.35 then
+                    S._LastPresetSwitchTime = now2
+                    if S.CycleToNextPreset then
+                        task.spawn(S.CycleToNextPreset)
+                    end
                 end
             end
         end
@@ -2503,7 +2567,7 @@ task.spawn(function()
             end
         else
             -- Wallcheck off: treat everyone as visible so aimbot works normally
-            S.VisibilityPrecomputed = {}
+            table.clear(S.VisibilityPrecomputed)
         end
         task.wait(0.05)
     end
@@ -3181,18 +3245,25 @@ local function HookNeutralization(p)
         end
 
         local lastHealth = hum.Health
-        TrackConnection(hum.Died:Connect(handlePlayerDeath))
+        TrackConnection(hum.Died:Connect(function()
+            lastHealth = 0 -- keep lastHealth in sync so respawn doesn't misfire
+            handlePlayerDeath()
+        end))
         TrackConnection(hum.HealthChanged:Connect(function(newHealth)
             if newHealth <= 0 then
+                lastHealth = 0
                 handlePlayerDeath()
             elseif S.OtherPlayersDamageTracking and newHealth < lastHealth then
                 local healthDrop = lastHealth - newHealth
+                -- Attempt to read a creator/attacker tag written by the game's damage script
                 local creator = (S.DeepThreatScanEnabled ~= false and ScanForKillerTag(char, hum))
                     or hum:FindFirstChild("creator") or hum:FindFirstChild("creatorTag")
                 local attacker = ExtractPlayerFromValue(creator)
-                -- Only fall back to heuristic scan if no creator tag exists AND damage is substantial (≥12 HP)
-                -- to avoid false positives from chip damage, fall damage, or environmental sources across the map.
-                if not attacker and healthDrop >= 12 then
+                -- Heuristic proximity fallback: used when no damage tag exists.
+                -- Threshold lowered to 4 HP (from 12) so single-bullet hits are captured;
+                -- FindLikelyAttacker already has its own proximity/line-of-sight filter to
+                -- suppress environmental or distant false positives.
+                if not attacker and healthDrop >= 4 then
                     attacker = FindLikelyAttacker(char, p)
                 end
                 if attacker and attacker ~= p and attacker ~= Player then
@@ -3240,12 +3311,18 @@ table.insert(getgenv().TASFF.Connections, Players.PlayerRemoving:Connect(functio
         local label = wasIntel and (wasIntel.nemesis and "Nemesis" or wasIntel.source) or "Priority"
         Notify({Title="TASFF Intel", Content="["..label.."] "..p.Name.." left the game.", Duration=4, Image="user-minus"})
     end
+    -- Prune per-player runtime tables on disconnect to prevent stale key accumulation
+    if S._PermanentPriorityNotified then S._PermanentPriorityNotified[p.Name] = nil end
+    if S.PlayerNemesisStrikes then S.PlayerNemesisStrikes[p.Name] = nil end
+    if S.PlayerNemesisStrikeTimes then S.PlayerNemesisStrikeTimes[p.Name] = nil end
+    if S.PlayerKillCounts then S.PlayerKillCounts[p.Name] = nil end
+    if S.PriorityPlayerKills then S.PriorityPlayerKills[p.Name] = nil end
 end))
 
 task.defer(function()
     -- Render loop remains idle until UI loading sequence completes and explicitly sets S.ScriptInitialized = true
     S.CurrentTarget = nil
-    print("[TASFF v2.2.5] Core function slots registered. Awaiting UI sequence...")
+    print("[TASFF Core v" .. tostring(S and S.CurrentVersion or "?") .. "] Core function slots registered. Awaiting UI sequence...")
 end)
 
 -- // ══════════════════════════════════════════════════════════════ // --
@@ -3446,6 +3523,24 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 if (not S.SilentAimEnabled or not S.CurrentTarget) and (tick() - (S.SilentAimTargetCacheTime or 0) > 0.1) then
                     S.SilentAimTargetCache = nil
                 end
+                -- DeadTargetsCache cap: prune entries whose flash has already expired to prevent unbounded growth
+                if S.DeadTargetsCache then
+                    local now2 = tick()
+                    local flashDur = S.KillFlashDuration or 0.8
+                    for model, ts in pairs(S.DeadTargetsCache) do
+                        if (now2 - ts) > flashDur + 1 then
+                            S.DeadTargetsCache[model] = nil
+                        end
+                    end
+                end
+                -- OOF Angle Smooth cache cap: prune stale model entries
+                if S._OOFAngleSmooth then
+                    for model, _ in pairs(S._OOFAngleSmooth) do
+                        if not model or not model.Parent then
+                            S._OOFAngleSmooth[model] = nil
+                        end
+                    end
+                end
             end
 
             S.PipelineSlot = (slot + 1) % 3
@@ -3469,6 +3564,8 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
     -- Reads S.AimbotCandidates (written by Slot 1), sorts and picks target
     -- every frame so aimbot responsiveness is independent of performance mode.
     if MasterEnabled and AimbotActive and TargetingEnabled then
+        if not Camera or not Camera.Parent then Camera = workspace.CurrentCamera end
+        if not Camera then return end
         local TargetPart = (type(S.TargetPart) == "string" and S.TargetPart ~= "") and S.TargetPart or "Head"
         local WallCheck = S.WallCheck
         if not S.ActivePartName or S.ActivePartName == "" then
@@ -4222,7 +4319,15 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         local mA=MME and eMR and meleeAllowed
 
         if tbA or mA then
-            local coord; if S.ThirdPersonTriggerbot and CT2 and CT2.ScreenPos then coord=CT2.ScreenPos else coord=UserInputService:GetMouseLocation() end
+            -- Safe coordinate: ThirdPersonTriggerbot uses CT2.ScreenPos; fall back to mouse location
+            -- to avoid nil errors if the target loses visibility on the click frame.
+            local coord
+            if S.ThirdPersonTriggerbot and CT2 and CT2.ScreenPos then
+                coord = CT2.ScreenPos
+            end
+            if not coord or not coord.X then
+                coord = UserInputService:GetMouseLocation()
+            end
             local aI=mA and MCI or CI
             if CM=="Hold" then
                 if not S.IsHoldingClick then
@@ -4340,10 +4445,30 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 end
             end
             
+            -- Additional bypass: if the RaycastParams filter explicitly includes the local character
+            -- (weapon hit-detection and viewmodel scripts use this pattern), pass through untouched
+            -- to prevent camera hitching and silent aim interfering with the weapon's own logic.
+            if method == "Raycast" and typeof(args[3]) == "Instance" then
+                local rp = args[3]
+                local ok3, fdi = pcall(function() return rp.FilterDescendantsInstances end)
+                if ok3 and type(fdi) == "table" and Player and Player.Character then
+                    for _, inst in ipairs(fdi) do
+                        if inst == Player.Character then
+                            return oldNamecall(self,...)
+                        end
+                    end
+                end
+            end
+            
             -- Also ignore if calling script is clearly the camera
             if getcallingscript then
                 local cs = getcallingscript()
                 if cs and (cs.Name == "CameraModule" or cs.Name == "ZoomController" or cs.Name == "Popper") then
+                    return oldNamecall(self,...)
+                end
+                -- Also bypass raycasts from scripts parented inside the LocalPlayer's character
+                -- (FPS viewmodel scripts, weapon animations, etc.) to prevent camera hitching.
+                if cs and Player and Player.Character and cs:IsDescendantOf(Player.Character) then
                     return oldNamecall(self,...)
                 end
             end
@@ -4419,7 +4544,7 @@ end
 local lastNotifiedUpdateVer = nil
 function S.CheckForUpdates(manual)
     local repoBase = "https://raw.githubusercontent.com/plasmazzm/TASFF/refs/heads/main/"
-    local currentVer = S.CurrentVersion or "2.2.6"
+    local currentVer = S.CurrentVersion or "?"
     local cacheBust = "?t=" .. tostring(tick())
 
     -- Step 1: Query version.txt
@@ -4605,4 +4730,12 @@ getgenv().TASFF.Cleanup = function()
     end
 end
 
+-- [v2.3.0] Key system stub — real HTTP verification wired in obfuscated build
+if not S.VerifyKey then
+    S.VerifyKey = function(key)
+        -- Stub: always returns false in open-source build.
+        -- Replace with actual verification endpoint in obfuscated release.
+        return false
+    end
+end
 print("[TASFF Core] All function slots registered. Render loop active.")

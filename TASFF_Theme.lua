@@ -1000,6 +1000,8 @@ ndScroller.Position = UDim2.new(0, 6, 0, 30)
 ndScroller.BackgroundTransparency = 1
 ndScroller.BorderSizePixel = 0
 ndScroller.ScrollBarThickness = 3
+ndScroller.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ndScroller.CanvasSize = UDim2.new(0, 0, 0, 0)
 local ndList = Instance.new("UIListLayout", ndScroller)
 ndList.Padding = UDim.new(0, 4)
 ndList.SortOrder = Enum.SortOrder.LayoutOrder
@@ -1022,10 +1024,14 @@ local function RefreshNotificationDrawer()
     for i = #hist, 1, -1 do
         local item = hist[i]
         local card = Instance.new("Frame", ndScroller)
-        card.Size = UDim2.new(1, -6, 0, 42)
+        card.Size = UDim2.new(1, -6, 0, 44)
         card.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
         card.BorderSizePixel = 0
         Instance.new("UICorner", card).CornerRadius = UDim.new(0, 4)
+        local cardStroke = Instance.new("UIStroke", card)
+        cardStroke.Color = Color3.fromRGB(42, 42, 54)
+        cardStroke.Thickness = 1
+
         local t1 = Instance.new("TextLabel", card)
         t1.Size = UDim2.new(1, -8, 0, 14)
         t1.Position = UDim2.new(0, 6, 0, 4)
@@ -1036,7 +1042,7 @@ local function RefreshNotificationDrawer()
         t1.TextXAlignment = Enum.TextXAlignment.Left
         t1.Text = string.format("[%s] %s", item.Time or "Now", item.Title or "Notice")
         local t2 = Instance.new("TextLabel", card)
-        t2.Size = UDim2.new(1, -8, 0, 20)
+        t2.Size = UDim2.new(1, -8, 0, 22)
         t2.Position = UDim2.new(0, 6, 0, 18)
         t2.BackgroundTransparency = 1
         t2.Font = Enum.Font.Gotham
@@ -1058,12 +1064,56 @@ local function LogNotification(title, msg, color)
     local timeStr = os.date("%H:%M:%S")
     table.insert(S.NotificationHistory, {Title = title, Message = msg, Color = color, Time = timeStr})
     if #S.NotificationHistory > 50 then table.remove(S.NotificationHistory, 1) end
+
+    -- Trigger unread indicator on bell button
+    pcall(function()
+        local rGui = FindRayfieldGui and FindRayfieldGui()
+        if rGui then
+            local topbar = rGui:FindFirstChild("Topbar", true)
+            local bellBtn = topbar and topbar:FindFirstChild("NotifBellBtn")
+            local bellDot = bellBtn and bellBtn:FindFirstChild("BellDot")
+            if bellDot and not NotificationDrawer.Visible then
+                bellDot.Visible = true
+            end
+        end
+    end)
+
     if NotificationDrawer.Visible then RefreshNotificationDrawer() end
 end
 TASFFEnv.Theme.LogNotification = LogNotification
+
+local function UpdateDrawerPosition()
+    pcall(function()
+        local rGui = FindRayfieldGui and FindRayfieldGui()
+        if rGui then
+            local topbar = rGui:FindFirstChild("Topbar", true)
+            local bellBtn = topbar and topbar:FindFirstChild("NotifBellBtn")
+            if bellBtn then
+                local bPos = bellBtn.AbsolutePosition
+                local bSize = bellBtn.AbsoluteSize
+                NotificationDrawer.Position = UDim2.new(0, math.clamp(bPos.X + bSize.X - 240, 10, 3000), 0, bPos.Y + bSize.Y + 8)
+                return
+            end
+        end
+        NotificationDrawer.Position = UDim2.new(1, -260, 0, 45)
+    end)
+end
+
 TASFFEnv.Theme.ToggleNotificationDrawer = function()
     NotificationDrawer.Visible = not NotificationDrawer.Visible
-    if NotificationDrawer.Visible then RefreshNotificationDrawer() end
+    if NotificationDrawer.Visible then
+        UpdateDrawerPosition()
+        RefreshNotificationDrawer()
+        pcall(function()
+            local rGui = FindRayfieldGui and FindRayfieldGui()
+            if rGui then
+                local topbar = rGui:FindFirstChild("Topbar", true)
+                local bellBtn = topbar and topbar:FindFirstChild("NotifBellBtn")
+                local bellDot = bellBtn and bellBtn:FindFirstChild("BellDot")
+                if bellDot then bellDot.Visible = false end
+            end
+        end)
+    end
     PlayUISound("click")
 end
 
@@ -1408,54 +1458,92 @@ local function PatchRayfieldDOM()
     -- 0c. Topbar User Profile Banner & Notification Center Bell
     local topbar = mainFrame:FindFirstChild("Topbar", true)
     if topbar then
-        if not topbar:FindFirstChild("NotifBellBtn") then
-            local bellBtn = Instance.new("TextButton", topbar)
+        local bellBtn = topbar:FindFirstChild("NotifBellBtn")
+        if not bellBtn then
+            bellBtn = Instance.new("TextButton", topbar)
             bellBtn.Name = "NotifBellBtn"
-            bellBtn.Size = UDim2.new(0, 24, 0, 24)
-            bellBtn.Position = UDim2.new(1, -62, 0.5, -12)
+            bellBtn.Size = UDim2.new(0, 22, 0, 22)
+            bellBtn.Position = UDim2.new(1, -128, 0.5, -11)
             bellBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
             bellBtn.BackgroundTransparency = 0.3
             bellBtn.BorderSizePixel = 0
             bellBtn.Font = Enum.Font.GothamBold
             bellBtn.TextSize = 12
             bellBtn.TextColor3 = Color3.fromRGB(230, 230, 240)
-            bellBtn.Text = "ðŸ””"
-            bellBtn.ZIndex = 25
+            bellBtn.Text = ""
+            bellBtn.ZIndex = 40
             Instance.new("UICorner", bellBtn).CornerRadius = UDim.new(0, 5)
+            local bellStroke = Instance.new("UIStroke", bellBtn)
+            bellStroke.Color = Color3.fromRGB(50, 50, 65)
+            bellStroke.Thickness = 1
+
+            local bellIcon = Instance.new("ImageLabel", bellBtn)
+            bellIcon.Name = "BellIcon"
+            bellIcon.Size = UDim2.new(0, 14, 0, 14)
+            bellIcon.Position = UDim2.new(0.5, -7, 0.5, -7)
+            bellIcon.BackgroundTransparency = 1
+            bellIcon.Image = "rbxassetid://6031075938"
+            bellIcon.ImageColor3 = Color3.fromRGB(220, 220, 230)
+            bellIcon.ZIndex = 41
+
+            local bellDot = Instance.new("Frame", bellBtn)
+            bellDot.Name = "BellDot"
+            bellDot.Size = UDim2.new(0, 6, 0, 6)
+            bellDot.Position = UDim2.new(1, -3, 0, -3)
+            bellDot.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+            bellDot.BorderSizePixel = 0
+            bellDot.Visible = false
+            bellDot.ZIndex = 42
+            Instance.new("UICorner", bellDot).CornerRadius = UDim.new(1, 0)
+
+            bellBtn.MouseEnter:Connect(function()
+                bellIcon.ImageColor3 = GetThemeAccentColor()
+            end)
+            bellBtn.MouseLeave:Connect(function()
+                bellIcon.ImageColor3 = Color3.fromRGB(220, 220, 230)
+            end)
+
             bellBtn.MouseButton1Click:Connect(function()
+                bellDot.Visible = false
                 if TASFFEnv.Theme.ToggleNotificationDrawer then
                     TASFFEnv.Theme.ToggleNotificationDrawer()
                 end
             end)
         end
 
-        if not topbar:FindFirstChild("UserProfileBanner") then
-            local uBanner = Instance.new("Frame", topbar)
+        local uBanner = topbar:FindFirstChild("UserProfileBanner")
+        if not uBanner then
+            uBanner = Instance.new("Frame", topbar)
             uBanner.Name = "UserProfileBanner"
-            uBanner.Size = UDim2.new(0, 134, 0, 24)
-            uBanner.Position = UDim2.new(1, -202, 0.5, -12)
+            uBanner.Size = UDim2.new(0, 134, 0, 22)
+            uBanner.Position = UDim2.new(1, -266, 0.5, -11)
             uBanner.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
-            uBanner.BackgroundTransparency = 0.4
+            uBanner.BackgroundTransparency = 0.35
+            uBanner.ZIndex = 40
             Instance.new("UICorner", uBanner).CornerRadius = UDim.new(0, 5)
             local uStroke = Instance.new("UIStroke", uBanner)
             uStroke.Color = Color3.fromRGB(45, 45, 55)
 
             local uAvatar = Instance.new("ImageLabel", uBanner)
-            uAvatar.Size = UDim2.new(0, 20, 0, 20)
-            uAvatar.Position = UDim2.new(0, 2, 0.5, -10)
+            uAvatar.Name = "Avatar"
+            uAvatar.Size = UDim2.new(0, 18, 0, 18)
+            uAvatar.Position = UDim2.new(0, 2, 0.5, -9)
             uAvatar.BackgroundTransparency = 1
             uAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
+            uAvatar.ZIndex = 41
             Instance.new("UICorner", uAvatar).CornerRadius = UDim.new(1, 0)
 
             local uName = Instance.new("TextLabel", uBanner)
-            uName.Size = UDim2.new(1, -26, 1, 0)
-            uName.Position = UDim2.new(0, 24, 0, 0)
+            uName.Name = "Username"
+            uName.Size = UDim2.new(1, -24, 1, 0)
+            uName.Position = UDim2.new(0, 22, 0, 0)
             uName.BackgroundTransparency = 1
             uName.Font = Enum.Font.GothamBold
             uName.TextSize = 9
             uName.TextColor3 = Color3.fromRGB(215, 215, 225)
             uName.TextXAlignment = Enum.TextXAlignment.Left
             uName.TextTruncate = Enum.TextTruncate.AtEnd
+            uName.ZIndex = 41
             local exec = (identifyexecutor and identifyexecutor()) or "Client"
             uName.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. " (" .. exec .. ")"
         end
@@ -1507,17 +1595,6 @@ local function PatchRayfieldDOM()
             grip2.BackgroundColor3 = Color3.fromRGB(160, 160, 175)
         end)
 
-        local function syncGripFade()
-            local t = mainFrame.BackgroundTransparency
-            grip1.BackgroundTransparency = t
-            grip2.BackgroundTransparency = t
-            resizeHandle.Visible = (t < 0.95 and mainFrame.Visible)
-        end
-        mainFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(syncGripFade)
-        mainFrame:GetPropertyChangedSignal("Visible"):Connect(function()
-            resizeHandle.Visible = (mainFrame.Visible and mainFrame.BackgroundTransparency < 0.95)
-        end)
-
         local _resizing = false
         local _rStart, _rSizeStart
         hitArea.InputBegan:Connect(function(input)
@@ -1544,14 +1621,14 @@ local function PatchRayfieldDOM()
 
     -- 2. Inject Tab Notification Badges, Left Glow Bar & Category Dividers
     local tabList = mainFrame:FindFirstChild("TabList", true)
+    local tabContainer = tabList and tabList.Parent or mainFrame
+    local activeGlow = tabContainer:FindFirstChild("ActiveTabGlowBar")
     if tabList then
-        local tabContainer = tabList.Parent or mainFrame
-        local activeGlow = tabContainer:FindFirstChild("ActiveTabGlowBar")
         if not activeGlow then
             activeGlow = Instance.new("Frame", tabContainer)
             activeGlow.Name = "ActiveTabGlowBar"
             activeGlow.Size = UDim2.new(0, 3, 0, 24)
-            activeGlow.Position = UDim2.new(0, tabList.Position.X.Offset, 0, tabList.Position.Y.Offset + 4)
+            activeGlow.Position = UDim2.new(0, 2, 0, tabList.Position.Y.Offset + 4)
             activeGlow.BackgroundColor3 = GetThemeAccentColor()
             activeGlow.BorderSizePixel = 0
             activeGlow.ZIndex = 30
@@ -1559,6 +1636,90 @@ local function PatchRayfieldDOM()
         else
             activeGlow.BackgroundColor3 = GetThemeAccentColor()
         end
+    end
+
+    -- Centralized Full Fading & Window State Synchronizer
+    local function SyncRayfieldFade()
+        local topTrans = (topbar and topbar.BackgroundTransparency) or mainFrame.BackgroundTransparency
+        local mainTrans = mainFrame.BackgroundTransparency
+        local isVis = (mainFrame.Visible and topTrans < 0.95 and mainTrans < 0.95)
+        local isExpanded = (mainFrame.AbsoluteSize.Y > 60)
+
+        -- CyberStroke
+        local cStroke = mainFrame:FindFirstChild("CyberStroke")
+        if cStroke then
+            cStroke.Transparency = math.clamp(mainTrans, 0, 1)
+            cStroke.Enabled = isVis
+        end
+
+        -- Ambient Glass Drop Shadow
+        local gShadow = mainFrame:FindFirstChild("GlassShadow")
+        if gShadow then
+            gShadow.ImageTransparency = math.clamp(0.55 + mainTrans * 0.45, 0, 1)
+            gShadow.Visible = isVis
+        end
+
+        -- Topbar Profile Banner
+        local uBanner = topbar and topbar:FindFirstChild("UserProfileBanner")
+        if uBanner then
+            uBanner.Visible = isVis
+            uBanner.BackgroundTransparency = math.clamp(0.35 + topTrans * 0.65, 0, 1)
+            local uStroke = uBanner:FindFirstChildOfClass("UIStroke")
+            if uStroke then uStroke.Transparency = topTrans end
+            local uAvatar = uBanner:FindFirstChild("Avatar")
+            if uAvatar then uAvatar.ImageTransparency = topTrans end
+            local uName = uBanner:FindFirstChild("Username")
+            if uName then uName.TextTransparency = topTrans end
+        end
+
+        -- Topbar Bell Button
+        local bBtn = topbar and topbar:FindFirstChild("NotifBellBtn")
+        if bBtn then
+            bBtn.Visible = isVis
+            bBtn.BackgroundTransparency = math.clamp(0.3 + topTrans * 0.7, 0, 1)
+            local bStroke = bBtn:FindFirstChildOfClass("UIStroke")
+            if bStroke then bStroke.Transparency = topTrans end
+            local bIcon = bBtn:FindFirstChild("BellIcon")
+            if bIcon then bIcon.ImageTransparency = topTrans end
+            local bDot = bBtn:FindFirstChild("BellDot")
+            if bDot then bDot.BackgroundTransparency = topTrans end
+        end
+
+        -- Tab Active Glow Bar
+        if activeGlow then
+            activeGlow.Visible = (isVis and isExpanded)
+            activeGlow.BackgroundTransparency = math.clamp(mainTrans, 0, 1)
+        end
+
+        -- Resize Handle
+        local rHandle = mainFrame:FindFirstChild("ResizeHandle")
+        if rHandle then
+            rHandle.Visible = (isVis and isExpanded)
+            local g1 = rHandle:FindFirstChild("Grip1")
+            local g2 = rHandle:FindFirstChild("Grip2")
+            if g1 then g1.BackgroundTransparency = mainTrans end
+            if g2 then g2.BackgroundTransparency = mainTrans end
+        end
+
+        -- Drawer & Tooltip Auto-Hide on window hide/minimize
+        if not isVis or not isExpanded then
+            if NotificationDrawer then NotificationDrawer.Visible = false end
+            if TooltipFrame then TooltipFrame.Visible = false end
+        end
+    end
+
+    if not mainFrame:FindFirstChild("MasterFadeSyncHooked") then
+        local fHook = Instance.new("BoolValue", mainFrame)
+        fHook.Name = "MasterFadeSyncHooked"
+        mainFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
+        mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
+        mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncRayfieldFade)
+        if topbar then
+            topbar:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
+            topbar:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
+        end
+    end
+    SyncRayfieldFade()
 
         for _, tabBtn in ipairs(tabList:GetChildren()) do
             if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" and tabBtn.Name ~= "ActiveTabGlowBar" then
@@ -1615,33 +1776,135 @@ local function PatchRayfieldDOM()
         if desc.Name == "Template" or desc:FindFirstAncestor("Template") then
             -- Skip uninstantiated template objects
         else
+        -- Theme signature colors in global preset dropdown list
+        local function DecorateThemeOption(opt)
+            if not opt or not opt:IsA("GuiObject") then return end
+            local tName = opt.Name
+            local pal = GlobalThemePalettes[tName]
+            local title = opt:FindFirstChild("Title") or opt:FindFirstChildOfClass("TextLabel")
+            if not pal and title and GlobalThemePalettes[title.Text] then
+                tName = title.Text
+                pal = GlobalThemePalettes[tName]
+            end
+            if pal then
+                local accCol = HexToColor3(pal.UIAccent or pal.Overlay)
+                local baseCol = HexToColor3(pal.Base or pal.Drawing)
+                local prioCol = HexToColor3(pal.Priority or "#FF5555")
+
+                if title then
+                    title.TextColor3 = accCol
+                    title.Font = Enum.Font.GothamBold
+                elseif opt:IsA("TextLabel") or opt:IsA("TextButton") then
+                    opt.TextColor3 = accCol
+                    opt.Font = Enum.Font.GothamBold
+                end
+
+                local swatch = opt:FindFirstChild("ThemeSwatch")
+                if not swatch then
+                    swatch = Instance.new("Frame", opt)
+                    swatch.Name = "ThemeSwatch"
+                    swatch.Size = UDim2.new(0, 38, 0, 14)
+                    swatch.Position = UDim2.new(1, -44, 0.5, -7)
+                    swatch.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+                    swatch.BackgroundTransparency = 0.2
+                    swatch.BorderSizePixel = 0
+                    swatch.ZIndex = (opt.ZIndex or 20) + 5
+                    Instance.new("UICorner", swatch).CornerRadius = UDim.new(1, 0)
+                    local sStroke = Instance.new("UIStroke", swatch)
+                    sStroke.Color = Color3.fromRGB(50, 50, 65)
+                    sStroke.Thickness = 1
+
+                    local d1 = Instance.new("Frame", swatch)
+                    d1.Size = UDim2.new(0, 8, 0, 8)
+                    d1.Position = UDim2.new(0, 3, 0.5, -4)
+                    d1.BackgroundColor3 = accCol
+                    d1.BorderSizePixel = 0
+                    d1.ZIndex = swatch.ZIndex + 1
+                    Instance.new("UICorner", d1).CornerRadius = UDim.new(1, 0)
+
+                    local d2 = Instance.new("Frame", swatch)
+                    d2.Size = UDim2.new(0, 8, 0, 8)
+                    d2.Position = UDim2.new(0, 15, 0.5, -4)
+                    d2.BackgroundColor3 = baseCol
+                    d2.BorderSizePixel = 0
+                    d2.ZIndex = swatch.ZIndex + 1
+                    Instance.new("UICorner", d2).CornerRadius = UDim.new(1, 0)
+
+                    local d3 = Instance.new("Frame", swatch)
+                    d3.Size = UDim2.new(0, 8, 0, 8)
+                    d3.Position = UDim2.new(0, 27, 0.5, -4)
+                    d3.BackgroundColor3 = prioCol
+                    d3.BorderSizePixel = 0
+                    d3.ZIndex = swatch.ZIndex + 1
+                    Instance.new("UICorner", d3).CornerRadius = UDim.new(1, 0)
+                end
+            end
+        end
+
+        if GlobalThemePalettes[desc.Name] then
+            DecorateThemeOption(desc)
+        end
+
+        if desc:IsA("GuiObject") and (desc.Name == "Dropdown" or desc:FindFirstChild("Dropdown") or desc.Name == "List" or desc:FindFirstChild("List")) then
+            local listObj = (desc.Name == "List" and desc) or desc:FindFirstChild("List")
+            if listObj then
+                for _, opt in ipairs(listObj:GetChildren()) do
+                    DecorateThemeOption(opt)
+                end
+                if not listObj:FindFirstChild("ThemeWatcherHooked") then
+                    local wHook = Instance.new("BoolValue", listObj)
+                    wHook.Name = "ThemeWatcherHooked"
+                    listObj.ChildAdded:Connect(function(child)
+                        task.wait(0.02)
+                        DecorateThemeOption(child)
+                    end)
+                end
+            end
+            for _, opt in ipairs(desc:GetDescendants()) do
+                if GlobalThemePalettes[opt.Name] then
+                    DecorateThemeOption(opt)
+                end
+            end
+        end
+
         -- Section Header Collapse/Expand Injection
         if desc:IsA("GuiObject") and desc.Name == "SectionTitle" then
             local secFrame = desc
             if not secFrame:FindFirstChild("CollapseToggle") then
                 local toggleBtn = Instance.new("TextButton")
                 toggleBtn.Name = "CollapseToggle"
-                toggleBtn.Size = UDim2.new(0, 36, 0, 20)
-                toggleBtn.Position = UDim2.new(1, -42, 0.5, -10)
+                toggleBtn.Size = UDim2.new(0, 26, 0, 20)
+                toggleBtn.Position = UDim2.new(1, -32, 0.5, -10)
                 toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
                 toggleBtn.BackgroundTransparency = 0.3
                 toggleBtn.BorderSizePixel = 0
-                toggleBtn.Font = Enum.Font.GothamBold
-                toggleBtn.TextSize = 11
-                toggleBtn.TextColor3 = Color3.fromRGB(180, 180, 195)
-                toggleBtn.Text = "â–¼"
+                toggleBtn.Text = "" -- NO TEXT, 100% immune to UTF-8 character encoding corruption
                 toggleBtn.ZIndex = 20
                 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 4)
                 local btnStroke = Instance.new("UIStroke", toggleBtn)
                 btnStroke.Color = Color3.fromRGB(50, 50, 65)
                 btnStroke.Thickness = 1
+
+                local arrowIcon = Instance.new("ImageLabel", toggleBtn)
+                arrowIcon.Name = "ArrowIcon"
+                arrowIcon.Size = UDim2.new(0, 12, 0, 12)
+                arrowIcon.Position = UDim2.new(0.5, -6, 0.5, -6)
+                arrowIcon.BackgroundTransparency = 1
+                arrowIcon.Image = "rbxassetid://6031090990" -- Vector chevron down asset
+                arrowIcon.ImageColor3 = Color3.fromRGB(180, 180, 195)
+                arrowIcon.ZIndex = 21
+
                 toggleBtn.Parent = secFrame
 
                 local isCollapsed = false
                 local function toggleCollapse()
                     isCollapsed = not isCollapsed
-                    toggleBtn.Text = isCollapsed and "â–¶" or "â–¼"
-                    toggleBtn.TextColor3 = isCollapsed and GetThemeAccentColor() or Color3.fromRGB(180, 180, 195)
+                    local targetRot = isCollapsed and -90 or 0
+                    local targetCol = isCollapsed and GetThemeAccentColor() or Color3.fromRGB(180, 180, 195)
+                    TweenService:Create(arrowIcon, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                        Rotation = targetRot,
+                        ImageColor3 = targetCol
+                    }):Play()
                     PlayUISound(isCollapsed and "toggle_off" or "toggle_on")
                     local container = secFrame.Parent
                     if container then
@@ -1674,7 +1937,7 @@ local function PatchRayfieldDOM()
                 local function syncCollapseFade()
                     local t = secFrame.BackgroundTransparency
                     toggleBtn.BackgroundTransparency = math.clamp(0.3 + t * 0.7, 0, 1)
-                    toggleBtn.TextTransparency = t
+                    arrowIcon.ImageTransparency = t
                     btnStroke.Transparency = t
                 end
                 secFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(syncCollapseFade)

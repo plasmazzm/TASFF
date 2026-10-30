@@ -128,6 +128,27 @@ local function Notify(options)
         mat.Duration = S.NotificationDuration
     end
 
+    -- Record in Notification Drawer History
+    pcall(function()
+        if TASFFEnv and TASFFEnv.Theme and TASFFEnv.Theme.LogNotification then
+            TASFFEnv.Theme.LogNotification(mat.Title or "Notice", mat.Content or "", mat.Color)
+        else
+            local hist = S.NotificationHistory
+            if not hist then
+                hist = {}
+                S.NotificationHistory = hist
+            end
+            local timeStr = os.date("%H:%M:%S")
+            table.insert(hist, {
+                Title = mat.Title or "Notice",
+                Message = mat.Content or "",
+                Time = timeStr,
+                Color = mat.Color
+            })
+            if #hist > 50 then table.remove(hist, 1) end
+        end
+    end)
+
     -- Primary: Rayfield notification
     local rayfieldOk = false
     if Rayfield and Rayfield.Notify then
@@ -174,6 +195,25 @@ task.spawn(function()
                 return
             end
         end
+
+        -- Log notification to drawer history
+        if options and (options.Title or options.Content) then
+            pcall(function()
+                if TASFFEnv and TASFFEnv.Theme and TASFFEnv.Theme.LogNotification then
+                    TASFFEnv.Theme.LogNotification(options.Title or "Notice", options.Content or "", options.Color)
+                elseif S.NotificationHistory then
+                    local timeStr = os.date("%H:%M:%S")
+                    table.insert(S.NotificationHistory, {
+                        Title = options.Title or "Notice",
+                        Message = options.Content or "",
+                        Time = timeStr,
+                        Color = options.Color
+                    })
+                    if #S.NotificationHistory > 50 then table.remove(S.NotificationHistory, 1) end
+                end
+            end)
+        end
+
         return origNotify(target, options)
     end
 end)

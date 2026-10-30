@@ -90,10 +90,13 @@ end
 local previousTASFF = getgenv() and getgenv().TASFF or nil
 if previousTASFF and type(previousTASFF) == "table" then
     warn("[TASFF] Previous instance detected — performing clean shutdown.")
+    -- Atomically clear the running flag so every loop guard exits on their very next iteration
     previousTASFF.Running = false
+    -- Immediately nil the global so no new code can observe the old instance
+    getgenv().TASFF = nil
 
-    -- Give background loops one tick to read the flag and exit
-    task.wait(0.1)
+    -- Give background loops two ticks to observe the flag and exit cleanly
+    task.wait(0.15)
 
     -- Restore metamethod hooks + remove drawings + disconnect connections
     if previousTASFF.Cleanup then
@@ -137,7 +140,7 @@ if previousTASFF and type(previousTASFF) == "table" then
     for _, parent in ipairs(parentsToClean) do
         pcall(function()
             for _, child in ipairs(parent:GetChildren()) do
-                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                if child.Name:find("TASFF") or child.Name:find("Rayfield") or child.Name:find("Sirius") then
                     pcall(function() child:Destroy() end)
                 end
             end
@@ -204,7 +207,7 @@ local function CleanupPartialRuntime()
     for _, parent in ipairs(parentsToClean) do
         pcall(function()
             for _, child in ipairs(parent:GetChildren()) do
-                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                if child.Name:find("TASFF") or child.Name:find("Rayfield") or child.Name:find("Sirius") then
                     pcall(function() child:Destroy() end)
                 end
             end
@@ -327,8 +330,10 @@ local function StartLoadingSequence()
         LoadModule("TASFF_Core.lua")    -- S.FunctionSlots = ..., registers loops
         task.wait(0.08)
 
-        -- Stage 3: User Interface & controls
+        -- Stage 3: User Interface — theme module first, then controls
         SendLoaderNotify("TASFF Initializing", "Step 3/4: Building Interface Elements...", "layout-grid", 2)
+        LoadModule("TASFF_Theme.lua")   -- theme config, window config, palette data
+        task.wait(0.03)
         LoadModule("TASFF_UI.lua")      -- Window created, controls rendered, LoadConfiguration() completed
         task.wait(0.1)
     end)
@@ -343,17 +348,21 @@ local function StartLoadingSequence()
     S.ScriptInitialized = true
 
     -- Stage 4: Ready notification
+    -- Version is read exclusively from TASFF_State (single source of truth); never hardcoded here.
     task.delay(0.2, function()
+        local ver = (S and S.CurrentVersion) or "?"
         if S and S.Notify then
             S.Notify({
-                Title    = "TASFF v2.2.6 Ready",
+                Title    = "TASFF v" .. ver .. " Ready",
                 Content  = "All modules loaded stably! Master Switch to begin.",
                 Duration = 4,
-                Image    = "shield-check"
+                Image    = "shield-check",
+                BypassThrottle = true,
+                Important      = true
             })
         elseif Rayfield and Rayfield.Notify then
             Rayfield:Notify({
-                Title    = "TASFF v2.2.6 Ready",
+                Title    = "TASFF v" .. ver .. " Ready",
                 Content  = "All modules loaded stably! Master Switch to begin.",
                 Duration = 4,
                 Image    = "shield-check"
@@ -397,7 +406,7 @@ local function StartLoadingSequence()
             for _, parent in ipairs(parentsToClean) do
                 pcall(function()
                     for _, child in ipairs(parent:GetChildren()) do
-                        if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                        if child.Name:find("TASFF") or child.Name:find("Rayfield") or child.Name:find("Sirius") then
                             pcall(function() child:Destroy() end)
                         end
                     end
@@ -407,22 +416,27 @@ local function StartLoadingSequence()
             _G.TASFF_State = nil
             task.wait(0.25)
 
-            -- Step 3: Re-instantiate fresh Rayfield instance
+            -- Step 3: Re-instantiate Rayfield.
+            -- Try the cached factory first (instant, no HTTP round-trip) so that
+            -- restarting is offline-safe and near-instantaneous. Only fall back to a
+            -- fresh HTTP download if the cached factory itself fails.
             local freshRayfield = nil
-            pcall(function()
-                local cacheBust = "?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
-                local rfSource = SafeHttpGet("https://sirius.menu/rayfield" .. cacheBust, "Rayfield")
-                local fac = loadstring(rfSource)
-                if type(fac) == "function" then
-                    cachedRayfieldFactory = fac
-                    freshRayfield = fac()
-                end
-            end)
-            if not freshRayfield and cachedRayfieldFactory then
+            if cachedRayfieldFactory then
                 local ok, inst = pcall(cachedRayfieldFactory)
                 if ok and type(inst) == "table" then
                     freshRayfield = inst
                 end
+            end
+            if not freshRayfield then
+                pcall(function()
+                    local cacheBust = "?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
+                    local rfSource = SafeHttpGet("https://sirius.menu/rayfield" .. cacheBust, "Rayfield")
+                    local fac = loadstring(rfSource)
+                    if type(fac) == "function" then
+                        cachedRayfieldFactory = fac
+                        freshRayfield = fac()
+                    end
+                end)
             end
 
             Rayfield = freshRayfield
@@ -459,4 +473,4 @@ task.spawn(function()
     end
 end)
 
-print("[TASFF Loader] ══ All modules loaded. TASFF v2.2.6 is running. ══")
+print("[TASFF Loader] ══ All modules loaded. TASFF v" .. tostring(S and S.CurrentVersion or "?") .. " is running. ══")

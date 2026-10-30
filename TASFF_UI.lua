@@ -128,6 +128,7 @@ local ColorFlagMap = {
 local ThemeColorDefaults = (TASFFTheme and TASFFTheme.Defaults) or {Background=Color3.fromRGB(15,15,15),Topbar=Color3.fromRGB(20,20,20),TabBackgroundSelected=Color3.fromRGB(60,60,60),ElementBackground=Color3.fromRGB(28,28,28),TextColor=Color3.fromRGB(240,240,240)}
 
 local ThemeColors = (TASFFTheme.Defaults and table.clone(TASFFTheme.Defaults)) or table.clone(ThemeColorDefaults)
+if TASFFTheme then TASFFTheme.ActiveThemeColors = ThemeColors end
 
 local function DecodeColor(value)
     if type(value) ~= "table" then return nil end
@@ -933,7 +934,13 @@ VisualTab:CreateToggle({Name = "FOV Circle", CurrentValue = S.ShowFOV, Flag = "S
     if not v and S.FOVCircle then S.FOVCircle.Visible = false end
 end})
 VisualTab:CreateToggle({Name = "Silent FOV", CurrentValue = S.InvisibleFOV, Flag = "InvisibleFOV", Callback = function(v) S.InvisibleFOV = v end})
-VisualTab:CreateSlider({Name = "FOV Size", Range = {30, 600}, Increment = 5, CurrentValue = S.FOVSize, Flag = "FOVSize", Callback = function(v) S.FOVSize = v end})
+VisualTab:CreateSlider({Name = "FOV Size", Range = {30, 600}, Increment = 5, CurrentValue = S.FOVSize, Flag = "FOVSize", Callback = function(v)
+    S.FOVSize = v
+    S.LiveFOVPulseActive = true
+    task.delay(1.2, function()
+        S.LiveFOVPulseActive = false
+    end)
+end})
 VisualTab:CreateToggle({Name = KeyName("Dynamic FOV"), CurrentValue = S.DynamicFOVEnabled, Flag = "DynamicFOVEnabled", Callback = function(v) S.DynamicFOVEnabled = v end})
 VisualTab:CreateParagraph({
     Title   = "Dynamic FOV Scaling",
@@ -963,6 +970,68 @@ VisualTab:CreateDropdown({Name = "Crosshair Style", Options = {"Plus", "Square",
     if S.ClearCrosshair then S.ClearCrosshair() end
 end})
 VisualTab:CreateSlider({Name = "Crosshair Size", Range = {2, 50}, Increment = 1, CurrentValue = S.CrosshairSize, Flag = "CrossSize", Callback = function(v) S.CrosshairSize = v end})
+
+local crosshairPreviewPara = VisualTab:CreateParagraph({
+    Title = "Interactive Reticle Preview",
+    Content = "Simulating real-time reticle geometry, color, and dynamic spread."
+})
+task.spawn(function()
+    pcall(function()
+        task.wait(1)
+        local pFrame = crosshairPreviewPara and (crosshairPreviewPara.Paragraph or crosshairPreviewPara.Object)
+        if pFrame then
+            local pBox = Instance.new("Frame", pFrame)
+            pBox.Name = "CrosshairPreviewBox"
+            pBox.Size = UDim2.new(0, 100, 0, 70)
+            pBox.Position = UDim2.new(1, -110, 0.5, -35)
+            pBox.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+            pBox.BorderSizePixel = 0
+            Instance.new("UICorner", pBox).CornerRadius = UDim.new(0, 6)
+            local pBoxStroke = Instance.new("UIStroke", pBox)
+            pBoxStroke.Color = Color3.fromRGB(45, 45, 55)
+
+            local retCenter = Instance.new("Frame", pBox)
+            retCenter.Name = "ReticleCenter"
+            retCenter.Size = UDim2.new(0, 4, 0, 4)
+            retCenter.Position = UDim2.new(0.5, -2, 0.5, -2)
+            retCenter.BackgroundColor3 = S.CrosshairColor or Color3.fromRGB(0, 255, 200)
+            Instance.new("UICorner", retCenter).CornerRadius = UDim.new(1, 0)
+
+            local lineTop = Instance.new("Frame", pBox)
+            local lineBot = Instance.new("Frame", pBox)
+            local lineLeft = Instance.new("Frame", pBox)
+            local lineRight = Instance.new("Frame", pBox)
+            local allLines = {lineTop, lineBot, lineLeft, lineRight}
+            for _, l in ipairs(allLines) do
+                l.BorderSizePixel = 0
+                l.BackgroundColor3 = S.CrosshairColor or Color3.fromRGB(0, 255, 200)
+            end
+
+            task.spawn(function()
+                while pBox and pBox.Parent do
+                    local sz = math.clamp(S.CrosshairSize or 10, 4, 25)
+                    local col = S.CrosshairColor or Color3.fromRGB(0, 255, 200)
+                    retCenter.BackgroundColor3 = col
+                    for _, l in ipairs(allLines) do l.BackgroundColor3 = col end
+
+                    lineTop.Size = UDim2.new(0, 2, 0, sz)
+                    lineTop.Position = UDim2.new(0.5, -1, 0.5, -sz - 3)
+
+                    lineBot.Size = UDim2.new(0, 2, 0, sz)
+                    lineBot.Position = UDim2.new(0.5, -1, 0.5, 3)
+
+                    lineLeft.Size = UDim2.new(0, sz, 0, 2)
+                    lineLeft.Position = UDim2.new(0.5, -sz - 3, 0.5, -1)
+
+                    lineRight.Size = UDim2.new(0, sz, 0, 2)
+                    lineRight.Position = UDim2.new(0.5, 3, 0.5, -1)
+
+                    task.wait(0.25)
+                end
+            end)
+        end
+    end)
+end)
 
 VisualTab:CreateSection("Calibration")
 VisualTab:CreateParagraph({Title = "Calibration", Content = "Apply fixed pixel offsets to compensate for monitor or camera misalignment. Only used when Manual Calibration is enabled."})
@@ -2659,9 +2728,17 @@ local function UpdateGlobalThemeMonitor(themeName)
         table.insert(lines, entry.title .. " | " .. FormatGlobalThemeColor(color))
     end
     GlobalThemeMonitor:Set({
-        Title = "Preset Preview — " .. themeName,
+        Title = "Preset Preview - " .. themeName,
         Content = table.concat(lines, "\n"),
     })
+    task.spawn(function()
+        pcall(function()
+            local pFrame = GlobalThemeMonitor and (GlobalThemeMonitor.Paragraph or GlobalThemeMonitor.Object)
+            if pFrame and TASFFTheme and TASFFTheme.RenderThemePreviewCard then
+                TASFFTheme.RenderThemePreviewCard(pFrame, themeName)
+            end
+        end)
+    end)
 end
 GlobalThemeMonitor = CustomizationTab:CreateParagraph({
     Title = "Preset Preview — " .. selectedGlobalTheme,
@@ -3030,6 +3107,100 @@ CustomizationTab:CreateButton({Name = "Reset UI Theme to Default", Callback = fu
 end})
 
 -- Misc tab removed in v2.3.0; contents moved to Settings tab
+
+CustomizationTab:CreateSection("Tactile Audio Feedback")
+CustomizationTab:CreateToggle({
+    Name = "Audio-Tactile Feedback (Clicks & Switches)",
+    CurrentValue = (S.AudioFeedbackEnabled ~= false),
+    Flag = "AudioFeedbackEnabled",
+    Callback = function(v)
+        S.AudioFeedbackEnabled = v
+        if TASFFTheme and TASFFTheme.PlayUISound then
+            TASFFTheme.PlayUISound(v and "toggle_on" or "toggle_off")
+        end
+    end
+})
+CustomizationTab:CreateSlider({
+    Name = "Audio Feedback Volume",
+    Range = {10, 100},
+    Increment = 5,
+    Suffix = "%",
+    CurrentValue = math.floor((S.AudioFeedbackVolume or 0.5) * 100),
+    Flag = "AudioFeedbackVolume",
+    Callback = function(v)
+        S.AudioFeedbackVolume = v / 100
+    end
+})
+
+CustomizationTab:CreateSection("Tactical Interface Overlays")
+CustomizationTab:CreateToggle({
+    Name = "Target Inspection Hologram",
+    CurrentValue = (S.TargetCardEnabled ~= false),
+    Flag = "TargetCardEnabled",
+    Callback = function(v)
+        S.TargetCardEnabled = v
+    end
+})
+CustomizationTab:CreateToggle({
+    Name = "Compact Floating HUD Mode (When Closed)",
+    CurrentValue = (S.CompactHUDEnabled == true),
+    Flag = "CompactHUDEnabled",
+    Callback = function(v)
+        S.CompactHUDEnabled = v
+    end
+})
+CustomizationTab:CreateToggle({
+    Name = "Combat Keystrokes Visualizer",
+    CurrentValue = (S.KeystrokesEnabled == true),
+    Flag = "KeystrokesEnabled",
+    Callback = function(v)
+        S.KeystrokesEnabled = v
+    end
+})
+CustomizationTab:CreateToggle({
+    Name = "Live Performance Sparkline Graph",
+    CurrentValue = (S.SparklineGraphEnabled ~= false),
+    Flag = "SparklineGraphEnabled",
+    Callback = function(v)
+        S.SparklineGraphEnabled = v
+    end
+})
+
+CustomizationTab:CreateSection("System Diagnostics & Memory")
+local diagParagraph = CustomizationTab:CreateParagraph({
+    Title = "Client Diagnostics",
+    Content = "Collecting memory and runtime telemetry..."
+})
+task.spawn(function()
+    while task.wait(2.5) do
+        if diagParagraph and diagParagraph.Set then
+            local memMb = math.floor(collectgarbage("count") / 1024)
+            local drwCount = (TASFFEnv.Drawings and #TASFFEnv.Drawings) or 0
+            local connCount = (TASFFEnv.Connections and #TASFFEnv.Connections) or 0
+            pcall(function()
+                diagParagraph:Set({
+                    Title = "Client Diagnostics",
+                    Content = string.format("Script Memory: ~%d MB  â€¢  Drawings: %d  â€¢  Connections: %d", memMb, drwCount, connCount)
+                })
+            end)
+        end
+    end
+end)
+CustomizationTab:CreateButton({
+    Name = "Purge Stale Cache & Garbage Collect",
+    Callback = function()
+        if S.CleanupCaches then S.CleanupCaches() end
+        collectgarbage("collect")
+        if S.Notify then
+            S.Notify({
+                Title = "Diagnostics",
+                Content = "Purged stale target caches & performed GC sweep.",
+                Duration = 3,
+                Image = "trash-2"
+            })
+        end
+    end
+})
 
 SettingsTab:CreateSection("Notifications")
 SettingsTab:CreateParagraph({Title = "Notifications", Content = "Controls how and when TASFF sends in-game Rayfield notifications. Mute disables all. Max per 3s throttles burst spam."})

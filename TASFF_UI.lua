@@ -2178,16 +2178,15 @@ local function LoadPresetByName(presetName, silent)
                 Important      = true,
                 BypassSilence  = true,
             })
+        else
+            pcall(function()
+                game:GetService("StarterGui"):SetCore("SendNotification", {
+                    Title    = "Profile Loaded",
+                    Text     = presetName,
+                    Duration = 3,
+                })
+            end)
         end
-        -- Always guarantee visibility through native HUD notification as a second layer,
-        -- especially critical when the UI window is currently closed.
-        pcall(function()
-            game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title    = "Profile Loaded",
-                Text     = presetName,
-                Duration = 3,
-            })
-        end)
     end
     return true
 end
@@ -2735,10 +2734,50 @@ CustomizationTab:CreateButton({
         if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(S.CrosshairColor) end
         UpdateWindowTitle(selectedGlobalTheme)
         ScheduleColorSettingsSave()
+
+        -- Dynamic live theme repaint
+        if Window and Window.ModifyTheme then
+            pcall(function()
+                Window.ModifyTheme({
+                    TextColor                     = ThemeColors.TextColor,
+                    Background                    = ThemeColors.Background,
+                    Topbar                        = ThemeColors.Topbar,
+                    Shadow                        = Color3.fromRGB(10, 10, 10),
+                    NotificationBackground        = Color3.fromRGB(15, 15, 15),
+                    NotificationActionsBackground = Color3.fromRGB(35, 35, 35),
+                    TabBackground                 = Color3.fromRGB(25, 25, 25),
+                    TabStroke                     = ThemeColors.ElementBackground,
+                    TabBackgroundSelected         = ThemeColors.TabBackgroundSelected,
+                    TabTextColor                  = ThemeColors.TextColor,
+                    SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
+                    ElementBackground             = ThemeColors.ElementBackground,
+                    ElementBackgroundHover        = Color3.fromRGB(35, 35, 35),
+                    SecondaryElementBackground    = Color3.fromRGB(20, 20, 20),
+                    ElementStroke                 = Color3.fromRGB(40, 40, 40),
+                    SecondaryElementStroke        = Color3.fromRGB(35, 35, 35),
+                    SliderBackground              = ThemeColors.ElementBackground,
+                    SliderProgress                = ThemeColors.TabBackgroundSelected,
+                    SliderStroke                  = ThemeColors.TabBackgroundSelected,
+                    ToggleBackground              = ThemeColors.ElementBackground,
+                    ToggleEnabled                 = ThemeColors.TabBackgroundSelected,
+                    ToggleDisabled                = Color3.fromRGB(60, 60, 60),
+                    ToggleEnabledStroke           = ThemeColors.TabBackgroundSelected,
+                    ToggleDisabledStroke          = Color3.fromRGB(80, 80, 80),
+                    ToggleEnabledOuterStroke      = ThemeColors.TabBackgroundSelected,
+                    ToggleDisabledOuterStroke     = Color3.fromRGB(45, 45, 45),
+                    DropdownSelected              = ThemeColors.TabBackgroundSelected,
+                    DropdownUnselected            = Color3.fromRGB(25, 25, 25),
+                    InputBackground               = Color3.fromRGB(20, 20, 20),
+                    InputStroke                   = ThemeColors.TabBackgroundSelected,
+                    PlaceholderColor              = Color3.fromRGB(150, 150, 150),
+                })
+            end)
+        end
+
         if S.Notify then
             S.Notify({
                 Title = "Global Theme Applied",
-                Content = selectedGlobalTheme .. " visuals applied. Overrides turned off. UI colors take effect next load.",
+                Content = selectedGlobalTheme .. " theme and visual colors applied live.",
                 Duration = 4,
                 Image = "palette",
             })
@@ -3822,6 +3861,14 @@ for _, entry in ipairs(TabRegistry) do
 end
 
 print("[TASFF UI] Interface constructed. Configuration loaded.")
+
+-- Trigger theme runtime patch immediately upon UI creation
+if TASFFTheme and TASFFTheme.PatchRayfieldDOM then
+    task.spawn(function()
+        task.wait(0.15)
+        TASFFTheme.PatchRayfieldDOM()
+    end)
+end
 
 
 

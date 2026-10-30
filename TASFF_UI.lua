@@ -84,13 +84,48 @@ local GlobalThemePalettes  = TASFFTheme.GlobalThemePalettes   or {}
 local GlobalThemeColorNames= TASFFTheme.GlobalThemeColorNames or {}
 local GlobalThemeColorFields=TASFFTheme.GlobalThemeColorFields or {}
 local PersistedColorValues = {}
+local selectedGlobalTheme  = "Default"
+
+local ColorFields = {
+    "HighlightColor",
+    "FOVColor",
+    "CrosshairColor",
+    "BoxColor",
+    "SkeletonColor",
+    "SnaplineColor",
+    "OOFArrowColor",
+    "PriorityHighlightColor",
+    "ThreatHighlightColor",
+    "NemesisHighlightColor",
+    "BlacklistedTagColor",
+    "ChamsColor",
+    "KillFlashColor",
+    "VisibleColor",
+    "HiddenColor",
+    "EnvironmentalESPColor",
+}
+
+local ColorFlagMap = {
+    HighlightColor         = "HighlightColorPicker",
+    FOVColor               = "FOVCircleColorPicker",
+    CrosshairColor         = "CrosshairColorPicker",
+    BoxColor               = "BoxESPColorPicker",
+    SkeletonColor          = "SkeletonESPColorPicker",
+    SnaplineColor          = "SnaplineFineColorPicker",
+    OOFArrowColor          = "OOFArrowColorPicker",
+    PriorityHighlightColor = "PriorityHighlightColorPicker",
+    ThreatHighlightColor   = "ThreatHighlightColorPicker",
+    NemesisHighlightColor  = "NemesisHighlightColorPicker",
+    BlacklistedTagColor    = "BlacklistedTagColorPicker",
+    ChamsColor             = "ChamsColorPicker",
+    KillFlashColor         = "KillFlashColorPicker",
+    VisibleColor           = "VisibleColorPicker",
+    HiddenColor            = "HiddenColorPicker",
+    EnvironmentalESPColor  = "EnvironmentalESPColorPicker",
+}
 
 -- ThemeColorDefaults: fallback if Theme module unavailable
 local ThemeColorDefaults = (TASFFTheme and TASFFTheme.Defaults) or {Background=Color3.fromRGB(15,15,15),Topbar=Color3.fromRGB(20,20,20),TabBackgroundSelected=Color3.fromRGB(60,60,60),ElementBackground=Color3.fromRGB(28,28,28),TextColor=Color3.fromRGB(240,240,240)}
-
-
-
-
 
 local ThemeColors = (TASFFTheme.Defaults and table.clone(TASFFTheme.Defaults)) or table.clone(ThemeColorDefaults)
 

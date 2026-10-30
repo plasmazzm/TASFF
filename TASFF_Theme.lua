@@ -199,6 +199,30 @@ TASFFEnv.Theme.GlobalThemeOptions     = GlobalThemeOptions
 TASFFEnv.Theme.GlobalThemePalettes    = GlobalThemePalettes
 TASFFEnv.Theme.GlobalThemeColorNames  = GlobalThemeColorNames
 TASFFEnv.Theme.GlobalThemeColorFields = GlobalThemeColorFields
+TASFFEnv.Theme.ColorFields            = {
+    "HighlightColor", "FOVColor", "CrosshairColor", "BoxColor", "SkeletonColor",
+    "SnaplineColor", "OOFArrowColor", "PriorityHighlightColor", "ThreatHighlightColor",
+    "NemesisHighlightColor", "BlacklistedTagColor", "ChamsColor", "KillFlashColor",
+    "VisibleColor", "HiddenColor", "EnvironmentalESPColor"
+}
+TASFFEnv.Theme.ColorFlagMap           = {
+    HighlightColor         = "HighlightColorPicker",
+    FOVColor               = "FOVCircleColorPicker",
+    CrosshairColor         = "CrosshairColorPicker",
+    BoxColor               = "BoxESPColorPicker",
+    SkeletonColor          = "SkeletonESPColorPicker",
+    SnaplineColor          = "SnaplineFineColorPicker",
+    OOFArrowColor          = "OOFArrowColorPicker",
+    PriorityHighlightColor = "PriorityHighlightColorPicker",
+    ThreatHighlightColor   = "ThreatHighlightColorPicker",
+    NemesisHighlightColor  = "NemesisHighlightColorPicker",
+    BlacklistedTagColor    = "BlacklistedTagColorPicker",
+    ChamsColor             = "ChamsColorPicker",
+    KillFlashColor         = "KillFlashColorPicker",
+    VisibleColor           = "VisibleColorPicker",
+    HiddenColor            = "HiddenColorPicker",
+    EnvironmentalESPColor  = "EnvironmentalESPColorPicker",
+}
 TASFFEnv.Theme.Defaults               = ThemeColorDefaults
 TASFFEnv.Theme.ControlTooltips        = ControlTooltips
 -- // ============================================================ // --
@@ -216,7 +240,7 @@ local LocalPlayer = Players.LocalPlayer
 local OverlayGui = Instance.new("ScreenGui")
 OverlayGui.Name = "TASFF_OverlayGui"
 OverlayGui.ResetOnSpawn = false
-OverlayGui.DisplayOrder = 999
+OverlayGui.DisplayOrder = 999999999
 pcall(function()
     if syn and syn.protect_gui then syn.protect_gui(OverlayGui); OverlayGui.Parent = CoreGui
     elseif gethui then OverlayGui.Parent = gethui()
@@ -488,13 +512,35 @@ local function HideTooltip()
 end
 -- ── 5. Rayfield DOM Tree Patch Engine ────────────────────────────
 local function FindRayfieldGui()
-    local container = CoreGui
+    local candidates = {}
     pcall(function()
-        if gethui then container = gethui() end
+        if typeof(gethui) == "function" then
+            local h = gethui()
+            if h then table.insert(candidates, h) end
+        end
     end)
-    for _, child in ipairs(container:GetChildren()) do
-        if child:IsA("ScreenGui") and (child.Name:find("Rayfield") or child:FindFirstChild("Main")) then
-            return child
+    local ok1, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok1 and cg then table.insert(candidates, cg) end
+    local ok2, pg = pcall(function() return Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui") end)
+    if ok2 and pg then table.insert(candidates, pg) end
+
+    for _, container in ipairs(candidates) do
+        for _, child in ipairs(container:GetChildren()) do
+            if child:IsA("ScreenGui") and child.Name ~= "TASFF_OverlayGui" then
+                if child:FindFirstChild("Main") and child.Main:FindFirstChild("Topbar") and child.Main:FindFirstChild("Elements") then
+                    return child
+                end
+            end
+        end
+    end
+    for _, container in ipairs(candidates) do
+        for _, child in ipairs(container:GetChildren()) do
+            if child:IsA("ScreenGui") and child.Name ~= "TASFF_OverlayGui" then
+                local n = child.Name:lower()
+                if n:find("rayfield") or n:find("sirius") or n:find("tasff") then
+                    return child
+                end
+            end
         end
     end
     return nil
@@ -542,7 +588,7 @@ TASFFEnv.Theme.HighlightChangedControls = HighlightChangedControls
 local _tabBadges = {}
 local function SetTabBadge(tabName, count)
     local badge = _tabBadges[tabName]
-    if badge then
+    if badge and badge.Parent then
         if count and count > 0 then
             badge.Text = tostring(count)
             badge.Parent.Visible = true
@@ -559,141 +605,152 @@ local function PatchRayfieldDOM()
     if not rGui then return false end
 
     local mainFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
-    if mainFrame then
-        if S.UIOpacity and S.UIOpacity < 1.0 then
-            mainFrame.BackgroundTransparency = 1 - S.UIOpacity
-        end
+    if not mainFrame then return false end
 
-        -- 1. Window Resize Handle (Bottom-Right Grip)
-        if not mainFrame:FindFirstChild("ResizeHandle") then
-            local resizeHandle = Instance.new("TextButton")
-            resizeHandle.Name = "ResizeHandle"
-            resizeHandle.Size = UDim2.new(0, 16, 0, 16)
-            resizeHandle.Position = UDim2.new(1, -16, 1, -16)
-            resizeHandle.BackgroundTransparency = 1
-            resizeHandle.Font = Enum.Font.GothamBold
-            resizeHandle.TextSize = 10
-            resizeHandle.TextColor3 = Color3.fromRGB(120, 120, 130)
-            resizeHandle.Text = "⇲"
-            resizeHandle.Parent = mainFrame
+    if S.UIOpacity and S.UIOpacity < 1.0 then
+        mainFrame.BackgroundTransparency = 1 - S.UIOpacity
+    end
 
-            local _resizing = false
-            local _rStart, _rSizeStart
-            resizeHandle.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    _resizing = true
-                    _rStart = input.Position
-                    _rSizeStart = mainFrame.AbsoluteSize
-                end
-            end)
-            resizeHandle.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    _resizing = false
-                end
-            end)
-            UserInputService.InputChanged:Connect(function(input)
-                if _resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                    local delta = input.Position - _rStart
-                    local newW = math.clamp(_rSizeStart.X + delta.X, 420, 960)
-                    local newH = math.clamp(_rSizeStart.Y + delta.Y, 320, 800)
-                    mainFrame.Size = UDim2.new(0, newW, 0, newH)
-                end
-            end)
-        end
+    -- 1. Window Resize Handle (Bottom-Right Grip)
+    if not mainFrame:FindFirstChild("ResizeHandle") then
+        local resizeHandle = Instance.new("TextButton")
+        resizeHandle.Name = "ResizeHandle"
+        resizeHandle.Size = UDim2.new(0, 18, 0, 18)
+        resizeHandle.Position = UDim2.new(1, -18, 1, -18)
+        resizeHandle.BackgroundTransparency = 1
+        resizeHandle.Font = Enum.Font.GothamBold
+        resizeHandle.TextSize = 12
+        resizeHandle.TextColor3 = Color3.fromRGB(150, 150, 160)
+        resizeHandle.Text = "⇲"
+        resizeHandle.ZIndex = 50
+        resizeHandle.Parent = mainFrame
+
+        local _resizing = false
+        local _rStart, _rSizeStart
+        resizeHandle.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                _resizing = true
+                _rStart = input.Position
+                _rSizeStart = mainFrame.AbsoluteSize
+            end
+        end)
+        resizeHandle.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                _resizing = false
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if _resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - _rStart
+                local newW = math.clamp(_rSizeStart.X + delta.X, 440, 1000)
+                local newH = math.clamp(_rSizeStart.Y + delta.Y, 340, 850)
+                mainFrame.Size = UDim2.new(0, newW, 0, newH)
+            end
+        end)
     end
 
     -- 2. Inject Tab Notification Badges
-    for _, tabBtn in ipairs(rGui:GetDescendants()) do
-        if tabBtn:IsA("TextButton") and tabBtn.Parent and tabBtn.Parent.Name == "Tabs" then
-            local tName = tabBtn.Text
-            if tName and tName ~= "" and not tabBtn:FindFirstChild("BadgeFrame") then
-                local bFrame = Instance.new("Frame")
-                bFrame.Name = "BadgeFrame"
-                bFrame.Size = UDim2.new(0, 16, 0, 16)
-                bFrame.Position = UDim2.new(1, -18, 0, 4)
-                bFrame.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-                bFrame.BorderSizePixel = 0
-                bFrame.Visible = false
-                bFrame.Parent = tabBtn
-
-                Instance.new("UICorner", bFrame).CornerRadius = UDim.new(1, 0)
-                local bLabel = Instance.new("TextLabel", bFrame)
-                bLabel.Size = UDim2.new(1, 0, 1, 0)
-                bLabel.BackgroundTransparency = 1
-                bLabel.Font = Enum.Font.GothamBold
-                bLabel.TextSize = 9
-                bLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                bLabel.Text = "0"
-                _tabBadges[tName] = bLabel
-
-                tabBtn.MouseButton1Click:Connect(function()
+    local tabList = mainFrame:FindFirstChild("TabList", true)
+    if tabList then
+        for _, tabBtn in ipairs(tabList:GetChildren()) do
+            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" then
+                local tName = tabBtn.Name
+                if not tabBtn:FindFirstChild("BadgeFrame") then
+                    local bFrame = Instance.new("Frame")
+                    bFrame.Name = "BadgeFrame"
+                    bFrame.Size = UDim2.new(0, 16, 0, 16)
+                    bFrame.Position = UDim2.new(1, -20, 0.5, -8)
+                    bFrame.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+                    bFrame.BorderSizePixel = 0
                     bFrame.Visible = false
-                end)
+                    bFrame.ZIndex = 25
+                    bFrame.Parent = tabBtn
+
+                    Instance.new("UICorner", bFrame).CornerRadius = UDim.new(1, 0)
+                    local bLabel = Instance.new("TextLabel", bFrame)
+                    bLabel.Size = UDim2.new(1, 0, 1, 0)
+                    bLabel.BackgroundTransparency = 1
+                    bLabel.Font = Enum.Font.GothamBold
+                    bLabel.TextSize = 9
+                    bLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    bLabel.Text = "0"
+                    _tabBadges[tName] = bLabel
+
+                    tabBtn.InputBegan:Connect(function(inp)
+                        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+                            bFrame.Visible = false
+                        end
+                    end)
+                end
             end
         end
     end
 
     -- 3. Inject Search Bar into Element Scrollers
-    for _, page in ipairs(rGui:GetDescendants()) do
-        if page:IsA("ScrollingFrame") and (page.Name == "Elements" or page.Name:find("Container") or page.Name:find("Page")) then
-            if not page:FindFirstChild("ControlSearchBar") then
-                local searchBox = Instance.new("TextBox")
-                searchBox.Name = "ControlSearchBar"
-                searchBox.Size = UDim2.new(1, -16, 0, 26)
-                searchBox.Position = UDim2.new(0, 8, 0, 4)
-                searchBox.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-                searchBox.BorderSizePixel = 0
-                searchBox.Font = Enum.Font.Gotham
-                searchBox.TextSize = 11
-                searchBox.TextColor3 = Color3.fromRGB(240, 240, 245)
-                searchBox.PlaceholderText = "🔍 Filter controls..."
-                searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 135)
-                searchBox.LayoutOrder = -9999
-                searchBox.Parent = page
+    local elementsHolder = mainFrame:FindFirstChild("Elements", true)
+    if elementsHolder then
+        for _, page in ipairs(elementsHolder:GetChildren()) do
+            if page:IsA("ScrollingFrame") and page.Name ~= "Template" and page.Name ~= "UIListLayout" and page.Name ~= "UIPadding" then
+                if not page:FindFirstChild("ControlSearchBar") then
+                    local searchBox = Instance.new("TextBox")
+                    searchBox.Name = "ControlSearchBar"
+                    searchBox.Size = UDim2.new(1, -16, 0, 26)
+                    searchBox.Position = UDim2.new(0, 8, 0, 4)
+                    searchBox.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+                    searchBox.BorderSizePixel = 0
+                    searchBox.Font = Enum.Font.Gotham
+                    searchBox.TextSize = 11
+                    searchBox.TextColor3 = Color3.fromRGB(240, 240, 245)
+                    searchBox.PlaceholderText = "🔍 Filter controls in " .. page.Name .. "..."
+                    searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 135)
+                    searchBox.LayoutOrder = -9999
+                    searchBox.Parent = page
 
-                Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0, 5)
-                local sStroke = Instance.new("UIStroke", searchBox)
-                sStroke.Color = Color3.fromRGB(45, 45, 55)
+                    Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0, 5)
+                    local sStroke = Instance.new("UIStroke", searchBox)
+                    sStroke.Color = Color3.fromRGB(45, 45, 55)
 
-                searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-                    local query = searchBox.Text:lower():gsub("%s+", "")
-                    for _, child in ipairs(page:GetChildren()) do
-                        if child ~= searchBox and child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
-                            if query == "" then
-                                child.Visible = true
-                            else
-                                local tLabel = child:FindFirstChild("Title", true) or child:FindFirstChildOfClass("TextLabel")
-                                local labelText = tLabel and tLabel.Text:lower():gsub("%s+", "") or ""
-                                child.Visible = (labelText:find(query, 1, true) ~= nil)
+                    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                        local query = searchBox.Text:lower():gsub("%s+", "")
+                        for _, child in ipairs(page:GetChildren()) do
+                            if child ~= searchBox and child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
+                                if query == "" then
+                                    child.Visible = true
+                                else
+                                    local tLabel = child:FindFirstChild("Title", true) or child:FindFirstChildOfClass("TextLabel")
+                                    local labelText = (tLabel and tLabel.Text or child.Name):lower():gsub("%s+", "")
+                                    child.Visible = (labelText:find(query, 1, true) ~= nil)
+                                end
                             end
                         end
-                    end
-                end)
+                    end)
+                end
             end
         end
     end
 
-    for _, desc in ipairs(rGui:GetDescendants()) do
-        -- 1. Section Header Collapse/Expand Injection
-        if desc:IsA("TextLabel") and desc.Name == "Title" and desc.Parent and desc.Parent.Name == "Section" then
-            local secFrame = desc.Parent
+    -- 4. Walk Elements and inject Section collapse, Tooltips, and Live Dots
+    for _, desc in ipairs(mainFrame:GetDescendants()) do
+        -- Section Header Collapse/Expand Injection
+        if desc:IsA("GuiObject") and (desc.Name == "SectionTitle" or desc.Name:find("Section")) then
+            local secFrame = desc
             if not secFrame:FindFirstChild("CollapseToggle") then
                 local toggleBtn = Instance.new("TextButton")
                 toggleBtn.Name = "CollapseToggle"
-                toggleBtn.Size = UDim2.new(0, 20, 0, 20)
-                toggleBtn.Position = UDim2.new(1, -24, 0, 2)
+                toggleBtn.Size = UDim2.new(0, 22, 0, 22)
+                toggleBtn.Position = UDim2.new(1, -26, 0.5, -11)
                 toggleBtn.BackgroundTransparency = 1
                 toggleBtn.Font = Enum.Font.GothamBold
                 toggleBtn.TextSize = 12
                 toggleBtn.TextColor3 = Color3.fromRGB(150, 150, 160)
                 toggleBtn.Text = "▼"
+                toggleBtn.ZIndex = 15
                 toggleBtn.Parent = secFrame
 
                 local isCollapsed = false
                 toggleBtn.MouseButton1Click:Connect(function()
                     isCollapsed = not isCollapsed
                     toggleBtn.Text = isCollapsed and "▶" or "▼"
-                    -- Collapse sibling elements under section until next section
                     local container = secFrame.Parent
                     if container then
                         local pastSec = false
@@ -701,8 +758,8 @@ local function PatchRayfieldDOM()
                             if child == secFrame then
                                 pastSec = true
                             elseif pastSec then
-                                if child.Name == "Section" then break end
-                                if child:IsA("GuiObject") and child.Name ~= "UIListLayout" then
+                                if child.Name == "SectionTitle" or child.Name:find("Section") then break end
+                                if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" and child.Name ~= "ControlSearchBar" then
                                     child.Visible = not isCollapsed
                                 end
                             end
@@ -712,14 +769,19 @@ local function PatchRayfieldDOM()
             end
         end
 
-        -- 2. Tooltip & Definition attachment on interactive elements
-        if desc:IsA("TextLabel") and desc.Text and desc.Text ~= "" then
-            local cleanName = desc.Text:gsub("^🔒%s*", ""):gsub(":%s*$", "")
-            local def = ControlTooltips[cleanName]
-            if def and desc.Parent and desc.Parent:IsA("GuiObject") then
-                local targetElem = desc.Parent
-                targetElem.MouseEnter:Connect(function(x, y)
-                    ShowTooltip(cleanName, def, Vector2.new(x, y))
+        -- Tooltip & Definition attachment on interactive elements
+        local titleLabel = desc:FindFirstChild("Title", true)
+        if titleLabel and titleLabel:IsA("TextLabel") and titleLabel.Text ~= "" then
+            local cleanName = titleLabel.Text:gsub("^🔒%s*", ""):gsub(":%s*$", ""):gsub("^%s+", ""):gsub("%s+$", "")
+            local def = ControlTooltips[cleanName] or ControlTooltips[desc.Name]
+            if def and not desc:FindFirstChild("TooltipHooked") then
+                local hookTag = Instance.new("BoolValue")
+                hookTag.Name = "TooltipHooked"
+                hookTag.Parent = desc
+
+                local function onHoverEnter()
+                    local mPos = UserInputService:GetMouseLocation()
+                    ShowTooltip(cleanName, def, mPos)
                     S.LastTouchedDef = cleanName
                     S.LastTouchedDefText = def
                     if S.DefinitionsParagraph and S.DefinitionsParagraph.Set then
@@ -730,24 +792,48 @@ local function PatchRayfieldDOM()
                             })
                         end)
                     end
-                end)
-                targetElem.MouseLeave:Connect(function()
+                end
+                local function onHoverLeave()
                     HideTooltip()
-                end)
+                end
+
+                desc.MouseEnter:Connect(onHoverEnter)
+                desc.MouseLeave:Connect(onHoverLeave)
+
+                local interact = desc:FindFirstChild("Interact")
+                if interact and interact:IsA("GuiObject") then
+                    interact.MouseEnter:Connect(onHoverEnter)
+                    interact.MouseLeave:Connect(onHoverLeave)
+                end
             end
         end
 
-        -- 3. Live State Dot Indicator on Toggles
-        if desc:IsA("Frame") and desc.Name == "Toggle" then
-            if not desc:FindFirstChild("LiveDot") then
-                local dot = Instance.new("Frame")
-                dot.Name = "LiveDot"
-                dot.Size = UDim2.new(0, 5, 0, 5)
-                dot.Position = UDim2.new(0, 4, 0.5, -2.5)
-                dot.BackgroundColor3 = Color3.fromRGB(0, 230, 100)
-                dot.BorderSizePixel = 0
-                Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-                dot.Parent = desc
+        -- Live State Dot on Toggles
+        if desc:IsA("GuiObject") and desc:FindFirstChild("Switch") and not desc:FindFirstChild("LiveDot") then
+            local dot = Instance.new("Frame")
+            dot.Name = "LiveDot"
+            dot.Size = UDim2.new(0, 6, 0, 6)
+            dot.Position = UDim2.new(0, 5, 0.5, -3)
+            dot.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+            dot.BorderSizePixel = 0
+            Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+            dot.Parent = desc
+
+            local switch = desc:FindFirstChild("Switch")
+            local function updateDot()
+                local ind = switch and switch:FindFirstChild("Indicator")
+                if ind and ind.Position.X.Offset > -30 then
+                    dot.BackgroundColor3 = Color3.fromRGB(0, 230, 100)
+                else
+                    dot.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+                end
+            end
+            task.delay(0.2, updateDot)
+            local interact = desc:FindFirstChild("Interact")
+            if interact and interact:IsA("GuiObject") then
+                interact.InputEnded:Connect(function()
+                    task.delay(0.1, updateDot)
+                end)
             end
         end
     end

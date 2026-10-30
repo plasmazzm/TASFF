@@ -1,6 +1,6 @@
 -- // ============================================================ // --
 -- //   TASFF_Lists.lua                                           // --
--- //   Keyword lists, classifiers, feature list, game configs.  // --
+-- //   Keyword lists, classifiers, feature list.                // --
 -- //   Load order: State → Lists → Core → UI                   // --
 -- //   Populates S.ClassifyTool and related slots.              // --
 -- // ============================================================ // --
@@ -150,7 +150,7 @@ local FeatureList = {
     "Performance Pipeline", "Performance Auto-Tune", "Anti-AFK",
     "Auto-Update Checker", "Panic System (Permanent)", "Panic on Focus Loss",
     "Notification Throttle", "Debug Mode", "Preset Profiles",
-    "Quick-Load Game Configs", "UI Theme Editor",
+    "UI Theme Editor",
     "Team Check", "Ignore Dead Targets",
     -- Customization
     "Custom ESP Colors (per category)", "Custom OOF Arrow Color",
@@ -199,68 +199,28 @@ local FeatureList = {
     "Quick Preset Profile Switching",
     "Expert Instincts Auto-Equip",
     "Expert Instincts First Person Camera",
+    -- v2.3.0 UI Overhaul & Extensions
+    "Persistent HUD Status Strip",
+    "Threat Radar Mini-Map",
+    "Notification Sidebar Feed",
+    "Full Keyboard Navigation",
+    "Interactive Control Tooltips",
+    "Collapsible UI Sections",
+    "Definitions & Glossary Engine",
+    "Live Session Event Timeline",
+    "Preset Configuration Diff View",
+    "Compact Mode View",
+    "Threat Confidence Classification",
 }
 
 S.FeatureCount = #FeatureList
 -- Control totals reflect the Create* declarations in TASFF_UI.lua.
-S.ToggleCount         = 102  -- +2 (InstinctsAutoEquip, InstinctsFirstPersonCamera)
-S.SliderCount         = 38   -- (EnvironmentalESPTransparency)
-S.DropdownCount       = 43   -- (VOSPriorityParts)
-S.ButtonCount         = 29   -- (Check for Updates Now, Instincts Blacklist Add/Remove, Instincts Priority Add/Remove)
-S.KeybindCount        = 8    -- +1 (Master Switch Keybind in CombatTab)
-S.StatusDisplayCount  = 7    -- Server Info, Quick Feature Status, Session Stats, Priority/Intel Monitor, Preset Status, Cloak Status, Repository Status
-S.ParagraphCount      = 35   -- +1 (Quick Profile Switcher in PresetsTab)
-
--- // ── Preset Game Configurations ───────────────────────────────── // --
--- Applied via the Presets tab "Quick-Load Game Config" dropdown.
--- These are read-only reference configs. User presets are separate.
-
-S.PresetGameConfigs = {
-    ["Arsenal"] = {
-        Mode = "Advanced Legit (Mouse)", TargetPart = "Head",
-        SmoothnessX = 1.2, SmoothnessY = 1.2, PredictionAmount = 0.12,
-        SilentAimEnabled = false, StickyAimEnabled = true, WallCheck = true,
-        FOVSize = 120, ShowFOV = true, InvisibleFOV = false,
-        AutoClickEnabled = true, ClickInterval = 100, ClickMethod = "Mash",
-        TriggerbotClickMode = "Virtual", UseHighlight = true, UseInfoTag = true,
-        ThreatDetectorEnabled = true, NemesisEnabled = true,
-        PerformanceMode = "High",
-    },
-    ["Phantom Forces"] = {
-        Mode = "Legit (Camera)", TargetPart = "Head",
-        SmoothnessX = 2.0, SmoothnessY = 2.0, PredictionAmount = 0.20,
-        SilentAimEnabled = false, StickyAimEnabled = false, WallCheck = true,
-        FOVSize = 80, ShowFOV = false, InvisibleFOV = true,
-        AutoClickEnabled = false, UseHighlight = true, UseInfoTag = true,
-        PerformanceMode = "Medium",
-    },
-    ["BedWars"] = {
-        Mode = "Blatant", TargetPart = "Head",
-        SmoothnessX = 1.0, SmoothnessY = 1.0, PredictionAmount = 0.10,
-        SilentAimEnabled = false, StickyAimEnabled = true, WallCheck = false,
-        FOVSize = 200, ShowFOV = false,
-        MeleeModeEnabled = true, MeleeDetectionRange = 7, MeleeClickInterval = 80,
-        UseHighlight = true, UseInfoTag = true, TeamCheck = true,
-        PerformanceMode = "High",
-    },
-    ["Criminality"] = {
-        Mode = "Advanced Legit (Mouse)", TargetPart = "Head",
-        SmoothnessX = 1.5, SmoothnessY = 1.5, PredictionAmount = 0.15,
-        SilentAimEnabled = false, StickyAimEnabled = true, WallCheck = true,
-        FOVSize = 150, ShowFOV = false,
-        AutoClickEnabled = false,
-        ThreatDetectorEnabled = true, NemesisEnabled = true,
-        PerformanceMode = "Medium",
-    },
-    ["Da Hood"] = {
-        Mode = "Advanced Legit (Mouse)", TargetPart = "Head",
-        SmoothnessX = 1.8, SmoothnessY = 1.8, PredictionAmount = 0.18,
-        SilentAimEnabled = false, StickyAimEnabled = true, WallCheck = true,
-        FOVSize = 130, ShowFOV = false,
-        ThreatDetectorEnabled = true, NemesisEnabled = true,
-        AutoClickEnabled = true, ClickInterval = 120, ClickMethod = "Mash",
-        PerformanceMode = "Medium",
-    },
-}
+S.ToggleCount         = 109
+S.SliderCount         = 40
+S.DropdownCount       = 44
+S.ButtonCount         = 36
+S.KeybindCount        = 6
+S.StatusDisplayCount  = 7
+S.ParagraphCount      = 73
 
 print("[TASFF Lists] Loaded. " .. S.FeatureCount .. " features registered. Classifiers active.")

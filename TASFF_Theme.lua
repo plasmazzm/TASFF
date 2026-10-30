@@ -1405,9 +1405,10 @@ local function AttachCarbonOverlay(targetFrame, transparency)
     carbon.Position = UDim2.new(0, 0, 0, 0)
     carbon.BackgroundTransparency = 1
     carbon.Image = "rbxassetid://2151741365"
+    carbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
     carbon.ScaleType = Enum.ScaleType.Tile
-    carbon.TileSize = UDim2.new(0, 14, 0, 14)
-    carbon.ImageTransparency = transparency or 0.92
+    carbon.TileSize = UDim2.new(0, 16, 0, 16)
+    carbon.ImageTransparency = transparency or 0.80
     carbon.ZIndex = math.max(1, targetFrame.ZIndex)
     Instance.new("UICorner", carbon).CornerRadius = UDim.new(0, 6)
     carbon.Parent = targetFrame
@@ -1450,16 +1451,16 @@ local function PatchRayfieldDOM()
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
     end
 
-    -- 0. Window Width Expansion (ensures generous spacing for Title, Profile Banner, Bell, and Controls)
+    -- 0. Window Width Expansion (generous spacing for Title, Profile Banner, Monitor, Bell, and Controls)
     if not mainFrame:FindFirstChild("SizeInitialized") then
         local sInit = Instance.new("BoolValue", mainFrame)
         sInit.Name = "SizeInitialized"
-        if mainFrame.AbsoluteSize.X < 530 then
-            mainFrame.Size = UDim2.new(0, 545, 0, math.max(420, mainFrame.AbsoluteSize.Y))
+        if mainFrame.AbsoluteSize.X < 630 then
+            mainFrame.Size = UDim2.new(0, 640, 0, math.max(460, mainFrame.AbsoluteSize.Y))
         end
     end
 
-    -- 0a. Subtle Aerospace Carbon Mesh on Window Background
+    -- 0a. Tactical Carbon Mesh on Window Background
     if not mainFrame:FindFirstChild("MainCarbonMesh") then
         local mCarbon = Instance.new("ImageLabel")
         mCarbon.Name = "MainCarbonMesh"
@@ -1467,9 +1468,10 @@ local function PatchRayfieldDOM()
         mCarbon.Position = UDim2.new(0, 0, 0, 0)
         mCarbon.BackgroundTransparency = 1
         mCarbon.Image = "rbxassetid://2151741365"
+        mCarbon.ImageColor3 = Color3.fromRGB(225, 225, 245)
         mCarbon.ScaleType = Enum.ScaleType.Tile
-        mCarbon.TileSize = UDim2.new(0, 22, 0, 22)
-        mCarbon.ImageTransparency = 0.96
+        mCarbon.TileSize = UDim2.new(0, 18, 0, 18)
+        mCarbon.ImageTransparency = 0.84
         mCarbon.ZIndex = 1
         Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
         mCarbon.Parent = mainFrame
@@ -1506,7 +1508,7 @@ local function PatchRayfieldDOM()
         cyberStroke.Color = GetThemeAccentColor()
     end
 
-    -- 0c. True Ambient Glass Aura (Parented strictly behind Main in ScreenGui - 0% occlusion of controls)
+    -- 0c. Snug Ambient Glass Aura (Parented strictly behind Main in ScreenGui - 0% occlusion of controls)
     local ambientAura = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
     if mainFrame.Parent and not ambientAura then
         ambientAura = Instance.new("ImageLabel")
@@ -1514,13 +1516,17 @@ local function PatchRayfieldDOM()
         ambientAura.BackgroundTransparency = 1
         ambientAura.Image = "rbxassetid://1316045217"
         ambientAura.ImageColor3 = GetThemeAccentColor()
-        ambientAura.ImageTransparency = 0.72
+        ambientAura.ImageTransparency = 0.65
         ambientAura.ScaleType = Enum.ScaleType.Slice
         ambientAura.SliceCenter = Rect.new(10, 10, 118, 118)
+        ambientAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 9, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 9)
+        ambientAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 18, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 18)
         ambientAura.ZIndex = 0
         ambientAura.Parent = mainFrame.Parent
     elseif ambientAura then
         ambientAura.ImageColor3 = GetThemeAccentColor()
+        ambientAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 9, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 9)
+        ambientAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 18, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 18)
     end
 
     -- Clean up any residual legacy GlassShadow directly on mainFrame
@@ -1555,8 +1561,8 @@ local function PatchRayfieldDOM()
         if not statusPill then
             statusPill = Instance.new("Frame", topbar)
             statusPill.Name = "StatusPill"
-            statusPill.Size = UDim2.new(0, 68, 0, 18)
-            statusPill.Position = UDim2.new(0, 168, 0.5, -9)
+            statusPill.Size = UDim2.new(0, 68, 0, 20)
+            statusPill.Position = UDim2.new(1, -220, 0.5, -10)
             statusPill.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
             statusPill.BackgroundTransparency = 0.35
             statusPill.BorderSizePixel = 0
@@ -1603,6 +1609,8 @@ local function PatchRayfieldDOM()
                     task.wait(0.5)
                 end
             end)
+        else
+            statusPill.Position = UDim2.new(1, -220, 0.5, -10)
         end
 
         local bellBtn = topbar:FindFirstChild("NotifBellBtn")
@@ -1610,7 +1618,7 @@ local function PatchRayfieldDOM()
             bellBtn = Instance.new("TextButton", topbar)
             bellBtn.Name = "NotifBellBtn"
             bellBtn.Size = UDim2.new(0, 22, 0, 22)
-            bellBtn.Position = UDim2.new(1, -165, 0.5, -11)
+            bellBtn.Position = UDim2.new(1, -145, 0.5, -11)
             bellBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
             bellBtn.BackgroundTransparency = 0.3
             bellBtn.BorderSizePixel = 0
@@ -1657,15 +1665,15 @@ local function PatchRayfieldDOM()
                 end
             end)
         else
-            bellBtn.Position = UDim2.new(1, -165, 0.5, -11)
+            bellBtn.Position = UDim2.new(1, -145, 0.5, -11)
         end
 
         local uBanner = topbar:FindFirstChild("UserProfileBanner")
         if not uBanner then
             uBanner = Instance.new("Frame", topbar)
             uBanner.Name = "UserProfileBanner"
-            uBanner.Size = UDim2.new(0, 134, 0, 22)
-            uBanner.Position = UDim2.new(1, -305, 0.5, -11)
+            uBanner.Size = UDim2.new(0, 136, 0, 22)
+            uBanner.Position = UDim2.new(1, -364, 0.5, -11)
             uBanner.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
             uBanner.BackgroundTransparency = 0.35
             uBanner.ZIndex = 40
@@ -1696,7 +1704,7 @@ local function PatchRayfieldDOM()
             local exec = (identifyexecutor and identifyexecutor()) or "Client"
             uName.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. " (" .. exec .. ")"
         else
-            uBanner.Position = UDim2.new(1, -305, 0.5, -11)
+            uBanner.Position = UDim2.new(1, -364, 0.5, -11)
         end
     end
 
@@ -1770,26 +1778,15 @@ local function PatchRayfieldDOM()
         end)
     end
 
-    -- 2. Inject Tab Notification Badges, Left Glow Bar & Category Dividers
+    -- 2. Inject Tab Notification Badges, Glowing Active Indicator & Tab Feedback
     local tabList = mainFrame:FindFirstChild("TabList", true)
     local tabContainer = tabList and tabList.Parent or mainFrame
-    local activeGlow = tabContainer:FindFirstChild("ActiveTabGlowBar")
-    if tabList then
-        if not activeGlow then
-            activeGlow = Instance.new("Frame", tabContainer)
-            activeGlow.Name = "ActiveTabGlowBar"
-            activeGlow.Size = UDim2.new(0, 3, 0, 24)
-            activeGlow.Position = UDim2.new(0, 2, 0, tabList.Position.Y.Offset + 4)
-            activeGlow.BackgroundColor3 = GetThemeAccentColor()
-            activeGlow.BorderSizePixel = 0
-            activeGlow.ZIndex = 30
-            Instance.new("UICorner", activeGlow).CornerRadius = UDim.new(1, 0)
-        else
-            activeGlow.BackgroundColor3 = GetThemeAccentColor()
-        end
+    local legacyGlow = tabContainer:FindFirstChild("ActiveTabGlowBar") or (tabList and tabList:FindFirstChild("ActiveTabGlowBar"))
+    if legacyGlow then legacyGlow:Destroy() end
 
+    if tabList then
         for _, tabBtn in ipairs(tabList:GetChildren()) do
-            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" and tabBtn.Name ~= "ActiveTabGlowBar" then
+            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" then
                 local tName = tabBtn.Name
                 local tabPod = tabBtn:FindFirstChild("TabGlowPod")
                 if not tabPod then
@@ -1840,11 +1837,6 @@ local function PatchRayfieldDOM()
                                 tabPod.BackgroundColor3 = GetThemeAccentColor()
                                 TweenService:Create(tabPod, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 0.2}):Play()
                             end
-                            TweenService:Create(activeGlow, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-                                Position = UDim2.new(0, 2, 0, tabBtn.Position.Y.Offset + 2),
-                                Size = UDim2.new(0, 3, 0, math.max(16, tabBtn.Size.Y.Offset - 4)),
-                                BackgroundColor3 = GetThemeAccentColor()
-                            }):Play()
                         end
                     end)
                 end
@@ -1866,21 +1858,21 @@ local function PatchRayfieldDOM()
             cStroke.Enabled = isVis
         end
 
-        -- Ambient Glass Aura Sync (strictly behind Main, tracks window position & size)
+        -- Ambient Glass Aura Sync (strictly behind Main, tracks window position & size with snug spread)
         local aAura = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
         if aAura then
             aAura.Visible = (isVis and isExpanded)
-            aAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 22, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 22)
-            aAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 44, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 44)
+            aAura.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset - 9, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset - 9)
+            aAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 18, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 18)
             aAura.ImageColor3 = GetThemeAccentColor()
-            aAura.ImageTransparency = math.clamp(0.72 + mainTrans * 0.28, 0, 1)
+            aAura.ImageTransparency = math.clamp(0.65 + mainTrans * 0.35, 0, 1)
         end
 
         -- Main Window Carbon Mesh
         local mMesh = mainFrame:FindFirstChild("MainCarbonMesh")
         if mMesh then
             mMesh.Visible = (isVis and isExpanded)
-            mMesh.ImageTransparency = math.clamp(0.96 + mainTrans * 0.04, 0, 1)
+            mMesh.ImageTransparency = math.clamp(0.84 + mainTrans * 0.16, 0, 1)
         end
 
         -- Live Status Pill
@@ -1921,12 +1913,6 @@ local function PatchRayfieldDOM()
             if bIcon then bIcon.ImageTransparency = topTrans end
             local bDot = bBtn:FindFirstChild("BellDot")
             if bDot then bDot.BackgroundTransparency = topTrans end
-        end
-
-        -- Tab Active Glow Bar
-        if activeGlow then
-            activeGlow.Visible = (isVis and isExpanded)
-            activeGlow.BackgroundTransparency = math.clamp(mainTrans, 0, 1)
         end
 
         -- Resize Handle
@@ -2191,8 +2177,8 @@ local function PatchRayfieldDOM()
             end)
         end
 
-        -- 1-Click Color Preset Swatches on ColorPickers
-        if desc:IsA("GuiObject") and desc:FindFirstChild("ColorPicker") and not desc:FindFirstChild("QuickSwatchesHooked") then
+        -- 1-Click Color Preset Swatches on ColorPickers (Strictly exclude Templates)
+        if desc:IsA("GuiObject") and desc.Name ~= "Template" and not desc:FindFirstAncestor("Template") and desc:FindFirstChild("ColorPicker") and not desc:FindFirstChild("QuickSwatchesHooked") then
             local swHook = Instance.new("BoolValue", desc)
             swHook.Name = "QuickSwatchesHooked"
             local swRow = Instance.new("Frame", desc)
@@ -2217,7 +2203,7 @@ local function PatchRayfieldDOM()
         end
 
         -- 3D Physical Keycap Styling on Keybinds
-        if desc:IsA("GuiObject") and desc:FindFirstChild("Keybind") and not desc:FindFirstChild("Keycap3DHooked") then
+        if desc:IsA("GuiObject") and desc.Name ~= "Template" and not desc:FindFirstAncestor("Template") and desc:FindFirstChild("Keybind") and not desc:FindFirstChild("Keycap3DHooked") then
             local kbHook = Instance.new("BoolValue", desc)
             kbHook.Name = "Keycap3DHooked"
             local kbBtn = desc:FindFirstChild("Keybind")
@@ -2233,7 +2219,7 @@ local function PatchRayfieldDOM()
         -- Tooltip & Definition attachment on interactive elements
         local titleLabel = desc:FindFirstChild("Title", true)
         if titleLabel and titleLabel:IsA("TextLabel") and titleLabel.Text ~= "" then
-            local cleanName = titleLabel.Text:gsub("^ðŸ”’%s*", ""):gsub(":%s*$", ""):gsub("^%s+", ""):gsub("%s+$", "")
+            local cleanName = titleLabel.Text:gsub("^%[KEY%]%s*", ""):gsub("^[^%a%d]+%s*", ""):gsub(":%s*$", ""):gsub("^%s+", ""):gsub("%s+$", "")
             local def = ControlTooltips[cleanName] or ControlTooltips[desc.Name]
             if def and not desc:FindFirstChild("TooltipHooked") then
                 local hookTag = Instance.new("BoolValue")
@@ -2314,35 +2300,60 @@ local function PatchRayfieldDOM()
         end
 
         -- 3b. Atmospheric Carbon Weave & Card Hover Glow Injection
-        if desc:IsA("GuiObject") and desc.Parent and (desc.Parent.Name == "Elements" or desc.Parent:FindFirstChild("UIListLayout")) then
+        if desc:IsA("GuiObject") and desc.Name ~= "Template" and not desc:FindFirstAncestor("Template") and desc.Parent and (desc.Parent.Name == "Elements" or desc.Parent:FindFirstChild("UIListLayout")) then
             AttachHoverGlow(desc)
 
-            -- Paragraph Terminal Carbon Weave & Accent Prompt
-            if desc:FindFirstChild("Content") and not desc:FindFirstChild("ParaAccentBar") then
-                AttachCarbonOverlay(desc, 0.90)
-                local pBar = Instance.new("Frame", desc)
-                pBar.Name = "ParaAccentBar"
-                pBar.Size = UDim2.new(0, 2.5, 1, -8)
-                pBar.Position = UDim2.new(0, 2, 0, 4)
-                pBar.BackgroundColor3 = GetThemeAccentColor()
-                pBar.BorderSizePixel = 0
-                pBar.ZIndex = desc.ZIndex + 1
-                Instance.new("UICorner", pBar).CornerRadius = UDim.new(1, 0)
+            -- Paragraph Terminal Carbon Weave, Accent Bar & Dynamic Compact Height
+            if desc:IsA("Frame") and desc:FindFirstChild("Content") and desc:FindFirstChild("Title") and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider") and not desc:FindFirstChild("ColorPicker") and not desc:FindFirstChild("Keybind") and not desc:FindFirstChild("Dropdown") then
+                AttachCarbonOverlay(desc, 0.78)
+                if not desc:FindFirstChild("ParaAccentBar") then
+                    local pBar = Instance.new("Frame", desc)
+                    pBar.Name = "ParaAccentBar"
+                    pBar.Size = UDim2.new(0, 3, 1, -8)
+                    pBar.Position = UDim2.new(0, 3, 0, 4)
+                    pBar.BackgroundColor3 = GetThemeAccentColor()
+                    pBar.BorderSizePixel = 0
+                    pBar.ZIndex = desc.ZIndex + 1
+                    Instance.new("UICorner", pBar).CornerRadius = UDim.new(1, 0)
+                end
+
+                local title = desc:FindFirstChild("Title")
+                local content = desc:FindFirstChild("Content")
+                if title and content and title:IsA("TextLabel") and content:IsA("TextLabel") and not desc:FindFirstChild("ParaSizerHooked") then
+                    local sizerHook = Instance.new("BoolValue", desc)
+                    sizerHook.Name = "ParaSizerHooked"
+
+                    title.TextXAlignment = Enum.TextXAlignment.Left
+                    content.TextXAlignment = Enum.TextXAlignment.Left
+                    content.TextWrapped = true
+
+                    local function ResizePara()
+                        local tw = desc.AbsoluteSize.X > 50 and (desc.AbsoluteSize.X - 24) or 420
+                        local tH = TextService:GetTextSize(title.Text, title.TextSize, title.Font, Vector2.new(tw, 1000)).Y
+                        local cH = TextService:GetTextSize(content.Text, content.TextSize, content.Font, Vector2.new(tw, 2000)).Y
+                        local totalH = math.clamp(math.ceil(tH + cH + 16), 34, 400)
+                        desc.Size = UDim2.new(desc.Size.X.Scale, desc.Size.X.Offset, 0, totalH)
+                    end
+
+                    task.defer(ResizePara)
+                    content:GetPropertyChangedSignal("Text"):Connect(function() task.defer(ResizePara) end)
+                    title:GetPropertyChangedSignal("Text"):Connect(function() task.defer(ResizePara) end)
+                end
             end
 
             -- Toggle Carbon Background
             if desc:FindFirstChild("Switch") then
-                AttachCarbonOverlay(desc, 0.93)
+                AttachCarbonOverlay(desc, 0.82)
             end
 
             -- Button Carbon Weave
             if desc:FindFirstChild("Interact") and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider") then
-                AttachCarbonOverlay(desc, 0.91)
+                AttachCarbonOverlay(desc, 0.80)
             end
 
             -- Slider Carbon Weave
             if desc:FindFirstChild("Slider") then
-                AttachCarbonOverlay(desc, 0.93)
+                AttachCarbonOverlay(desc, 0.82)
             end
         end
 

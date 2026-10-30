@@ -1545,12 +1545,13 @@ local function PatchRayfieldDOM()
     -- 2. Inject Tab Notification Badges, Left Glow Bar & Category Dividers
     local tabList = mainFrame:FindFirstChild("TabList", true)
     if tabList then
-        local activeGlow = tabList:FindFirstChild("ActiveTabGlowBar")
+        local tabContainer = tabList.Parent or mainFrame
+        local activeGlow = tabContainer:FindFirstChild("ActiveTabGlowBar")
         if not activeGlow then
-            activeGlow = Instance.new("Frame", tabList)
+            activeGlow = Instance.new("Frame", tabContainer)
             activeGlow.Name = "ActiveTabGlowBar"
             activeGlow.Size = UDim2.new(0, 3, 0, 24)
-            activeGlow.Position = UDim2.new(0, 2, 0, 4)
+            activeGlow.Position = UDim2.new(0, tabList.Position.X.Offset, 0, tabList.Position.Y.Offset + 4)
             activeGlow.BackgroundColor3 = GetThemeAccentColor()
             activeGlow.BorderSizePixel = 0
             activeGlow.ZIndex = 30
@@ -1610,6 +1611,10 @@ local function PatchRayfieldDOM()
 
     local hookedTooltips = 0
     for _, desc in ipairs(mainFrame:GetDescendants()) do
+        -- STRICT: Skip Rayfield internal templates entirely
+        if desc.Name == "Template" or desc:FindFirstAncestor("Template") then
+            -- Skip uninstantiated template objects
+        else
         -- Section Header Collapse/Expand Injection
         if desc:IsA("GuiObject") and desc.Name == "SectionTitle" then
             local secFrame = desc
@@ -1868,6 +1873,7 @@ local function PatchRayfieldDOM()
                 end)
             end
         end
+        end
     end
 
     return true
@@ -1929,10 +1935,14 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
--- Defer initial DOM patch until Rayfield creates its window and keep syncing across tabs
+-- Defer initial DOM patch until UI is completely built by TASFF_UI.lua
 task.spawn(function()
-    for i = 1, 15 do
-        task.wait(0.6)
+    while not (S.UIInitialized or S.ScriptInitialized) do
+        task.wait(0.2)
+    end
+    task.wait(0.2)
+    for i = 1, 10 do
+        task.wait(0.5)
         if PatchRayfieldDOM() then
             S.ThemePatchDone = true
         end

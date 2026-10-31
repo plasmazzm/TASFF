@@ -782,9 +782,33 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         return
     end
 
-    local tgtChar = tgt.Character or (tgt.Parent and tgt.Parent:IsA("Model") and tgt.Parent) or tgt
-    local tgtHum = tgtChar and tgtChar:FindFirstChildOfClass("Humanoid")
-    local tgtRoot = tgtChar and (tgtChar:FindFirstChild("HumanoidRootPart") or tgtChar:FindFirstChild("Head") or tgtChar.PrimaryPart)
+    local tgtChar = nil
+    if typeof(tgt) == "Instance" then
+        if tgt:IsA("Player") then
+            tgtChar = tgt.Character
+        elseif tgt:IsA("Model") then
+            tgtChar = tgt
+        elseif tgt.Parent and tgt.Parent:IsA("Model") then
+            tgtChar = tgt.Parent
+        end
+    elseif type(tgt) == "table" then
+        local c = tgt.Character or tgt.Model or tgt.Instance or tgt.Player
+        if typeof(c) == "Instance" then
+            if c:IsA("Player") then
+                tgtChar = c.Character
+            elseif c:IsA("Model") then
+                tgtChar = c
+            end
+        end
+    end
+
+    if not (tgtChar and typeof(tgtChar) == "Instance") then
+        TargetCardFrame.Visible = false
+        return
+    end
+
+    local tgtHum = tgtChar:FindFirstChildOfClass("Humanoid")
+    local tgtRoot = tgtChar:FindFirstChild("HumanoidRootPart") or tgtChar:FindFirstChild("Head") or tgtChar.PrimaryPart
     local myChar = LocalPlayer.Character
     local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Head"))
 
@@ -1466,7 +1490,8 @@ local function PatchRayfieldDOM()
     if S.UIOpacity and S.UIOpacity < 1.0 then
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
     end
-    mainFrame.ClipsDescendants = false
+    mainFrame.ClipsDescendants = true
+    mainFrame.ZIndex = 2  -- Ensure mainFrame is above background halo (ZIndex 0)
 
     -- 0a. Atmospheric Scanline Grid on Window Background (procedurally drawn — no rbxassetid)
     local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
@@ -1477,13 +1502,12 @@ local function PatchRayfieldDOM()
     mCarbon.Size = UDim2.new(1, 0, 1, 0)
     mCarbon.Position = UDim2.new(0, 0, 0, 0)
     mCarbon.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-    mCarbon.BackgroundTransparency = 0.50  -- visible overlay
+    mCarbon.BackgroundTransparency = 0.50
     mCarbon.BorderSizePixel = 0
     mCarbon.ZIndex = 2
     mCarbon.Active = false
     Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
 
-    -- Horizontal scanlines: alternating dark / bright rows across entire menu background
     local scanGrad = Instance.new("UIGradient", mCarbon)
     scanGrad.Rotation = 90
     scanGrad.Color = ColorSequence.new({
@@ -1549,32 +1573,46 @@ local function PatchRayfieldDOM()
         cyberStroke.Color = GetThemeAccentColor()
     end
 
-    -- 0c. Centered Ambient Halo Styling (Strictly behind menu — native Rayfield shadow glow)
+    -- 0c. Centered Ambient Halo Styling (Strictly in mainFrame.Parent with ZIndex 0 — 100% behind menu)
     local legacyShadow = mainFrame:FindFirstChild("GlassShadow")
     if legacyShadow then legacyShadow:Destroy() end
     local legacyAuraOverlay = OverlayGui:FindFirstChild("TASFF_AmbientAura")
     if legacyAuraOverlay then legacyAuraOverlay:Destroy() end
+    if OverlayGui then
+        local oldH = OverlayGui:FindFirstChild("TASFF_AmbientHalo")
+        if oldH then oldH:Destroy() end
+    end
     if mainFrame.Parent then
         local legacyAuraParent = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
         if legacyAuraParent then legacyAuraParent:Destroy() end
     end
 
-    -- Use Rayfield's own native Shadow frame: perfectly centered, genuine soft blur glow, strictly BEHIND mainFrame
+    -- Strictly disable/hide any native shadow inside mainFrame so it NEVER obstructs text or controls
     local nativeShadow = mainFrame:FindFirstChild("Shadow")
     if nativeShadow then
-        nativeShadow.AnchorPoint = Vector2.new(0.5, 0.5)
-        nativeShadow.Position    = UDim2.new(0.5, 0, 0.5, 0)
-        nativeShadow.Size        = UDim2.new(1, 48, 1, 48) -- 24px symmetrical halo bleed
-        nativeShadow.ZIndex      = 0
-        local sImg = nativeShadow:FindFirstChild("Image") or (nativeShadow:IsA("ImageLabel") and nativeShadow)
-        if sImg and sImg:IsA("ImageLabel") then
-            sImg.AnchorPoint        = Vector2.new(0.5, 0.5)
-            sImg.Position           = UDim2.new(0.5, 0, 0.5, 0)
-            sImg.Size               = UDim2.new(1, 0, 1, 0)
-            sImg.ImageColor3        = GetThemeAccentColor()
-            sImg.ImageTransparency  = 0.35  -- bright and clearly visible soft halo
-            sImg.ZIndex             = 0
-        end
+        nativeShadow.Visible = false
+    end
+
+    -- Create genuine soft halo in mainFrame.Parent (the Rayfield ScreenGui) with ZIndex = 0
+    local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
+    if not ambientHalo and mainFrame.Parent then
+        ambientHalo = Instance.new("ImageLabel")
+        ambientHalo.Name = "TASFF_AmbientHalo"
+        ambientHalo.BackgroundTransparency = 1
+        ambientHalo.Image = "rbxassetid://5028857084" -- Soft radial blur 9-slice glow
+        ambientHalo.ScaleType = Enum.ScaleType.Slice
+        ambientHalo.SliceCenter = Rect.new(24, 24, 276, 276)
+        ambientHalo.ImageColor3 = GetThemeAccentColor()
+        ambientHalo.ImageTransparency = 0.35
+        ambientHalo.ZIndex = 0
+        ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
+        ambientHalo.Parent = mainFrame.Parent
+    end
+
+    if ambientHalo then
+        ambientHalo.ImageColor3 = GetThemeAccentColor()
+        ambientHalo.Position = UDim2.new(0, mainFrame.AbsolutePosition.X + mainFrame.AbsoluteSize.X * 0.5, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y * 0.5)
+        ambientHalo.Size = UDim2.new(0, mainFrame.AbsoluteSize.X + 44, 0, mainFrame.AbsoluteSize.Y + 44)
     end
 
     -- 0d. Topbar Clean Accent Line & Notification Center Bell (Shifted clear of Search)
@@ -1667,26 +1705,22 @@ local function PatchRayfieldDOM()
         end
     end
 
-    -- Operator Profile & Live System Monitor: Attached Bottom Bar (direct child of mainFrame — 100% synced)
+    -- Operator Profile & Live System Monitor: Attached Bottom Bar (parented to mainFrame.Parent in Rayfield ScreenGui)
     for _, child in ipairs(mainFrame:GetDescendants()) do
-        if child.Name == "BottomDock" then child:Destroy() end
+        if child.Name == "BottomDock" or child.Name == "TASFF_BottomBar" then child:Destroy() end
     end
     if OverlayGui then
         local oldOverlayBB = OverlayGui:FindFirstChild("TASFF_BottomBar")
         if oldOverlayBB then oldOverlayBB:Destroy() end
     end
-    if mainFrame.Parent then
-        local oldLegacyBB = mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
-        if oldLegacyBB then oldLegacyBB:Destroy() end
-    end
 
-    local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar")
-    if not bottomBar then
-        bottomBar = Instance.new("Frame", mainFrame)
+    local bottomBar = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
+    if not bottomBar and mainFrame.Parent then
+        bottomBar = Instance.new("Frame", mainFrame.Parent)
         bottomBar.Name = "TASFF_BottomBar"
         bottomBar.AnchorPoint = Vector2.new(0, 0)
-        bottomBar.Position = UDim2.new(0, 0, 1, 4)
-        bottomBar.Size = UDim2.new(1, 0, 0, 26)
+        bottomBar.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y + 4)
+        bottomBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 26)
         bottomBar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
         bottomBar.BackgroundTransparency = 0.10
         bottomBar.BorderSizePixel = 0
@@ -1959,21 +1993,22 @@ local function PatchRayfieldDOM()
             cStroke.Enabled = isVis
         end
 
-        -- Native Rayfield Centered Shadow Glow Sync (100% strictly behind menu)
+        -- Ambient Halo Sync in mainFrame.Parent (100% strictly BEHIND mainFrame)
+        local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
+        if ambientHalo then
+            ambientHalo.Visible = (isVis and isExpanded)
+            if ambientHalo.Visible then
+                ambientHalo.ImageColor3 = GetThemeAccentColor()
+                ambientHalo.ImageTransparency = math.clamp(0.35 + mainTrans * 0.65, 0, 1)
+                ambientHalo.Position = UDim2.new(0, mainFrame.AbsolutePosition.X + mainFrame.AbsoluteSize.X * 0.5, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y * 0.5)
+                ambientHalo.Size = UDim2.new(0, mainFrame.AbsoluteSize.X + 44, 0, mainFrame.AbsoluteSize.Y + 44)
+            end
+        end
+
+        -- Keep native shadow disabled so it NEVER obstructs text or controls
         local nativeShadow = mainFrame:FindFirstChild("Shadow")
         if nativeShadow then
-            nativeShadow.Visible = (isVis and isExpanded)
-            nativeShadow.AnchorPoint = Vector2.new(0.5, 0.5)
-            nativeShadow.Position    = UDim2.new(0.5, 0, 0.5, 0)
-            nativeShadow.Size        = UDim2.new(1, 48, 1, 48)
-            local sImg = nativeShadow:FindFirstChild("Image") or (nativeShadow:IsA("ImageLabel") and nativeShadow)
-            if sImg and sImg:IsA("ImageLabel") then
-                sImg.AnchorPoint       = Vector2.new(0.5, 0.5)
-                sImg.Position          = UDim2.new(0.5, 0, 0.5, 0)
-                sImg.Size              = UDim2.new(1, 0, 1, 0)
-                sImg.ImageColor3       = GetThemeAccentColor()
-                sImg.ImageTransparency = math.clamp(0.35 + mainTrans * 0.65, 0, 1)
-            end
+            nativeShadow.Visible = false
         end
 
         -- Main Window Carbon Mesh (procedural Frame — stays at 0.50 base when visible)
@@ -1983,31 +2018,35 @@ local function PatchRayfieldDOM()
             mMesh.BackgroundTransparency = math.clamp(0.50 + mainTrans * 0.50, 0, 1)
         end
 
-        -- Attached TASFF_BottomBar sync (direct child of mainFrame)
-        local bBar = mainFrame:FindFirstChild("TASFF_BottomBar")
+        -- Attached TASFF_BottomBar sync (in mainFrame.Parent, directly below menu)
+        local bBar = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
         if bBar then
             bBar.Visible = (isVis and isExpanded)
-            bBar.BackgroundTransparency = math.clamp(0.10 + mainTrans * 0.90, 0, 1)
-            local bStroke2 = bBar:FindFirstChildOfClass("UIStroke")
-            if bStroke2 then bStroke2.Transparency = math.clamp(0.5 + mainTrans * 0.5, 0, 1) end
-            local opA = bBar:FindFirstChild("OpAvatar")
-            if opA then opA.ImageTransparency = mainTrans end
-            local opN = bBar:FindFirstChild("OpName")
-            if opN then opN.TextTransparency = mainTrans end
-            local sCont = bBar:FindFirstChild("StatContainer")
-            if sCont then
-                local led = sCont:FindFirstChild("LED")
-                if led then led.BackgroundTransparency = mainTrans end
-                local st = sCont:FindFirstChild("StatusText")
-                if st then st.TextTransparency = mainTrans end
-            end
-            local rh = bBar:FindFirstChild("ResizeHandle")
-            if rh then
-                rh.Visible = (isVis and isExpanded)
-                local g1 = rh:FindFirstChild("Grip1")
-                local g2 = rh:FindFirstChild("Grip2")
-                if g1 then g1.BackgroundTransparency = mainTrans end
-                if g2 then g2.BackgroundTransparency = mainTrans end
+            if bBar.Visible then
+                bBar.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y + 4)
+                bBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 26)
+                bBar.BackgroundTransparency = math.clamp(0.10 + mainTrans * 0.90, 0, 1)
+                local bStroke2 = bBar:FindFirstChildOfClass("UIStroke")
+                if bStroke2 then bStroke2.Transparency = math.clamp(0.5 + mainTrans * 0.5, 0, 1) end
+                local opA = bBar:FindFirstChild("OpAvatar")
+                if opA then opA.ImageTransparency = mainTrans end
+                local opN = bBar:FindFirstChild("OpName")
+                if opN then opN.TextTransparency = mainTrans end
+                local sCont = bBar:FindFirstChild("StatContainer")
+                if sCont then
+                    local led = sCont:FindFirstChild("LED")
+                    if led then led.BackgroundTransparency = mainTrans end
+                    local st = sCont:FindFirstChild("StatusText")
+                    if st then st.TextTransparency = mainTrans end
+                end
+                local rh = bBar:FindFirstChild("ResizeHandle")
+                if rh then
+                    rh.Visible = (isVis and isExpanded)
+                    local g1 = rh:FindFirstChild("Grip1")
+                    local g2 = rh:FindFirstChild("Grip2")
+                    if g1 then g1.BackgroundTransparency = mainTrans end
+                    if g2 then g2.BackgroundTransparency = mainTrans end
+                end
             end
         end
 
@@ -2686,6 +2725,40 @@ UserInputService.InputBegan:Connect(function(input, gpe)
             if elem:IsA("TextButton") then
                 pcall(function() elem.MouseButton1Click:Fire() end)
             end
+        end
+    end
+end)
+
+-- Global Window Open/Close Keybind Hook
+-- Ensures pressing RightControl, K, or any configured toggle key ALWAYS opens/closes the menu cleanly
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    local isToggleKey = (input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.K)
+    if S.MenuKeybind and Enum.KeyCode[S.MenuKeybind] and input.KeyCode == Enum.KeyCode[S.MenuKeybind] then
+        isToggleKey = true
+    end
+    if S.MenuToggleKey and Enum.KeyCode[S.MenuToggleKey] and input.KeyCode == Enum.KeyCode[S.MenuToggleKey] then
+        isToggleKey = true
+    end
+    if isToggleKey then
+        local rGui = FindRayfieldGui and FindRayfieldGui()
+        local mFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
+        if mFrame then
+            if mFrame.Visible and mFrame.AbsoluteSize.Y > 60 then
+                mFrame.Visible = false
+            else
+                mFrame.Visible = true
+                if mFrame.AbsoluteSize.Y <= 60 then
+                    mFrame.Size = UDim2.new(0, 500, 0, 475)
+                end
+            end
+            pcall(function()
+                local isExpanded = (mFrame.Visible and mFrame.AbsoluteSize.Y > 60)
+                local halo = mFrame.Parent and mFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
+                if halo then halo.Visible = isExpanded end
+                local bb = mFrame.Parent and mFrame.Parent:FindFirstChild("TASFF_BottomBar")
+                if bb then bb.Visible = isExpanded end
+            end)
         end
     end
 end)

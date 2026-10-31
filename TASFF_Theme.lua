@@ -1494,78 +1494,49 @@ local function PatchRayfieldDOM()
     if S.UIOpacity and S.UIOpacity < 1.0 then
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
     end
-    mainFrame.ClipsDescendants = true
+    mainFrame.ClipsDescendants = false
     mainFrame.ZIndex = 2  -- Ensure mainFrame is above background halo (ZIndex 0)
 
-    -- 0a. Atmospheric Scanline Grid on Window Background (procedurally drawn — no rbxassetid)
+    -- 0a. Atmospheric Scanline Grid on Window Background (directly on mainFrame — CAN NEVER COVER CARDS)
     local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
     if existingMesh then existingMesh:Destroy() end
 
-    local mCarbon = Instance.new("Frame")
-    mCarbon.Name = "MainCarbonMesh"
-    mCarbon.Size = UDim2.new(1, 0, 1, 0)
-    mCarbon.Position = UDim2.new(0, 0, 0, 0)
-    mCarbon.BackgroundColor3 = Color3.fromRGB(12, 13, 18)
-    mCarbon.BackgroundTransparency = 0
-    mCarbon.BorderSizePixel = 0
-    mCarbon.ZIndex = 0
-    mCarbon.Active = false
-    Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(15, 16, 23)
 
-    -- Primary: High-contrast atmospheric scanline bands
-    local scanGrad = Instance.new("UIGradient", mCarbon)
+    local scanGrad = mainFrame:FindFirstChild("MainScanlinesGrad")
+    if not scanGrad then
+        scanGrad = Instance.new("UIGradient", mainFrame)
+        scanGrad.Name = "MainScanlinesGrad"
+    end
     scanGrad.Rotation = 90
     scanGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,      Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(0.05,   Color3.fromRGB(55,  60,  85)),
-        ColorSequenceKeypoint.new(0.10,   Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(0.15,   Color3.fromRGB(55,  60,  85)),
-        ColorSequenceKeypoint.new(0.20,   Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(55,  60,  85)),
-        ColorSequenceKeypoint.new(0.30,   Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(0.35,   Color3.fromRGB(55,  60,  85)),
-        ColorSequenceKeypoint.new(0.40,   Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(0.45,   Color3.fromRGB(55,  60,  85)),
-        ColorSequenceKeypoint.new(0.50,   Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(55,  60,  85)),
-        ColorSequenceKeypoint.new(0.60,   Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(0.65,   Color3.fromRGB(55,  60,  85)),
-        ColorSequenceKeypoint.new(0.70,   Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(55,  60,  85)),
-        ColorSequenceKeypoint.new(0.80,   Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(0.85,   Color3.fromRGB(55,  60,  85)),
-        ColorSequenceKeypoint.new(0.90,   Color3.fromRGB(10,  11,  16)),
-        ColorSequenceKeypoint.new(1,      Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0,      Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(0.05,   Color3.fromRGB(65,  72,  100)),
+        ColorSequenceKeypoint.new(0.10,   Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(0.15,   Color3.fromRGB(65,  72,  100)),
+        ColorSequenceKeypoint.new(0.20,   Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(65,  72,  100)),
+        ColorSequenceKeypoint.new(0.30,   Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(0.35,   Color3.fromRGB(65,  72,  100)),
+        ColorSequenceKeypoint.new(0.40,   Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(0.45,   Color3.fromRGB(65,  72,  100)),
+        ColorSequenceKeypoint.new(0.50,   Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(65,  72,  100)),
+        ColorSequenceKeypoint.new(0.60,   Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(0.65,   Color3.fromRGB(65,  72,  100)),
+        ColorSequenceKeypoint.new(0.70,   Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(65,  72,  100)),
+        ColorSequenceKeypoint.new(0.80,   Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(0.85,   Color3.fromRGB(65,  72,  100)),
+        ColorSequenceKeypoint.new(0.90,   Color3.fromRGB(12,  13,  19)),
+        ColorSequenceKeypoint.new(1,      Color3.fromRGB(65,  72,  100)),
     })
     scanGrad.Transparency = NumberSequence.new(0)
-
-    -- Secondary: Atmospheric 45-degree carbon weave cross grid
-    local mCross = Instance.new("Frame", mCarbon)
-    mCross.Name = "CarbonCrossWeave"
-    mCross.Size = UDim2.new(1, 0, 1, 0)
-    mCross.Position = UDim2.new(0, 0, 0, 0)
-    mCross.BackgroundColor3 = Color3.fromRGB(24, 26, 38)
-    mCross.BackgroundTransparency = 0.45
-    mCross.BorderSizePixel = 0
-    mCross.ZIndex = 0
-    Instance.new("UICorner", mCross).CornerRadius = UDim.new(0, 8)
-    local crossGrad = Instance.new("UIGradient", mCross)
-    crossGrad.Rotation = 45
-    crossGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,    Color3.fromRGB(8,   9,  14)),
-        ColorSequenceKeypoint.new(0.25, Color3.fromRGB(60, 65,  92)),
-        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(8,   9,  14)),
-        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(60, 65,  92)),
-        ColorSequenceKeypoint.new(1,    Color3.fromRGB(8,   9,  14)),
-    })
-
-    mCarbon.Parent = mainFrame
 
     -- Make Rayfield's Elements scroll container transparent so the carbon background shines through!
     for _, el in ipairs(mainFrame:GetDescendants()) do
         if el.Name == "Elements" and el:IsA("ScrollingFrame") then
             el.BackgroundTransparency = 1
-            el.ZIndex = 2  -- Strictly above background carbon mesh (ZIndex 0)
         end
     end
 
@@ -2120,14 +2091,8 @@ local function PatchRayfieldDOM()
     if not mainFrame:FindFirstChild("MasterFadeSyncHooked") then
         local fHook = Instance.new("BoolValue", mainFrame)
         fHook.Name = "MasterFadeSyncHooked"
-        mainFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
         mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
-        mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncRayfieldFade)
         mainFrame:GetPropertyChangedSignal("Position"):Connect(SyncRayfieldFade)
-        if topbar then
-            topbar:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
-            topbar:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
-        end
         if rGui then
             rGui:GetPropertyChangedSignal("Enabled"):Connect(SyncRayfieldFade)
         end
@@ -2636,14 +2601,10 @@ local function PatchRayfieldDOM()
                     HideTooltip()
                 end
 
-                desc.MouseEnter:Connect(onHoverEnter)
-                desc.MouseLeave:Connect(onHoverLeave)
-
-                for _, child in ipairs(desc:GetDescendants()) do
-                    if child:IsA("GuiObject") then
-                        child.MouseEnter:Connect(onHoverEnter)
-                        child.MouseLeave:Connect(onHoverLeave)
-                    end
+                if not desc:FindFirstChild("DefTooltipHooked") then
+                    Instance.new("BoolValue", desc).Name = "DefTooltipHooked"
+                    desc.MouseEnter:Connect(onHoverEnter)
+                    desc.MouseLeave:Connect(onHoverLeave)
                 end
             end
         end
@@ -2824,8 +2785,8 @@ task.spawn(function()
         task.wait(0.2)
     end
     task.wait(0.2)
-    for i = 1, 10 do
-        task.wait(0.5)
+    for i = 1, 2 do
+        task.wait(0.4)
         local ok, res = pcall(PatchRayfieldDOM)
         if ok and res then
             S.ThemePatchDone = true

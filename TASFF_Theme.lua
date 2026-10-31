@@ -9,6 +9,7 @@ if not S then warn("[TASFF Theme] State not ready."); return end
 
 local TASFFEnv = (getgenv and getgenv().TASFF) or {}
 local Connections = TASFFEnv.Connections or {}
+local FindRayfieldGui = nil -- declared forward so early functions (e.g. UpdateDrawerPosition) can call it
 
 -- ── Base Theme Defaults ──────────────────────────────────────────
 local ThemeColorDefaults = {
@@ -1297,7 +1298,7 @@ local function HideTooltip()
 end
 
 -- ── 5. Rayfield DOM Tree Patch Engine ────────────────────────────
-local function FindRayfieldGui()
+FindRayfieldGui = function()
     local containers = {}
     pcall(function()
         if typeof(gethui) == "function" then
@@ -1404,33 +1405,34 @@ local function SetTabBadge(tabName, count)
 end
 TASFFEnv.Theme.SetTabBadge = SetTabBadge
 
--- Carbon Weave Texture & Control Hover Glow Helpers
--- PRIMARY texture: carbon fiber weave for paragraphs, buttons, toggles, dropdowns
-local TEXTURE_PRIMARY   = "rbxassetid://2151741365"  -- carbon weave tile
--- SECONDARY texture: metal grid / crosshatch for sliders, dropdown buttons, toggle tracks
-local TEXTURE_SECONDARY = "rbxassetid://6031075938"  -- pixel dot / crosshatch
+-- Universal Atmospheric Carbon Weave Texture & Control Hover Glow Helpers
+local UNIVERSAL_CARBON_TEXTURE = "rbxassetid://2151741365"  -- universal carbon weave tile for all elements
 
-local function AttachCarbonOverlay(targetFrame, transparency, useSecondary)
-    if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
+local function AttachCarbonOverlay(targetFrame, transparency)
+    if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") or targetFrame:FindFirstChild("CarbonFolder") then return end
+    local isListContainer = targetFrame:FindFirstChildOfClass("UIListLayout")
     local carbon = Instance.new("ImageLabel")
     carbon.Name = "CarbonOverlay"
     carbon.Size = UDim2.new(1, 0, 1, 0)
     carbon.Position = UDim2.new(0, 0, 0, 0)
     carbon.BackgroundTransparency = 1
-    if useSecondary then
-        carbon.Image = TEXTURE_SECONDARY
-        carbon.ImageColor3 = Color3.fromRGB(180, 200, 230)
-        carbon.TileSize = UDim2.new(0, 6, 0, 6)
-    else
-        carbon.Image = TEXTURE_PRIMARY
-        carbon.ImageColor3 = Color3.fromRGB(200, 210, 230)
-        carbon.TileSize = UDim2.new(0, 12, 0, 12)
-    end
+    carbon.Image = UNIVERSAL_CARBON_TEXTURE
+    carbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
+    carbon.TileSize = UDim2.new(0, 16, 0, 16)
     carbon.ScaleType = Enum.ScaleType.Tile
-    carbon.ImageTransparency = transparency or 0.72
+    carbon.ImageTransparency = transparency or 0.38  -- clearly visible high-contrast weave
     carbon.ZIndex = math.max(1, targetFrame.ZIndex)
     Instance.new("UICorner", carbon).CornerRadius = UDim.new(0, 6)
-    carbon.Parent = targetFrame
+
+    if isListContainer then
+        -- Put inside a Folder so Roblox UIListLayout ignores it completely (no layout shift / infinite expansion)
+        local f = Instance.new("Folder")
+        f.Name = "CarbonFolder"
+        carbon.Parent = f
+        f.Parent = targetFrame
+    else
+        carbon.Parent = targetFrame
+    end
 end
 
 local function AttachHoverGlow(card)
@@ -1509,15 +1511,21 @@ local function PatchRayfieldDOM()
     mCarbon.Size = UDim2.new(1, 0, 1, 0)
     mCarbon.Position = UDim2.new(0, 0, 0, 0)
     mCarbon.BackgroundTransparency = 1
-    -- Scanline grid: rbxassetid://6031075938 is a pixel dot; use 3px tile for grid look
-    mCarbon.Image = "rbxassetid://2151741365"  -- carbon fiber weave
-    mCarbon.ImageColor3 = Color3.fromRGB(200, 210, 230)
+    mCarbon.Image = UNIVERSAL_CARBON_TEXTURE  -- carbon fiber weave
+    mCarbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
     mCarbon.ScaleType = Enum.ScaleType.Tile
-    mCarbon.TileSize = UDim2.new(0, 12, 0, 12)
-    mCarbon.ImageTransparency = 0.60  -- clearly visible atmospheric texture
+    mCarbon.TileSize = UDim2.new(0, 16, 0, 16)
+    mCarbon.ImageTransparency = 0.35  -- clearly visible atmospheric carbon texture
     mCarbon.ZIndex = 2
     Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
     mCarbon.Parent = mainFrame
+
+    -- Make Rayfield's Elements scroll container transparent so the carbon background shines through!
+    for _, el in ipairs(mainFrame:GetDescendants()) do
+        if el.Name == "Elements" and el:IsA("ScrollingFrame") then
+            el.BackgroundTransparency = 1
+        end
+    end
 
     -- 0b. Animated Cyber Neon Border with Rotating Gradient
     local cyberStroke = mainFrame:FindFirstChild("CyberStroke")
@@ -1550,13 +1558,28 @@ local function PatchRayfieldDOM()
         cyberStroke.Color = GetThemeAccentColor()
     end
 
-    -- 0c. Centered Ambient Halo Styling (Native Rayfield Shadow Glow - 100% Centered & Symmetrical)
-    if mainFrame.Parent then
-        local residualAura = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
-        if residualAura then residualAura:Destroy() end
-    end
+    -- 0c. Centered Ambient Halo Styling (100% Centered & Symmetrical Halo)
     local legacyShadow = mainFrame:FindFirstChild("GlassShadow")
     if legacyShadow then legacyShadow:Destroy() end
+
+    local ambientAura = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
+    if not ambientAura and mainFrame.Parent then
+        ambientAura = Instance.new("ImageLabel", mainFrame.Parent)
+        ambientAura.Name = "TASFF_AmbientAura"
+        ambientAura.BackgroundTransparency = 1
+        ambientAura.Image = "rbxassetid://5028857084" -- Soft radial blur glow
+        ambientAura.ScaleType = Enum.ScaleType.Slice
+        ambientAura.SliceCenter = Rect.new(24, 24, 276, 276)
+        ambientAura.ImageColor3 = GetThemeAccentColor()
+        ambientAura.ImageTransparency = 0.40
+        ambientAura.ZIndex = 0
+    end
+    if ambientAura then
+        ambientAura.AnchorPoint = mainFrame.AnchorPoint
+        ambientAura.Position = mainFrame.Position
+        ambientAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 48, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 48)
+        ambientAura.ImageColor3 = GetThemeAccentColor()
+    end
 
     local nativeShadow = mainFrame:FindFirstChild("Shadow")
     if nativeShadow then
@@ -1665,19 +1688,23 @@ local function PatchRayfieldDOM()
         end
     end
 
-    -- Operator Profile & Live System Monitor: External Bottom Bar (sibling of mainFrame in ScreenGui)
+    -- Operator Profile & Live System Monitor: External Bottom Bar (located in OverlayGui directly below menu)
     -- Destroy any old BottomDock parented inside mainFrame from previous versions
-    local oldInnerDock = mainFrame:FindFirstChild("BottomDock")
-    if oldInnerDock then oldInnerDock:Destroy() end
+    for _, child in ipairs(mainFrame:GetDescendants()) do
+        if child.Name == "BottomDock" then child:Destroy() end
+    end
+    if mainFrame.Parent then
+        local oldLegacyBB = mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
+        if oldLegacyBB then oldLegacyBB:Destroy() end
+    end
 
-    local screenGui = mainFrame.Parent
-    local bottomBar = screenGui and screenGui:FindFirstChild("TASFF_BottomBar")
-    if not bottomBar and screenGui then
-        bottomBar = Instance.new("Frame", screenGui)
+    local bottomBar = OverlayGui:FindFirstChild("TASFF_BottomBar")
+    if not bottomBar then
+        bottomBar = Instance.new("Frame", OverlayGui)
         bottomBar.Name = "TASFF_BottomBar"
-        bottomBar.AnchorPoint = Vector2.new(0.5, 0)  -- anchor from top-center
-        -- Position is set dynamically below; size matches mainFrame width
-        bottomBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 30)
+        bottomBar.AnchorPoint = Vector2.new(0, 0)  -- top-left anchor to match AbsolutePosition
+        bottomBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 26)
+        bottomBar.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y + 6)
         bottomBar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
         bottomBar.BackgroundTransparency = 0.10
         bottomBar.BorderSizePixel = 0
@@ -1693,11 +1720,11 @@ local function PatchRayfieldDOM()
         barCarbon.Name = "BarCarbon"
         barCarbon.Size = UDim2.new(1, 0, 1, 0)
         barCarbon.BackgroundTransparency = 1
-        barCarbon.Image = "rbxassetid://2151741365"
-        barCarbon.ImageColor3 = Color3.fromRGB(200, 210, 230)
+        barCarbon.Image = UNIVERSAL_CARBON_TEXTURE
+        barCarbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
         barCarbon.ScaleType = Enum.ScaleType.Tile
-        barCarbon.TileSize = UDim2.new(0, 12, 0, 12)
-        barCarbon.ImageTransparency = 0.62
+        barCarbon.TileSize = UDim2.new(0, 16, 0, 16)
+        barCarbon.ImageTransparency = 0.40
         barCarbon.ZIndex = 101
         Instance.new("UICorner", barCarbon).CornerRadius = UDim.new(0, 6)
 
@@ -1861,15 +1888,15 @@ local function PatchRayfieldDOM()
         end)
     end
 
-    -- Dynamically position the bottom bar just below mainFrame every frame
-    if bottomBar and screenGui then
+    -- Dynamically position the bottom bar directly below mainFrame in real-time
+    if bottomBar then
         local function SyncBottomBarPosition()
             if not (mainFrame and mainFrame.Parent and bottomBar and bottomBar.Parent) then return end
             local mAbsPos  = mainFrame.AbsolutePosition
             local mAbsSize = mainFrame.AbsoluteSize
-            -- mainFrame has AnchorPoint (0.5,0.5), so its top-left is AbsolutePosition
-            bottomBar.Position = UDim2.new(0, mAbsPos.X + mAbsSize.X / 2, 0, mAbsPos.Y + mAbsSize.Y + 4)
-            bottomBar.Size     = UDim2.new(0, mAbsSize.X, 0, 30)
+            -- AnchorPoint is (0,0), so mAbsPos.X and mAbsPos.Y + mAbsSize.Y + 6 puts it exactly 6px below mainFrame!
+            bottomBar.Position = UDim2.new(0, mAbsPos.X, 0, mAbsPos.Y + mAbsSize.Y + 6)
+            bottomBar.Size     = UDim2.new(0, mAbsSize.X, 0, 26)
         end
         SyncBottomBarPosition()
         if not mainFrame:FindFirstChild("BottomBarSyncHooked") then
@@ -1877,6 +1904,11 @@ local function PatchRayfieldDOM()
             bbHook.Name = "BottomBarSyncHooked"
             mainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(SyncBottomBarPosition)
             mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncBottomBarPosition)
+            RunService.RenderStepped:Connect(function()
+                if mainFrame and mainFrame.Parent and mainFrame.Visible and bottomBar and bottomBar.Parent and bottomBar.Visible then
+                    SyncBottomBarPosition()
+                end
+            end)
         end
     end
 
@@ -1964,10 +1996,17 @@ local function PatchRayfieldDOM()
             cStroke.Enabled = isVis
         end
 
-        -- Clean up residual TASFF_AmbientAura
+        -- Ambient Aura Halo Sync (100% symmetrically centered)
         if mainFrame.Parent then
             local aAura = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
-            if aAura then aAura:Destroy() end
+            if aAura then
+                aAura.Visible = (isVis and isExpanded)
+                aAura.ImageColor3 = GetThemeAccentColor()
+                aAura.ImageTransparency = math.clamp(0.40 + mainTrans * 0.60, 0, 1)
+                aAura.AnchorPoint = mainFrame.AnchorPoint
+                aAura.Position = mainFrame.Position
+                aAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 48, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 48)
+            end
         end
 
         -- Native Rayfield Centered Shadow Glow Sync (keep centered every fade cycle)
@@ -1993,9 +2032,8 @@ local function PatchRayfieldDOM()
             mMesh.ImageTransparency = math.clamp(0.60 + mainTrans * 0.40, 0, 1)
         end
 
-        -- External TASFF_BottomBar sync (sibling of mainFrame in ScreenGui)
-        local screenGui2 = mainFrame.Parent
-        local bBar = screenGui2 and screenGui2:FindFirstChild("TASFF_BottomBar")
+        -- External TASFF_BottomBar sync (located in OverlayGui directly below menu)
+        local bBar = OverlayGui:FindFirstChild("TASFF_BottomBar")
         if bBar then
             bBar.Visible = (isVis and isExpanded)
             bBar.BackgroundTransparency = math.clamp(0.10 + mainTrans * 0.90, 0, 1)
@@ -2035,6 +2073,11 @@ local function PatchRayfieldDOM()
             if bDot then bDot.BackgroundTransparency = topTrans end
         end
 
+        -- Keep NotificationDrawer attached to the right of the menu when visible
+        if isVis and isExpanded and NotificationDrawer and NotificationDrawer.Visible then
+            UpdateDrawerPosition()
+        end
+
         -- Drawer & Tooltip Auto-Hide on window hide/minimize
         if not isVis or not isExpanded then
             if NotificationDrawer then NotificationDrawer.Visible = false end
@@ -2066,29 +2109,11 @@ local function PatchRayfieldDOM()
     }
 
     local hookedTooltips = 0
-    -- Element type counters (restored for Home tab summary display)
-    local cToggles, cButtons, cSliders, cDropdowns, cKeybinds, cParagraphs, cColorPickers = 0,0,0,0,0,0,0
     for _, desc in ipairs(mainFrame:GetDescendants()) do
         -- STRICT: Skip Rayfield internal templates entirely
         if desc.Name == "Template" or desc:FindFirstAncestor("Template") then
             -- Skip uninstantiated template objects
         else
-        -- Count element types for Home tab summary (only direct UI elements, not nested helpers)
-        if desc:IsA("GuiObject") and desc.Parent and desc.Parent.Name == "Elements" then
-            if desc:FindFirstChild("Switch")      then cToggles      = cToggles + 1 end
-            if desc:FindFirstChild("Interact") and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider") then cButtons = cButtons + 1 end
-            if desc:FindFirstChild("Slider")      then cSliders      = cSliders + 1 end
-            if desc:FindFirstChild("Dropdown")    then cDropdowns    = cDropdowns + 1 end
-            if desc:FindFirstChild("Keybind")     then cKeybinds     = cKeybinds + 1 end
-            if desc:FindFirstChild("ColorPicker") then cColorPickers = cColorPickers + 1 end
-            -- Paragraph: has Content+Title but none of the interactive children
-            if desc:IsA("Frame") and desc:FindFirstChild("Content") and desc:FindFirstChild("Title")
-               and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider")
-               and not desc:FindFirstChild("ColorPicker") and not desc:FindFirstChild("Keybind")
-               and not desc:FindFirstChild("Dropdown") then
-                cParagraphs = cParagraphs + 1
-            end
-        end
         -- Theme signature colors in global preset dropdown list
         local function DecorateThemeOption(opt)
             if not opt or not opt:IsA("GuiObject") then return end
@@ -2263,8 +2288,6 @@ local function PatchRayfieldDOM()
                     }):Play()
                     PlayUISound(isCol and "toggle_off" or "toggle_on")
                     local container = secFrame.Parent
-                    -- Show/hide collapsed placeholder rectangle
-                    local colPlaceholder = secFrame.Parent and secFrame.Parent:FindFirstChild("SectionCollapsedBar_" .. tostring(secFrame))
                     if container then
                         local pastSec = false
                         for _, child in ipairs(container:GetChildren()) do
@@ -2278,37 +2301,30 @@ local function PatchRayfieldDOM()
                             end
                         end
                     end
-                    -- Manage the collapsed bar visibility
-                    local collBar = secFrame:FindFirstChild("CollapsedBar")
-                    if collBar then collBar.Visible = isCol end
                 end
 
                 toggleBtn.MouseButton1Click:Connect(toggleCollapse)
 
                 -- Section Element Box: dark fill + black outline wrapping all elements in the section
-                -- Build the box after a short defer so Rayfield has laid out all children first
                 task.defer(function()
                     if not (secFrame and secFrame.Parent) then return end
                     local boxContainer = secFrame.Parent
                     if not boxContainer then return end
 
-                    -- Collect all sibling elements that belong to this section
-                    local sectionElements = {}
-                    local pastSec2 = false
+                    -- Clean up any residual CollapsedBar and hide any dividers to eliminate weird gray lines
+                    local oldCB = secFrame:FindFirstChild("CollapsedBar")
+                    if oldCB then oldCB:Destroy() end
+
                     for _, child in ipairs(boxContainer:GetChildren()) do
-                        if child == secFrame then
-                            pastSec2 = true
-                        elseif pastSec2 then
-                            if child.Name == "SectionTitle" then break end
-                            if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
-                                table.insert(sectionElements, child)
-                            end
+                        if child.Name:lower():find("divider") or child.Name:lower():find("line") or (child:IsA("Frame") and #child:GetChildren() == 0 and child.AbsoluteSize.Y <= 8) then
+                            child.BackgroundTransparency = 1
+                            child.Visible = false
+                            local oldSt = child:FindFirstChildOfClass("UIStroke")
+                            if oldSt then oldSt:Destroy() end
                         end
                     end
 
-                    if #sectionElements == 0 then return end
-
-                    -- Inject a thin left accent bar on the secFrame to visually connect to the box
+                    -- Inject a thin left accent bar on the secFrame
                     if not secFrame:FindFirstChild("SectionLeftBar") then
                         local leftBar = Instance.new("Frame", secFrame)
                         leftBar.Name = "SectionLeftBar"
@@ -2320,36 +2336,23 @@ local function PatchRayfieldDOM()
                         Instance.new("UICorner", leftBar).CornerRadius = UDim.new(0, 2)
                     end
 
-                    -- Collapsed placeholder bar: thin dark rectangle that appears when section is collapsed
-                    if not secFrame:FindFirstChild("CollapsedBar") then
-                        local collBar = Instance.new("Frame", secFrame)
-                        collBar.Name = "CollapsedBar"
-                        collBar.Size = UDim2.new(1, -40, 0, 4)
-                        collBar.Position = UDim2.new(0, 4, 1, 2)  -- just below the section header
-                        collBar.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
-                        collBar.BackgroundTransparency = 0.3
-                        collBar.BorderSizePixel = 0
-                        collBar.Visible = false  -- only shown when collapsed
-                        collBar.ZIndex = secFrame.ZIndex + 1
-                        Instance.new("UICorner", collBar).CornerRadius = UDim.new(0, 2)
-                        local collStroke = Instance.new("UIStroke", collBar)
-                        collStroke.Color = Color3.fromRGB(0, 0, 0)
-                        collStroke.Thickness = 1
-                        collStroke.Transparency = 0.4
-                    end
-
-                    -- Inject a UIStroke (black outline) on each element if not already present
-                    for _, elem in ipairs(sectionElements) do
-                        if not elem:FindFirstChild("SectionBoxStroke") then
-                            local sboxStroke = Instance.new("UIStroke", elem)
-                            sboxStroke.Name = "SectionBoxStroke"
-                            sboxStroke.Color = Color3.fromRGB(0, 0, 0)
-                            sboxStroke.Thickness = 1.5
-                            sboxStroke.Transparency = 0.3
-                        end
-                        -- Deepen the element background for the dark fill effect
-                        if elem:IsA("Frame") and elem.BackgroundTransparency > 0.6 then
-                            elem.BackgroundTransparency = 0.55
+                    -- Apply black outline box stroke to actual configuration element cards only
+                    local pastSec2 = false
+                    for _, child in ipairs(boxContainer:GetChildren()) do
+                        if child == secFrame then
+                            pastSec2 = true
+                        elseif pastSec2 then
+                            if child.Name == "SectionTitle" then break end
+                            if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
+                                local isCard = child:FindFirstChild("Title") or child:FindFirstChild("Content") or child:FindFirstChild("Interact") or child:FindFirstChild("Switch") or child:FindFirstChild("Slider")
+                                if isCard and not child:FindFirstChild("SectionBoxStroke") then
+                                    local sboxStroke = Instance.new("UIStroke", child)
+                                    sboxStroke.Name = "SectionBoxStroke"
+                                    sboxStroke.Color = Color3.fromRGB(0, 0, 0)
+                                    sboxStroke.Thickness = 1.2
+                                    sboxStroke.Transparency = 0.35
+                                end
+                            end
                         end
                     end
                 end)
@@ -2556,24 +2559,19 @@ local function PatchRayfieldDOM()
         if desc:IsA("GuiObject") and desc.Name ~= "Template" and not desc:FindFirstAncestor("Template") and desc.Parent and (desc.Parent.Name == "Elements" or desc.Parent:FindFirstChild("UIListLayout")) then
             AttachHoverGlow(desc)
 
-            -- Clean and native Paragraph refinement (destroy any legacy pBar or carbon overlays)
+            -- Clean and native Paragraph refinement
             if IsParagraphFrame(desc) then
                 local oldBar = desc:FindFirstChild("ParaAccentBar")
                 if oldBar then oldBar:Destroy() end
-                -- Remove any carbon overlay from paragraphs - adding child ImageLabel to UIListLayout breaks layout
-                local oldCarbon = desc:FindFirstChild("CarbonOverlay")
-                if oldCarbon then oldCarbon:Destroy() end
-                -- Instead: apply a visible UIStroke tint + slightly visible background to paragraph cards
+                -- Apply universal carbon texture to paragraph card (wrapped in Folder so UIListLayout ignores it!)
+                AttachCarbonOverlay(desc, 0.38)
+
                 if not desc:FindFirstChild("ParaBoxStroke") then
                     local pStroke = Instance.new("UIStroke", desc)
                     pStroke.Name = "ParaBoxStroke"
                     pStroke.Color = GetThemeAccentColor()
                     pStroke.Thickness = 1
                     pStroke.Transparency = 0.55
-                end
-                -- Deepen paragraph card background slightly so the carbon mesh shows through
-                if desc.BackgroundTransparency > 0.4 then
-                    desc.BackgroundTransparency = 0.50
                 end
 
                 local title = desc:FindFirstChild("Title")
@@ -2584,53 +2582,10 @@ local function PatchRayfieldDOM()
                     content.TextColor3 = Color3.fromRGB(195, 200, 210)
                     content.Font = Enum.Font.GothamMedium
                 end
-            -- Only attach carbon overlays to non-paragraph interactive elements
-            -- AND skip if this desc is a child of a paragraph frame (to avoid UIListLayout corruption)
+            -- Attach universal carbon overlay to non-paragraph interactive elements
             elseif not IsParagraphFrame(desc.Parent) then
-                -- Toggle row: primary carbon texture on the row frame
-                if desc:FindFirstChild("Switch") then
-                    AttachCarbonOverlay(desc, 0.72, false)
-                    -- Secondary texture on the Switch track itself (different feel)
-                    local sw = desc:FindFirstChild("Switch")
-                    if sw and not sw:FindFirstChild("CarbonOverlay") then
-                        AttachCarbonOverlay(sw, 0.60, true)
-                    end
-                end
-
-                -- Button rows: primary texture
-                if desc:FindFirstChild("Interact") and not desc:FindFirstChild("Switch") and not desc:FindFirstChild("Slider") then
-                    AttachCarbonOverlay(desc, 0.72, false)
-                end
-
-                -- Dropdown container row: primary texture on the row
-                if desc:FindFirstChild("Dropdown") then
-                    AttachCarbonOverlay(desc, 0.72, false)
-                    -- Secondary texture on all option frames inside the dropdown
-                    local dd = desc:FindFirstChild("Dropdown")
-                    if dd then
-                        for _, child in ipairs(dd:GetDescendants()) do
-                            if child:IsA("Frame") and not child:FindFirstChild("CarbonOverlay")
-                               and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding"
-                               and child:FindFirstChildOfClass("TextLabel") then
-                                AttachCarbonOverlay(child, 0.62, true)
-                            end
-                        end
-                    end
-                end
-
-                -- Slider rows: secondary texture (crosshatch / different feel)
-                if desc:FindFirstChild("Slider") then
-                    AttachCarbonOverlay(desc, 0.65, true)
-                end
-
-                -- Keybind rows: primary texture
-                if desc:FindFirstChild("Keybind") then
-                    AttachCarbonOverlay(desc, 0.72, false)
-                end
-
-                -- ColorPicker rows: primary texture
-                if desc:FindFirstChild("ColorPicker") then
-                    AttachCarbonOverlay(desc, 0.72, false)
+                if desc:FindFirstChild("Switch") or (desc:FindFirstChild("Interact") and not desc:FindFirstChild("Slider")) or desc:FindFirstChild("Dropdown") or desc:FindFirstChild("Slider") or desc:FindFirstChild("Keybind") or desc:FindFirstChild("ColorPicker") then
+                    AttachCarbonOverlay(desc, 0.38)
                 end
             end
         end
@@ -2680,14 +2635,20 @@ local function PatchRayfieldDOM()
         end
     end
 
-    -- Update the Feature Overview paragraph with live element counts
+    -- Update the Feature Overview paragraph with element counts pulled directly from TASFF_Lists.lua
     if S.FeatureOverviewParagraph and S.FeatureOverviewParagraph.Set then
         pcall(function()
             S.FeatureOverviewParagraph:Set({
                 Title   = "UI Element Breakdown",
                 Content = string.format(
-                    "Toggles: %d  |  Buttons: %d  |  Sliders: %d\nDropdowns: %d  |  Keybinds: %d  |  ColorPickers: %d  |  Paragraphs: %d",
-                    cToggles, cButtons, cSliders, cDropdowns, cKeybinds, cColorPickers, cParagraphs
+                    "Toggles: %d  |  Buttons: %d  |  Sliders: %d\nDropdowns: %d  |  Keybinds: %d  |  Color Pickers: %d  |  Paragraphs: %d",
+                    S.ToggleCount or 109,
+                    S.ButtonCount or 36,
+                    S.SliderCount or 40,
+                    S.DropdownCount or 44,
+                    S.KeybindCount or 6,
+                    S.ColorPickerCount or 16,
+                    S.ParagraphCount or 73
                 )
             })
         end)

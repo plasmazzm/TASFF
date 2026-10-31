@@ -1406,36 +1406,27 @@ end
 TASFFEnv.Theme.SetTabBadge = SetTabBadge
 
 -- Universal Atmospheric Carbon Weave Texture & Control Hover Glow Helpers
--- Applies UIGradient directly onto the frame background — zero child Frames, no AutomaticSize conflicts.
+-- Applies high-contrast diagonal carbon UIGradient directly onto the frame background.
 local function AttachCarbonOverlay(targetFrame, _unused)
     if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
-    -- Mark as applied (BoolValue = no size impact)
     local marker = Instance.new("BoolValue")
     marker.Name = "CarbonOverlay"
     marker.Parent = targetFrame
 
-    -- Remove any existing UIGradient that's not the CyberGrad
     local existing = targetFrame:FindFirstChildOfClass("UIGradient")
     if existing and existing.Name ~= "CyberGrad" then existing:Destroy() end
 
-    -- Diagonal carbon-weave stripe gradient applied DIRECTLY to the frame's background.
-    -- High contrast: shifts between a darker and lighter band of the element's dark theme.
     local grad = Instance.new("UIGradient")
     grad.Name = "CarbonGradient"
     grad.Rotation = 45
-    -- Colors go from a near-black to a noticeably lighter blue-gray, creating visible diagonal striping
     grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,    Color3.fromRGB(18,  20,  30)),
-        ColorSequenceKeypoint.new(0.20, Color3.fromRGB(50,  53,  72)),
-        ColorSequenceKeypoint.new(0.40, Color3.fromRGB(18,  20,  30)),
-        ColorSequenceKeypoint.new(0.60, Color3.fromRGB(50,  53,  72)),
-        ColorSequenceKeypoint.new(0.80, Color3.fromRGB(18,  20,  30)),
-        ColorSequenceKeypoint.new(1,    Color3.fromRGB(50,  53,  72)),
+        ColorSequenceKeypoint.new(0,    Color3.fromRGB(16,  18,  26)),
+        ColorSequenceKeypoint.new(0.25, Color3.fromRGB(65,  70,  95)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(16,  18,  26)),
+        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(65,  70,  95)),
+        ColorSequenceKeypoint.new(1,    Color3.fromRGB(16,  18,  26)),
     })
-    grad.Transparency = NumberSequence.new(
-        NumberSequenceKeypoint.new(0, 0),
-        NumberSequenceKeypoint.new(1, 0)
-    )
+    grad.Transparency = NumberSequence.new(0)
     grad.Parent = targetFrame
 end
 
@@ -1475,15 +1466,9 @@ local function PatchRayfieldDOM()
     if S.UIOpacity and S.UIOpacity < 1.0 then
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
     end
-
-    -- 0. Window initial size (applied once — no hooks, no GetPropertyChangedSignal for size)
-    -- IMPORTANT: Do NOT add any AbsoluteSize listeners here. They fight Rayfield's open/close tween
-    -- and permanently break the toggle keybind. Just set size once, let Rayfield manage it.
-    S.DesiredWindowWidth  = S.DesiredWindowWidth  or 640
-    S.DesiredWindowHeight = S.DesiredWindowHeight or 480
+    mainFrame.ClipsDescendants = false
 
     -- 0a. Atmospheric Scanline Grid on Window Background (procedurally drawn — no rbxassetid)
-    -- Destroyed + recreated each PatchRayfieldDOM so it always overlays correctly.
     local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
     if existingMesh then existingMesh:Destroy() end
 
@@ -1492,39 +1477,38 @@ local function PatchRayfieldDOM()
     mCarbon.Size = UDim2.new(1, 0, 1, 0)
     mCarbon.Position = UDim2.new(0, 0, 0, 0)
     mCarbon.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-    mCarbon.BackgroundTransparency = 0.60  -- visible overlay
+    mCarbon.BackgroundTransparency = 0.50  -- visible overlay
     mCarbon.BorderSizePixel = 0
-    mCarbon.ZIndex = 3   -- above Elements scroll bg
-    mCarbon.Active = false  -- pass-through clicks
+    mCarbon.ZIndex = 2
+    mCarbon.Active = false
     Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
 
-    -- Horizontal scanlines: dark / bright / dark alternating — HIGH CONTRAST so they're visible
+    -- Horizontal scanlines: alternating dark / bright rows across entire menu background
     local scanGrad = Instance.new("UIGradient", mCarbon)
     scanGrad.Rotation = 90
     scanGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,      Color3.fromRGB(10,  10,  16)),
-        ColorSequenceKeypoint.new(0.055,  Color3.fromRGB(55,  58,  80)),
-        ColorSequenceKeypoint.new(0.11,   Color3.fromRGB(10,  10,  16)),
-        ColorSequenceKeypoint.new(0.165,  Color3.fromRGB(55,  58,  80)),
-        ColorSequenceKeypoint.new(0.22,   Color3.fromRGB(10,  10,  16)),
-        ColorSequenceKeypoint.new(0.275,  Color3.fromRGB(55,  58,  80)),
-        ColorSequenceKeypoint.new(0.33,   Color3.fromRGB(10,  10,  16)),
-        ColorSequenceKeypoint.new(0.385,  Color3.fromRGB(55,  58,  80)),
-        ColorSequenceKeypoint.new(0.44,   Color3.fromRGB(10,  10,  16)),
-        ColorSequenceKeypoint.new(0.495,  Color3.fromRGB(55,  58,  80)),
-        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(10,  10,  16)),
-        ColorSequenceKeypoint.new(0.605,  Color3.fromRGB(55,  58,  80)),
-        ColorSequenceKeypoint.new(0.66,   Color3.fromRGB(10,  10,  16)),
-        ColorSequenceKeypoint.new(0.715,  Color3.fromRGB(55,  58,  80)),
-        ColorSequenceKeypoint.new(0.77,   Color3.fromRGB(10,  10,  16)),
-        ColorSequenceKeypoint.new(0.825,  Color3.fromRGB(55,  58,  80)),
-        ColorSequenceKeypoint.new(0.88,   Color3.fromRGB(10,  10,  16)),
-        ColorSequenceKeypoint.new(0.935,  Color3.fromRGB(55,  58,  80)),
-        ColorSequenceKeypoint.new(1,      Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0,      Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(0.05,   Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0.10,   Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(0.15,   Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0.20,   Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0.30,   Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(0.35,   Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0.40,   Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(0.45,   Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0.50,   Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0.60,   Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(0.65,   Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0.70,   Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0.80,   Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(0.85,   Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0.90,   Color3.fromRGB(8,   8,  12)),
+        ColorSequenceKeypoint.new(1,      Color3.fromRGB(60,  64,  88)),
     })
-    -- Full opacity so gradient colours are pure; BackgroundTransparency above controls overall visibility
-    scanGrad.Transparency = NumberSequence.new(NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0))
-
+    scanGrad.Transparency = NumberSequence.new(0)
     mCarbon.Parent = mainFrame
 
     -- Make Rayfield's Elements scroll container transparent so the carbon background shines through!
@@ -1565,106 +1549,31 @@ local function PatchRayfieldDOM()
         cyberStroke.Color = GetThemeAccentColor()
     end
 
-    -- 0c. Centered Ambient Halo (soft layered glow — no rbxassetid, no UIStroke border)
+    -- 0c. Centered Ambient Halo Styling (Strictly behind menu — native Rayfield shadow glow)
     local legacyShadow = mainFrame:FindFirstChild("GlassShadow")
     if legacyShadow then legacyShadow:Destroy() end
-    -- Remove any legacy aura parented in Rayfield's ScreenGui (old location)
+    local legacyAuraOverlay = OverlayGui:FindFirstChild("TASFF_AmbientAura")
+    if legacyAuraOverlay then legacyAuraOverlay:Destroy() end
     if mainFrame.Parent then
-        local legacyAura = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
-        if legacyAura then legacyAura:Destroy() end
+        local legacyAuraParent = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
+        if legacyAuraParent then legacyAuraParent:Destroy() end
     end
 
-    -- Build the halo in OverlayGui so it persists through Rayfield open/close
-    local ambientAura = OverlayGui:FindFirstChild("TASFF_AmbientAura")
-    if not ambientAura then
-        -- Container (invisible background)
-        ambientAura = Instance.new("Frame", OverlayGui)
-        ambientAura.Name = "TASFF_AmbientAura"
-        ambientAura.BackgroundTransparency = 1
-        ambientAura.BorderSizePixel = 0
-        ambientAura.ZIndex = 1
-        Instance.new("UICorner", ambientAura).CornerRadius = UDim.new(0, 14)
-
-        -- Layer 1 — outermost, very faint wide glow (uses UIGradient for radial falloff simulation)
-        local layer1 = Instance.new("Frame", ambientAura)
-        layer1.Name = "HaloL1"
-        layer1.AnchorPoint = Vector2.new(0.5, 0.5)
-        layer1.Position = UDim2.new(0.5, 0, 0.5, 0)
-        layer1.Size = UDim2.new(1, 0, 1, 0)
-        layer1.BackgroundColor3 = GetThemeAccentColor()
-        layer1.BackgroundTransparency = 0.90
-        layer1.BorderSizePixel = 0
-        layer1.ZIndex = 1
-        Instance.new("UICorner", layer1).CornerRadius = UDim.new(0, 16)
-        local l1g = Instance.new("UIGradient", layer1)
-        l1g.Color = ColorSequence.new(Color3.fromRGB(255,255,255))
-        l1g.Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0,   0.92),
-            NumberSequenceKeypoint.new(0.4, 0.84),
-            NumberSequenceKeypoint.new(1,   0.92),
-        })
-
-        -- Layer 2 — middle glow ring, slightly brighter
-        local layer2 = Instance.new("Frame", ambientAura)
-        layer2.Name = "HaloL2"
-        layer2.AnchorPoint = Vector2.new(0.5, 0.5)
-        layer2.Position = UDim2.new(0.5, 0, 0.5, 0)
-        layer2.Size = UDim2.new(1, -12, 1, -12)
-        layer2.BackgroundColor3 = GetThemeAccentColor()
-        layer2.BackgroundTransparency = 0.84
-        layer2.BorderSizePixel = 0
-        layer2.ZIndex = 2
-        Instance.new("UICorner", layer2).CornerRadius = UDim.new(0, 14)
-
-        -- Layer 3 — innermost, almost fully transparent, just a faint tint along edges
-        local layer3 = Instance.new("Frame", ambientAura)
-        layer3.Name = "HaloL3"
-        layer3.AnchorPoint = Vector2.new(0.5, 0.5)
-        layer3.Position = UDim2.new(0.5, 0, 0.5, 0)
-        layer3.Size = UDim2.new(1, -28, 1, -28)
-        layer3.BackgroundColor3 = GetThemeAccentColor()
-        layer3.BackgroundTransparency = 0.92
-        layer3.BorderSizePixel = 0
-        layer3.ZIndex = 3
-        Instance.new("UICorner", layer3).CornerRadius = UDim.new(0, 12)
-    end
-
-    -- Sync aura position/size to exactly surround mainFrame (centered, no offset)
-    local function SyncAuraPosition()
-        if not (mainFrame and mainFrame.Parent and ambientAura and ambientAura.Parent) then return end
-        local mPos  = mainFrame.AbsolutePosition
-        local mSize = mainFrame.AbsoluteSize
-        local bleed = 18  -- px bleed on each side for the glow to extend beyond menu edge
-        ambientAura.Position = UDim2.new(0, mPos.X - bleed, 0, mPos.Y - bleed)
-        ambientAura.Size     = UDim2.new(0, mSize.X + bleed * 2, 0, mSize.Y + bleed * 2)
-        local acc = GetThemeAccentColor()
-        for _, ln in ipairs(ambientAura:GetChildren()) do
-            if ln:IsA("Frame") then ln.BackgroundColor3 = acc end
-        end
-    end
-    SyncAuraPosition()  -- defer so menu has its final AbsolutePosition
-    task.defer(SyncAuraPosition)
-    if not mainFrame:FindFirstChild("AuraSyncHooked") then
-        local ahook = Instance.new("BoolValue", mainFrame)
-        ahook.Name = "AuraSyncHooked"
-        mainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(SyncAuraPosition)
-        mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncAuraPosition)
-    end
-
+    -- Use Rayfield's own native Shadow frame: perfectly centered, genuine soft blur glow, strictly BEHIND mainFrame
     local nativeShadow = mainFrame:FindFirstChild("Shadow")
     if nativeShadow then
-        -- Center the Shadow frame on mainFrame so glow is symmetrical on all 4 sides
         nativeShadow.AnchorPoint = Vector2.new(0.5, 0.5)
         nativeShadow.Position    = UDim2.new(0.5, 0, 0.5, 0)
-        nativeShadow.Size        = UDim2.new(1, 80, 1, 80) -- 40px bleed each side
+        nativeShadow.Size        = UDim2.new(1, 48, 1, 48) -- 24px symmetrical halo bleed
+        nativeShadow.ZIndex      = 0
         local sImg = nativeShadow:FindFirstChild("Image") or (nativeShadow:IsA("ImageLabel") and nativeShadow)
         if sImg and sImg:IsA("ImageLabel") then
-            -- Keep the inner image filling the Shadow container symmetrically
             sImg.AnchorPoint        = Vector2.new(0.5, 0.5)
             sImg.Position           = UDim2.new(0.5, 0, 0.5, 0)
             sImg.Size               = UDim2.new(1, 0, 1, 0)
             sImg.ImageColor3        = GetThemeAccentColor()
-            sImg.ImageTransparency  = 0.50
+            sImg.ImageTransparency  = 0.35  -- bright and clearly visible soft halo
+            sImg.ZIndex             = 0
         end
     end
 
@@ -1758,23 +1667,26 @@ local function PatchRayfieldDOM()
         end
     end
 
-    -- Operator Profile & Live System Monitor: External Bottom Bar (located in OverlayGui directly below menu)
-    -- Destroy any old BottomDock parented inside mainFrame from previous versions
+    -- Operator Profile & Live System Monitor: Attached Bottom Bar (direct child of mainFrame — 100% synced)
     for _, child in ipairs(mainFrame:GetDescendants()) do
         if child.Name == "BottomDock" then child:Destroy() end
+    end
+    if OverlayGui then
+        local oldOverlayBB = OverlayGui:FindFirstChild("TASFF_BottomBar")
+        if oldOverlayBB then oldOverlayBB:Destroy() end
     end
     if mainFrame.Parent then
         local oldLegacyBB = mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
         if oldLegacyBB then oldLegacyBB:Destroy() end
     end
 
-    local bottomBar = OverlayGui:FindFirstChild("TASFF_BottomBar")
+    local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar")
     if not bottomBar then
-        bottomBar = Instance.new("Frame", OverlayGui)
+        bottomBar = Instance.new("Frame", mainFrame)
         bottomBar.Name = "TASFF_BottomBar"
-        bottomBar.AnchorPoint = Vector2.new(0, 0)  -- top-left anchor to match AbsolutePosition
-        bottomBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 26)
-        bottomBar.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y + 6)
+        bottomBar.AnchorPoint = Vector2.new(0, 0)
+        bottomBar.Position = UDim2.new(0, 0, 1, 4)
+        bottomBar.Size = UDim2.new(1, 0, 0, 26)
         bottomBar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
         bottomBar.BackgroundTransparency = 0.10
         bottomBar.BorderSizePixel = 0
@@ -1803,13 +1715,7 @@ local function PatchRayfieldDOM()
             ColorSequenceKeypoint.new(0.75, Color3.fromRGB(200, 205, 225)),
             ColorSequenceKeypoint.new(1,    Color3.fromRGB(150, 155, 175)),
         })
-        barCarbGrad.Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0,    0.88),
-            NumberSequenceKeypoint.new(0.25, 0.75),
-            NumberSequenceKeypoint.new(0.5,  0.88),
-            NumberSequenceKeypoint.new(0.75, 0.75),
-            NumberSequenceKeypoint.new(1,    0.88),
-        })
+        barCarbGrad.Transparency = NumberSequence.new(0)
 
         -- Accent separator line at top of bar (mirrors topbar bottom line)
         local barLine = Instance.new("Frame", bottomBar)
@@ -1943,8 +1849,6 @@ local function PatchRayfieldDOM()
                 local newW = math.clamp(_rSizeStart.X + delta.X, 480, 1000)
                 local newH = math.clamp(_rSizeStart.Y + delta.Y, 340, 850)
                 mainFrame.Size = UDim2.new(0, newW, 0, newH)
-                S.DesiredWindowWidth = newW
-                S.DesiredWindowHeight = newH
             end
         end)
 
@@ -1969,27 +1873,6 @@ local function PatchRayfieldDOM()
                 task.wait(0.5)
             end
         end)
-    end
-
-    -- Dynamically position the bottom bar directly below mainFrame in real-time
-    if bottomBar then
-        local function SyncBottomBarPosition()
-            if not (mainFrame and mainFrame.Parent and bottomBar and bottomBar.Parent) then return end
-            local mAbsPos  = mainFrame.AbsolutePosition
-            local mAbsSize = mainFrame.AbsoluteSize
-            -- AnchorPoint is (0,0), so mAbsPos.X and mAbsPos.Y + mAbsSize.Y + 6 puts it exactly 6px below mainFrame!
-            bottomBar.Position = UDim2.new(0, mAbsPos.X, 0, mAbsPos.Y + mAbsSize.Y + 6)
-            bottomBar.Size     = UDim2.new(0, mAbsSize.X, 0, 26)
-        end
-        SyncBottomBarPosition()
-        if not mainFrame:FindFirstChild("BottomBarSyncHooked") then
-            local bbHook = Instance.new("BoolValue", mainFrame)
-            bbHook.Name = "BottomBarSyncHooked"
-            mainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(SyncBottomBarPosition)
-            mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncBottomBarPosition)
-            -- Also sync when mainFrame visibility changes
-            mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncBottomBarPosition)
-        end
     end
 
     -- 1. Window Resize Handle is now on TASFF_BottomBar (external). Remove any legacy one inside mainFrame.
@@ -2076,55 +1959,32 @@ local function PatchRayfieldDOM()
             cStroke.Enabled = isVis
         end
 
-        -- Ambient Aura Halo Sync (layered glow frames in OverlayGui)
-        local aAura = OverlayGui:FindFirstChild("TASFF_AmbientAura")
-        if aAura then
-            aAura.Visible = (isVis and isExpanded)
-            local acc = GetThemeAccentColor()
-            -- Update layer colors and sync position
-            local baseTrans = { 0.90, 0.84, 0.92 }  -- base transparency per layer when fully visible
-            local i = 0
-            for _, ln in ipairs(aAura:GetChildren()) do
-                if ln:IsA("Frame") then
-                    i = i + 1
-                    ln.BackgroundColor3 = acc
-                    local bt = baseTrans[i] or 0.90
-                    ln.BackgroundTransparency = math.clamp(bt + mainTrans * (1 - bt), 0, 1)
-                end
-            end
-            -- Keep centered on mainFrame
-            local mPos = mainFrame.AbsolutePosition
-            local mSize = mainFrame.AbsoluteSize
-            local bleed = 18
-            aAura.Position = UDim2.new(0, mPos.X - bleed, 0, mPos.Y - bleed)
-            aAura.Size     = UDim2.new(0, mSize.X + bleed * 2, 0, mSize.Y + bleed * 2)
-        end
-
-        -- Native Rayfield Centered Shadow Glow Sync (keep centered every fade cycle)
+        -- Native Rayfield Centered Shadow Glow Sync (100% strictly behind menu)
         local nativeShadow = mainFrame:FindFirstChild("Shadow")
         if nativeShadow then
+            nativeShadow.Visible = (isVis and isExpanded)
             nativeShadow.AnchorPoint = Vector2.new(0.5, 0.5)
             nativeShadow.Position    = UDim2.new(0.5, 0, 0.5, 0)
-            nativeShadow.Size        = UDim2.new(1, 80, 1, 80)
+            nativeShadow.Size        = UDim2.new(1, 48, 1, 48)
             local sImg = nativeShadow:FindFirstChild("Image") or (nativeShadow:IsA("ImageLabel") and nativeShadow)
             if sImg and sImg:IsA("ImageLabel") then
                 sImg.AnchorPoint       = Vector2.new(0.5, 0.5)
                 sImg.Position          = UDim2.new(0.5, 0, 0.5, 0)
                 sImg.Size              = UDim2.new(1, 0, 1, 0)
                 sImg.ImageColor3       = GetThemeAccentColor()
-                sImg.ImageTransparency = math.clamp(0.50 + mainTrans * 0.50, 0, 1)
+                sImg.ImageTransparency = math.clamp(0.35 + mainTrans * 0.65, 0, 1)
             end
         end
 
-        -- Main Window Carbon Mesh (procedural Frame — stays at 0.60 base when visible)
+        -- Main Window Carbon Mesh (procedural Frame — stays at 0.50 base when visible)
         local mMesh = mainFrame:FindFirstChild("MainCarbonMesh")
         if mMesh then
             mMesh.Visible = (isVis and isExpanded)
-            mMesh.BackgroundTransparency = math.clamp(0.60 + mainTrans * 0.40, 0, 1)
+            mMesh.BackgroundTransparency = math.clamp(0.50 + mainTrans * 0.50, 0, 1)
         end
 
-        -- External TASFF_BottomBar sync (located in OverlayGui directly below menu)
-        local bBar = OverlayGui:FindFirstChild("TASFF_BottomBar")
+        -- Attached TASFF_BottomBar sync (direct child of mainFrame)
+        local bBar = mainFrame:FindFirstChild("TASFF_BottomBar")
         if bBar then
             bBar.Visible = (isVis and isExpanded)
             bBar.BackgroundTransparency = math.clamp(0.10 + mainTrans * 0.90, 0, 1)
@@ -2378,6 +2238,23 @@ local function PatchRayfieldDOM()
                         ImageColor3 = targetCol
                     }):Play()
                     PlayUISound(isCol and "toggle_off" or "toggle_on")
+
+                    -- Collapsed rectangle indicator directly under the section header
+                    local colRect = secFrame:FindFirstChild("CollapsedBar")
+                    if not colRect then
+                        colRect = Instance.new("Frame", secFrame)
+                        colRect.Name = "CollapsedBar"
+                        colRect.Size = UDim2.new(1, 0, 0, 8)
+                        colRect.Position = UDim2.new(0, 0, 1, 3)
+                        colRect.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+                        colRect.BorderSizePixel = 0
+                        Instance.new("UICorner", colRect).CornerRadius = UDim.new(0, 4)
+                        local crSt = Instance.new("UIStroke", colRect)
+                        crSt.Color = Color3.fromRGB(0, 0, 0)
+                        crSt.Thickness = 1.5
+                    end
+                    colRect.Visible = isCol
+
                     local container = secFrame.Parent
                     if container then
                         local pastSec = false
@@ -2403,9 +2280,6 @@ local function PatchRayfieldDOM()
                     if not boxContainer then return end
 
                     -- Clean up any residual CollapsedBar and hide any dividers to eliminate weird gray lines
-                    local oldCB = secFrame:FindFirstChild("CollapsedBar")
-                    if oldCB then oldCB:Destroy() end
-
                     for _, child in ipairs(boxContainer:GetChildren()) do
                         if child.Name:lower():find("divider") or child.Name:lower():find("line") or (child:IsA("Frame") and #child:GetChildren() == 0 and child.AbsoluteSize.Y <= 8) then
                             child.BackgroundTransparency = 1
@@ -2427,7 +2301,7 @@ local function PatchRayfieldDOM()
                         Instance.new("UICorner", leftBar).CornerRadius = UDim.new(0, 2)
                     end
 
-                    -- Apply visible section box: dark fill + accent outline on each card in the section
+                    -- Apply black outline box + dark filling background to configuration elements in section
                     local pastSec2 = false
                     for _, child in ipairs(boxContainer:GetChildren()) do
                         if child == secFrame then
@@ -2435,25 +2309,15 @@ local function PatchRayfieldDOM()
                         elseif pastSec2 then
                             if child.Name == "SectionTitle" then break end
                             if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
-                                local isCard = child:FindFirstChild("Title") or child:FindFirstChild("Content") or child:FindFirstChild("Interact") or child:FindFirstChild("Switch") or child:FindFirstChild("Slider")
+                                local isCard = child:FindFirstChild("Title") or child:FindFirstChild("Content") or child:FindFirstChild("Interact") or child:FindFirstChild("Switch") or child:FindFirstChild("Slider") or child:FindFirstChild("SliderBar")
                                 if isCard then
-                                    -- Dark fill — slightly darker than element background
+                                    child.BackgroundColor3 = Color3.fromRGB(16, 17, 24)
                                     if not child:FindFirstChild("SectionBoxStroke") then
-                                        -- Apply a visible accent-colored box outline
                                         local sboxStroke = Instance.new("UIStroke", child)
                                         sboxStroke.Name = "SectionBoxStroke"
-                                        sboxStroke.Color = GetThemeAccentColor()
-                                        sboxStroke.Thickness = 1.0
-                                        sboxStroke.Transparency = 0.60
-                                        -- Also give the card a slightly darker fill via BackgroundColor3
-                                        pcall(function()
-                                            local orig = child.BackgroundColor3
-                                            child.BackgroundColor3 = Color3.fromRGB(
-                                                math.clamp(math.floor(orig.R * 255 * 0.80), 0, 255),
-                                                math.clamp(math.floor(orig.G * 255 * 0.80), 0, 255),
-                                                math.clamp(math.floor(orig.B * 255 * 0.80), 0, 255)
-                                            )
-                                        end)
+                                        sboxStroke.Color = Color3.fromRGB(0, 0, 0)
+                                        sboxStroke.Thickness = 1.5
+                                        sboxStroke.Transparency = 0.1
                                     end
                                 end
                             end
@@ -2491,33 +2355,42 @@ local function PatchRayfieldDOM()
         end
 
         -- Slider Precision Stepper Buttons & Live Value Enhancement
-        if desc:IsA("GuiObject") and desc:FindFirstChild("Slider") and not desc:FindFirstChild("StepperHooked") then
+        local isSliderCard = desc:IsA("GuiObject") and (desc.Name == "Slider" or desc:FindFirstChild("Slider") or desc:FindFirstChild("SliderBar"))
+        if isSliderCard and not desc:FindFirstChild("StepperHooked") then
             local sHook = Instance.new("BoolValue", desc)
             sHook.Name = "StepperHooked"
 
             local stepMinus = Instance.new("TextButton", desc)
             stepMinus.Name = "StepMinus"
-            stepMinus.Size = UDim2.new(0, 16, 0, 16)
-            stepMinus.Position = UDim2.new(1, -135, 0.5, -8)
-            stepMinus.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+            stepMinus.Size = UDim2.new(0, 18, 0, 18)
+            stepMinus.Position = UDim2.new(1, -145, 0.5, -9)
+            stepMinus.BackgroundColor3 = Color3.fromRGB(34, 36, 48)
             stepMinus.BorderSizePixel = 0
             stepMinus.Font = Enum.Font.GothamBold
-            stepMinus.TextSize = 11
-            stepMinus.TextColor3 = Color3.fromRGB(200, 200, 215)
+            stepMinus.TextSize = 12
+            stepMinus.TextColor3 = Color3.fromRGB(240, 240, 255)
             stepMinus.Text = "-"
-            Instance.new("UICorner", stepMinus).CornerRadius = UDim.new(0, 3)
+            stepMinus.ZIndex = 50
+            Instance.new("UICorner", stepMinus).CornerRadius = UDim.new(0, 4)
+            local smStroke = Instance.new("UIStroke", stepMinus)
+            smStroke.Color = Color3.fromRGB(60, 65, 80)
+            smStroke.Thickness = 1
 
             local stepPlus = Instance.new("TextButton", desc)
             stepPlus.Name = "StepPlus"
-            stepPlus.Size = UDim2.new(0, 16, 0, 16)
-            stepPlus.Position = UDim2.new(1, -22, 0.5, -8)
-            stepPlus.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+            stepPlus.Size = UDim2.new(0, 18, 0, 18)
+            stepPlus.Position = UDim2.new(1, -24, 0.5, -9)
+            stepPlus.BackgroundColor3 = Color3.fromRGB(34, 36, 48)
             stepPlus.BorderSizePixel = 0
             stepPlus.Font = Enum.Font.GothamBold
-            stepPlus.TextSize = 11
-            stepPlus.TextColor3 = Color3.fromRGB(200, 200, 215)
+            stepPlus.TextSize = 12
+            stepPlus.TextColor3 = Color3.fromRGB(240, 240, 255)
             stepPlus.Text = "+"
-            Instance.new("UICorner", stepPlus).CornerRadius = UDim.new(0, 3)
+            stepPlus.ZIndex = 50
+            Instance.new("UICorner", stepPlus).CornerRadius = UDim.new(0, 4)
+            local spStroke = Instance.new("UIStroke", stepPlus)
+            spStroke.Color = Color3.fromRGB(60, 65, 80)
+            spStroke.Thickness = 1
 
             stepMinus.MouseButton1Click:Connect(function()
                 PlayUISound("stepper")
@@ -2825,8 +2698,11 @@ task.spawn(function()
     task.wait(0.2)
     for i = 1, 10 do
         task.wait(0.5)
-        if PatchRayfieldDOM() then
+        local ok, res = pcall(PatchRayfieldDOM)
+        if ok and res then
             S.ThemePatchDone = true
+        elseif not ok then
+            warn("[TASFF Theme] PatchRayfieldDOM error on pass " .. i .. ": " .. tostring(res))
         end
     end
 end)

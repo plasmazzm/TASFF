@@ -222,5 +222,6 @@ S.ButtonCount         = 36
 S.KeybindCount        = 6
 S.StatusDisplayCount  = 7
 S.ParagraphCount      = 73
+S.ColorPickerCount    = 16
 
 print("[TASFF Lists] Loaded. " .. S.FeatureCount .. " features registered. Classifiers active.")

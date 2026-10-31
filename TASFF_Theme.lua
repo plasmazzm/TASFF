@@ -1406,44 +1406,40 @@ end
 TASFFEnv.Theme.SetTabBadge = SetTabBadge
 
 -- Universal Atmospheric Carbon Weave Texture & Control Hover Glow Helpers
--- Procedural carbon-weave overlay using diagonal UIGradient stripes (no rbxassetid needed)
-local function AttachCarbonOverlay(targetFrame, transparency)
+-- Procedural carbon texture: applies a UIGradient directly onto the frame's own background.
+-- Zero child Frames added → no AutomaticSize conflicts, no paragraph inflation.
+local function AttachCarbonOverlay(targetFrame, _unused)
     if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
-    local alpha = transparency or 0.80  -- base background transparency (lower = more visible)
+    -- Mark as applied
+    local marker = Instance.new("BoolValue")
+    marker.Name = "CarbonOverlay"
+    marker.Parent = targetFrame
 
-    local carbon = Instance.new("Frame")
-    carbon.Name = "CarbonOverlay"
-    carbon.Size = UDim2.new(1, 0, 1, 0)
-    carbon.Position = UDim2.new(0, 0, 0, 0)
-    carbon.BackgroundColor3 = Color3.fromRGB(30, 32, 42)
-    carbon.BackgroundTransparency = alpha
-    carbon.BorderSizePixel = 0
-    carbon.ZIndex = math.max(1, targetFrame.ZIndex)
-    Instance.new("UICorner", carbon).CornerRadius = UDim.new(0, 6)
+    -- Apply diagonal stripe UIGradient directly on the frame background
+    -- (removes any existing UIGradient first so we don't double-stack)
+    local existing = targetFrame:FindFirstChildOfClass("UIGradient")
+    if existing and existing.Name ~= "CyberGrad" then existing:Destroy() end
 
-    -- Diagonal stripe gradient (visible carbon fiber effect)
-    local grad = Instance.new("UIGradient", carbon)
-    grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,    Color3.fromRGB(160, 165, 185)),
-        ColorSequenceKeypoint.new(0.18, Color3.fromRGB(210, 215, 235)),
-        ColorSequenceKeypoint.new(0.36, Color3.fromRGB(155, 158, 178)),
-        ColorSequenceKeypoint.new(0.54, Color3.fromRGB(205, 210, 230)),
-        ColorSequenceKeypoint.new(0.72, Color3.fromRGB(158, 162, 182)),
-        ColorSequenceKeypoint.new(0.90, Color3.fromRGB(208, 213, 232)),
-        ColorSequenceKeypoint.new(1,    Color3.fromRGB(160, 165, 185)),
-    })
+    local grad = Instance.new("UIGradient")
+    grad.Name = "CarbonGradient"
     grad.Rotation = 45
-    grad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0,    alpha + 0.05),
-        NumberSequenceKeypoint.new(0.18, alpha - 0.08),
-        NumberSequenceKeypoint.new(0.36, alpha + 0.05),
-        NumberSequenceKeypoint.new(0.54, alpha - 0.08),
-        NumberSequenceKeypoint.new(0.72, alpha + 0.05),
-        NumberSequenceKeypoint.new(0.90, alpha - 0.08),
-        NumberSequenceKeypoint.new(1,    alpha + 0.05),
+    grad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,    Color3.fromRGB(38,  40,  55)),
+        ColorSequenceKeypoint.new(0.20, Color3.fromRGB(52,  55,  72)),
+        ColorSequenceKeypoint.new(0.40, Color3.fromRGB(35,  37,  50)),
+        ColorSequenceKeypoint.new(0.60, Color3.fromRGB(50,  53,  70)),
+        ColorSequenceKeypoint.new(0.80, Color3.fromRGB(36,  38,  52)),
+        ColorSequenceKeypoint.new(1,    Color3.fromRGB(38,  40,  55)),
     })
-
-    carbon.Parent = targetFrame
+    grad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0,    0.55),
+        NumberSequenceKeypoint.new(0.20, 0.30),
+        NumberSequenceKeypoint.new(0.40, 0.55),
+        NumberSequenceKeypoint.new(0.60, 0.30),
+        NumberSequenceKeypoint.new(0.80, 0.55),
+        NumberSequenceKeypoint.new(1,    0.55),
+    })
+    grad.Parent = targetFrame
 end
 
 local function AttachHoverGlow(card)
@@ -1598,7 +1594,7 @@ local function PatchRayfieldDOM()
         cyberStroke.Color = GetThemeAccentColor()
     end
 
-    -- 0c. Centered Ambient Halo (procedurally drawn via UIStroke in OverlayGui — no rbxassetid)
+    -- 0c. Centered Ambient Halo (soft layered glow — no rbxassetid, no UIStroke border)
     local legacyShadow = mainFrame:FindFirstChild("GlassShadow")
     if legacyShadow then legacyShadow:Destroy() end
     -- Remove any legacy aura parented in Rayfield's ScreenGui (old location)
@@ -1607,42 +1603,73 @@ local function PatchRayfieldDOM()
         if legacyAura then legacyAura:Destroy() end
     end
 
-    -- Create/update in OverlayGui so it survives Rayfield open/close without being destroyed
+    -- Build the halo in OverlayGui so it persists through Rayfield open/close
     local ambientAura = OverlayGui:FindFirstChild("TASFF_AmbientAura")
     if not ambientAura then
+        -- Container (invisible background)
         ambientAura = Instance.new("Frame", OverlayGui)
         ambientAura.Name = "TASFF_AmbientAura"
         ambientAura.BackgroundTransparency = 1
         ambientAura.BorderSizePixel = 0
         ambientAura.ZIndex = 1
-        Instance.new("UICorner", ambientAura).CornerRadius = UDim.new(0, 12)
-        -- Outer glow ring
-        local auraStroke = Instance.new("UIStroke", ambientAura)
-        auraStroke.Name = "AuraStroke"
-        auraStroke.Thickness = 14
-        auraStroke.Color = GetThemeAccentColor()
-        auraStroke.Transparency = 0.40
-        -- Inner softer glow ring
-        local auraStroke2 = Instance.new("UIStroke")
-        auraStroke2.Name = "AuraStroke2"
-        auraStroke2.Thickness = 28
-        auraStroke2.Color = GetThemeAccentColor()
-        auraStroke2.Transparency = 0.72
-        auraStroke2.Parent = ambientAura
+        Instance.new("UICorner", ambientAura).CornerRadius = UDim.new(0, 14)
+
+        -- Layer 1 — outermost, very faint wide glow (uses UIGradient for radial falloff simulation)
+        local layer1 = Instance.new("Frame", ambientAura)
+        layer1.Name = "HaloL1"
+        layer1.AnchorPoint = Vector2.new(0.5, 0.5)
+        layer1.Position = UDim2.new(0.5, 0, 0.5, 0)
+        layer1.Size = UDim2.new(1, 0, 1, 0)
+        layer1.BackgroundColor3 = GetThemeAccentColor()
+        layer1.BackgroundTransparency = 0.90
+        layer1.BorderSizePixel = 0
+        layer1.ZIndex = 1
+        Instance.new("UICorner", layer1).CornerRadius = UDim.new(0, 16)
+        local l1g = Instance.new("UIGradient", layer1)
+        l1g.Color = ColorSequence.new(Color3.fromRGB(255,255,255))
+        l1g.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0,   0.92),
+            NumberSequenceKeypoint.new(0.4, 0.84),
+            NumberSequenceKeypoint.new(1,   0.92),
+        })
+
+        -- Layer 2 — middle glow ring, slightly brighter
+        local layer2 = Instance.new("Frame", ambientAura)
+        layer2.Name = "HaloL2"
+        layer2.AnchorPoint = Vector2.new(0.5, 0.5)
+        layer2.Position = UDim2.new(0.5, 0, 0.5, 0)
+        layer2.Size = UDim2.new(1, -12, 1, -12)
+        layer2.BackgroundColor3 = GetThemeAccentColor()
+        layer2.BackgroundTransparency = 0.84
+        layer2.BorderSizePixel = 0
+        layer2.ZIndex = 2
+        Instance.new("UICorner", layer2).CornerRadius = UDim.new(0, 14)
+
+        -- Layer 3 — innermost, almost fully transparent, just a faint tint along edges
+        local layer3 = Instance.new("Frame", ambientAura)
+        layer3.Name = "HaloL3"
+        layer3.AnchorPoint = Vector2.new(0.5, 0.5)
+        layer3.Position = UDim2.new(0.5, 0, 0.5, 0)
+        layer3.Size = UDim2.new(1, -28, 1, -28)
+        layer3.BackgroundColor3 = GetThemeAccentColor()
+        layer3.BackgroundTransparency = 0.92
+        layer3.BorderSizePixel = 0
+        layer3.ZIndex = 3
+        Instance.new("UICorner", layer3).CornerRadius = UDim.new(0, 12)
     end
 
-    -- Always sync position/size to mainFrame (absolutely, via AbsolutePosition so it's exact)
+    -- Sync aura position/size to exactly surround mainFrame (centered, no offset)
     local function SyncAuraPosition()
         if not (mainFrame and mainFrame.Parent and ambientAura and ambientAura.Parent) then return end
-        local mPos = mainFrame.AbsolutePosition
+        local mPos  = mainFrame.AbsolutePosition
         local mSize = mainFrame.AbsoluteSize
-        local bleed = 22  -- px bleed beyond menu edges
+        local bleed = 18  -- px bleed on each side for the glow to extend beyond menu edge
         ambientAura.Position = UDim2.new(0, mPos.X - bleed, 0, mPos.Y - bleed)
-        ambientAura.Size = UDim2.new(0, mSize.X + bleed * 2, 0, mSize.Y + bleed * 2)
-        local aStroke = ambientAura:FindFirstChild("AuraStroke")
-        if aStroke then aStroke.Color = GetThemeAccentColor() end
-        local aStroke2 = ambientAura:FindFirstChild("AuraStroke2")
-        if aStroke2 then aStroke2.Color = GetThemeAccentColor() end
+        ambientAura.Size     = UDim2.new(0, mSize.X + bleed * 2, 0, mSize.Y + bleed * 2)
+        local acc = GetThemeAccentColor()
+        for _, ln in ipairs(ambientAura:GetChildren()) do
+            if ln:IsA("Frame") then ln.BackgroundColor3 = acc end
+        end
     end
     SyncAuraPosition()
     if not mainFrame:FindFirstChild("AuraSyncHooked") then
@@ -1672,17 +1699,8 @@ local function PatchRayfieldDOM()
     -- 0d. Topbar Clean Accent Line & Notification Center Bell (Shifted clear of Search)
     local topbar = mainFrame:FindFirstChild("Topbar", true)
     if topbar then
-        -- Reset topbar to Rayfield default height (prevent accidental oversizing)
+        -- Reset topbar to Rayfield default height once per patch — no lock (lock breaks Rayfield toggle animation)
         topbar.Size = UDim2.new(1, 0, 0, 45)
-        -- Lock topbar height so Rayfield cannot resize it back
-        if not topbar:FindFirstChild("TopbarSizeHooked") then
-            Instance.new("BoolValue", topbar).Name = "TopbarSizeHooked"
-            topbar:GetPropertyChangedSignal("Size"):Connect(function()
-                if topbar.Size.Y.Offset ~= 45 then
-                    topbar.Size = UDim2.new(1, 0, 0, 45)
-                end
-            end)
-        end
         local topbarLine = topbar:FindFirstChild("TopbarAccentLine")
         if not topbarLine then
             topbarLine = Instance.new("Frame", topbar)
@@ -2086,29 +2104,28 @@ local function PatchRayfieldDOM()
             cStroke.Enabled = isVis
         end
 
-        -- Ambient Aura Halo Sync (in OverlayGui, positioned via AbsolutePosition)
+        -- Ambient Aura Halo Sync (layered glow frames in OverlayGui)
         local aAura = OverlayGui:FindFirstChild("TASFF_AmbientAura")
         if aAura then
             aAura.Visible = (isVis and isExpanded)
-            local aStroke = aAura:FindFirstChild("AuraStroke")
-            local aStroke2 = aAura:FindFirstChild("AuraStroke2")
             local acc = GetThemeAccentColor()
-            if aStroke then
-                aStroke.Color = acc
-                aStroke.Transparency = math.clamp(0.40 + mainTrans * 0.60, 0, 1)
+            -- Update layer colors and sync position
+            local baseTrans = { 0.90, 0.84, 0.92 }  -- base transparency per layer when fully visible
+            local i = 0
+            for _, ln in ipairs(aAura:GetChildren()) do
+                if ln:IsA("Frame") then
+                    i = i + 1
+                    ln.BackgroundColor3 = acc
+                    local bt = baseTrans[i] or 0.90
+                    ln.BackgroundTransparency = math.clamp(bt + mainTrans * (1 - bt), 0, 1)
+                end
             end
-            if aStroke2 then
-                aStroke2.Color = acc
-                aStroke2.Transparency = math.clamp(0.72 + mainTrans * 0.28, 0, 1)
-            end
-            -- Keep aura centered on mainFrame
-            if mainFrame and mainFrame.Parent then
-                local mPos = mainFrame.AbsolutePosition
-                local mSize = mainFrame.AbsoluteSize
-                local bleed = 22
-                aAura.Position = UDim2.new(0, mPos.X - bleed, 0, mPos.Y - bleed)
-                aAura.Size = UDim2.new(0, mSize.X + bleed * 2, 0, mSize.Y + bleed * 2)
-            end
+            -- Keep centered on mainFrame
+            local mPos = mainFrame.AbsolutePosition
+            local mSize = mainFrame.AbsoluteSize
+            local bleed = 18
+            aAura.Position = UDim2.new(0, mPos.X - bleed, 0, mPos.Y - bleed)
+            aAura.Size     = UDim2.new(0, mSize.X + bleed * 2, 0, mSize.Y + bleed * 2)
         end
 
         -- Native Rayfield Centered Shadow Glow Sync (keep centered every fade cycle)

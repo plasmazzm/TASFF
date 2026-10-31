@@ -145,6 +145,8 @@ local function GetWindowConfig(themeColors, selectedThemeName)
         Icon            = 7488932264,
         LoadingTitle    = "The Aimbot Script Final Form",
         LoadingSubtitle = "by Plasmazzm",
+        ToggleUIKeybind = S.MenuToggleKey or "RightControl",
+        Keybind         = S.MenuToggleKey or "RightControl",
         Theme = {
             TextColor                     = tc.TextColor,
             Background                    = tc.Background,
@@ -1501,44 +1503,67 @@ local function PatchRayfieldDOM()
     mCarbon.Name = "MainCarbonMesh"
     mCarbon.Size = UDim2.new(1, 0, 1, 0)
     mCarbon.Position = UDim2.new(0, 0, 0, 0)
-    mCarbon.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-    mCarbon.BackgroundTransparency = 0.50
+    mCarbon.BackgroundColor3 = Color3.fromRGB(12, 13, 18)
+    mCarbon.BackgroundTransparency = 0
     mCarbon.BorderSizePixel = 0
-    mCarbon.ZIndex = 2
+    mCarbon.ZIndex = 0
     mCarbon.Active = false
     Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
 
+    -- Primary: High-contrast atmospheric scanline bands
     local scanGrad = Instance.new("UIGradient", mCarbon)
     scanGrad.Rotation = 90
     scanGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,      Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(0.05,   Color3.fromRGB(60,  64,  88)),
-        ColorSequenceKeypoint.new(0.10,   Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(0.15,   Color3.fromRGB(60,  64,  88)),
-        ColorSequenceKeypoint.new(0.20,   Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(60,  64,  88)),
-        ColorSequenceKeypoint.new(0.30,   Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(0.35,   Color3.fromRGB(60,  64,  88)),
-        ColorSequenceKeypoint.new(0.40,   Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(0.45,   Color3.fromRGB(60,  64,  88)),
-        ColorSequenceKeypoint.new(0.50,   Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(60,  64,  88)),
-        ColorSequenceKeypoint.new(0.60,   Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(0.65,   Color3.fromRGB(60,  64,  88)),
-        ColorSequenceKeypoint.new(0.70,   Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(60,  64,  88)),
-        ColorSequenceKeypoint.new(0.80,   Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(0.85,   Color3.fromRGB(60,  64,  88)),
-        ColorSequenceKeypoint.new(0.90,   Color3.fromRGB(8,   8,  12)),
-        ColorSequenceKeypoint.new(1,      Color3.fromRGB(60,  64,  88)),
+        ColorSequenceKeypoint.new(0,      Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(0.05,   Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0.10,   Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(0.15,   Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0.20,   Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0.30,   Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(0.35,   Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0.40,   Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(0.45,   Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0.50,   Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0.60,   Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(0.65,   Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0.70,   Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0.80,   Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(0.85,   Color3.fromRGB(55,  60,  85)),
+        ColorSequenceKeypoint.new(0.90,   Color3.fromRGB(10,  11,  16)),
+        ColorSequenceKeypoint.new(1,      Color3.fromRGB(55,  60,  85)),
     })
     scanGrad.Transparency = NumberSequence.new(0)
+
+    -- Secondary: Atmospheric 45-degree carbon weave cross grid
+    local mCross = Instance.new("Frame", mCarbon)
+    mCross.Name = "CarbonCrossWeave"
+    mCross.Size = UDim2.new(1, 0, 1, 0)
+    mCross.Position = UDim2.new(0, 0, 0, 0)
+    mCross.BackgroundColor3 = Color3.fromRGB(24, 26, 38)
+    mCross.BackgroundTransparency = 0.45
+    mCross.BorderSizePixel = 0
+    mCross.ZIndex = 0
+    Instance.new("UICorner", mCross).CornerRadius = UDim.new(0, 8)
+    local crossGrad = Instance.new("UIGradient", mCross)
+    crossGrad.Rotation = 45
+    crossGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,    Color3.fromRGB(8,   9,  14)),
+        ColorSequenceKeypoint.new(0.25, Color3.fromRGB(60, 65,  92)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(8,   9,  14)),
+        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(60, 65,  92)),
+        ColorSequenceKeypoint.new(1,    Color3.fromRGB(8,   9,  14)),
+    })
+
     mCarbon.Parent = mainFrame
 
     -- Make Rayfield's Elements scroll container transparent so the carbon background shines through!
     for _, el in ipairs(mainFrame:GetDescendants()) do
         if el.Name == "Elements" and el:IsA("ScrollingFrame") then
             el.BackgroundTransparency = 1
+            el.ZIndex = 2  -- Strictly above background carbon mesh (ZIndex 0)
         end
     end
 
@@ -1603,16 +1628,17 @@ local function PatchRayfieldDOM()
         ambientHalo.ScaleType = Enum.ScaleType.Slice
         ambientHalo.SliceCenter = Rect.new(24, 24, 276, 276)
         ambientHalo.ImageColor3 = GetThemeAccentColor()
-        ambientHalo.ImageTransparency = 0.35
+        ambientHalo.ImageTransparency = 0.08
         ambientHalo.ZIndex = 0
-        ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
         ambientHalo.Parent = mainFrame.Parent
     end
 
     if ambientHalo then
         ambientHalo.ImageColor3 = GetThemeAccentColor()
-        ambientHalo.Position = UDim2.new(0, mainFrame.AbsolutePosition.X + mainFrame.AbsoluteSize.X * 0.5, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y * 0.5)
-        ambientHalo.Size = UDim2.new(0, mainFrame.AbsoluteSize.X + 44, 0, mainFrame.AbsoluteSize.Y + 44)
+        ambientHalo.ImageTransparency = 0.08
+        ambientHalo.AnchorPoint = mainFrame.AnchorPoint
+        ambientHalo.Position = mainFrame.Position
+        ambientHalo.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 50, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 50)
     end
 
     -- 0d. Topbar Clean Accent Line & Notification Center Bell (Shifted clear of Search)
@@ -1990,18 +2016,26 @@ local function PatchRayfieldDOM()
         local cStroke = mainFrame:FindFirstChild("CyberStroke")
         if cStroke then
             cStroke.Transparency = math.clamp(mainTrans, 0, 1)
-            cStroke.Enabled = isVis
+            cStroke.Enabled = (isVis and isExpanded)
         end
 
-        -- Ambient Halo Sync in mainFrame.Parent (100% strictly BEHIND mainFrame)
+        -- Topbar Accent Line sync (no orphan lines when minimized or closed)
+        local topbarLine = topbar and topbar:FindFirstChild("TopbarAccentLine")
+        if topbarLine then
+            topbarLine.Visible = (isVis and isExpanded)
+            topbarLine.BackgroundTransparency = mainTrans
+        end
+
+        -- Ambient Halo Sync in mainFrame.Parent (100% strictly BEHIND mainFrame, perfectly centered)
         local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
         if ambientHalo then
             ambientHalo.Visible = (isVis and isExpanded)
             if ambientHalo.Visible then
                 ambientHalo.ImageColor3 = GetThemeAccentColor()
-                ambientHalo.ImageTransparency = math.clamp(0.35 + mainTrans * 0.65, 0, 1)
-                ambientHalo.Position = UDim2.new(0, mainFrame.AbsolutePosition.X + mainFrame.AbsoluteSize.X * 0.5, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y * 0.5)
-                ambientHalo.Size = UDim2.new(0, mainFrame.AbsoluteSize.X + 44, 0, mainFrame.AbsoluteSize.Y + 44)
+                ambientHalo.ImageTransparency = math.clamp(0.08 + mainTrans * 0.92, 0, 1)
+                ambientHalo.AnchorPoint = mainFrame.AnchorPoint
+                ambientHalo.Position = mainFrame.Position
+                ambientHalo.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 50, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 50)
             end
         end
 
@@ -2011,20 +2045,26 @@ local function PatchRayfieldDOM()
             nativeShadow.Visible = false
         end
 
-        -- Main Window Carbon Mesh (procedural Frame — stays at 0.50 base when visible)
+        -- Main Window Carbon Mesh (procedural Frame — stays behind elements at ZIndex 0)
         local mMesh = mainFrame:FindFirstChild("MainCarbonMesh")
         if mMesh then
             mMesh.Visible = (isVis and isExpanded)
-            mMesh.BackgroundTransparency = math.clamp(0.50 + mainTrans * 0.50, 0, 1)
+            mMesh.BackgroundTransparency = mainTrans
         end
 
-        -- Attached TASFF_BottomBar sync (in mainFrame.Parent, directly below menu)
+        -- Attached TASFF_BottomBar sync (physically glued directly below menu using exact anchor coordinates)
         local bBar = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
         if bBar then
             bBar.Visible = (isVis and isExpanded)
             if bBar.Visible then
-                bBar.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y + 4)
+                bBar.AnchorPoint = Vector2.new(0.5, 0)
                 bBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 26)
+                bBar.Position = UDim2.new(
+                    mainFrame.Position.X.Scale,
+                    mainFrame.Position.X.Offset,
+                    mainFrame.Position.Y.Scale,
+                    mainFrame.Position.Y.Offset + (mainFrame.AbsoluteSize.Y * (1 - mainFrame.AnchorPoint.Y)) + 4
+                )
                 bBar.BackgroundTransparency = math.clamp(0.10 + mainTrans * 0.90, 0, 1)
                 local bStroke2 = bBar:FindFirstChildOfClass("UIStroke")
                 if bStroke2 then bStroke2.Transparency = math.clamp(0.5 + mainTrans * 0.5, 0, 1) end
@@ -2394,48 +2434,90 @@ local function PatchRayfieldDOM()
         end
 
         -- Slider Precision Stepper Buttons & Live Value Enhancement
-        local isSliderCard = desc:IsA("GuiObject") and (desc.Name == "Slider" or desc:FindFirstChild("Slider") or desc:FindFirstChild("SliderBar"))
+        local isSliderCard = desc:IsA("GuiObject") and (
+            desc.Name == "Slider" or
+            desc:FindFirstChild("Slider") or
+            desc:FindFirstChild("SliderBar") or
+            (desc:FindFirstChild("Main") and desc.Main:IsA("GuiObject") and desc.Main:FindFirstChild("Progress") and desc.Main:FindFirstChild("Information"))
+        )
         if isSliderCard and not desc:FindFirstChild("StepperHooked") then
             local sHook = Instance.new("BoolValue", desc)
             sHook.Name = "StepperHooked"
 
             local stepMinus = Instance.new("TextButton", desc)
             stepMinus.Name = "StepMinus"
-            stepMinus.Size = UDim2.new(0, 18, 0, 18)
-            stepMinus.Position = UDim2.new(1, -145, 0.5, -9)
-            stepMinus.BackgroundColor3 = Color3.fromRGB(34, 36, 48)
+            stepMinus.Size = UDim2.new(0, 20, 0, 20)
+            stepMinus.Position = UDim2.new(1, -52, 0, 5)
+            stepMinus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
             stepMinus.BorderSizePixel = 0
             stepMinus.Font = Enum.Font.GothamBold
-            stepMinus.TextSize = 12
-            stepMinus.TextColor3 = Color3.fromRGB(240, 240, 255)
+            stepMinus.TextSize = 13
+            stepMinus.TextColor3 = GetThemeAccentColor()
             stepMinus.Text = "-"
-            stepMinus.ZIndex = 50
+            stepMinus.ZIndex = 35
             Instance.new("UICorner", stepMinus).CornerRadius = UDim.new(0, 4)
             local smStroke = Instance.new("UIStroke", stepMinus)
-            smStroke.Color = Color3.fromRGB(60, 65, 80)
+            smStroke.Color = Color3.fromRGB(65, 70, 90)
             smStroke.Thickness = 1
 
             local stepPlus = Instance.new("TextButton", desc)
             stepPlus.Name = "StepPlus"
-            stepPlus.Size = UDim2.new(0, 18, 0, 18)
-            stepPlus.Position = UDim2.new(1, -24, 0.5, -9)
-            stepPlus.BackgroundColor3 = Color3.fromRGB(34, 36, 48)
+            stepPlus.Size = UDim2.new(0, 20, 0, 20)
+            stepPlus.Position = UDim2.new(1, -26, 0, 5)
+            stepPlus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
             stepPlus.BorderSizePixel = 0
             stepPlus.Font = Enum.Font.GothamBold
-            stepPlus.TextSize = 12
-            stepPlus.TextColor3 = Color3.fromRGB(240, 240, 255)
+            stepPlus.TextSize = 13
+            stepPlus.TextColor3 = GetThemeAccentColor()
             stepPlus.Text = "+"
-            stepPlus.ZIndex = 50
+            stepPlus.ZIndex = 35
             Instance.new("UICorner", stepPlus).CornerRadius = UDim.new(0, 4)
             local spStroke = Instance.new("UIStroke", stepPlus)
-            spStroke.Color = Color3.fromRGB(60, 65, 80)
+            spStroke.Color = Color3.fromRGB(65, 70, 90)
             spStroke.Thickness = 1
 
-            stepMinus.MouseButton1Click:Connect(function()
+            local function AdjustSlider(delta)
                 PlayUISound("stepper")
+                local titleLabel = desc:FindFirstChild("Title")
+                local sliderTitle = (titleLabel and titleLabel.Text) or desc.Name
+
+                -- Try to find matching flag in Rayfield.Flags
+                local matchedFlagObj = nil
+                local rLibrary = (TASFFEnv and TASFFEnv.Rayfield) or (getgenv and getgenv().Rayfield)
+                if rLibrary and rLibrary.Flags then
+                    for _, flagObj in pairs(rLibrary.Flags) do
+                        if type(flagObj) == "table" and (flagObj.Name == sliderTitle or flagObj.Name == desc.Name) and flagObj.Set then
+                            matchedFlagObj = flagObj
+                            break
+                        end
+                    end
+                end
+
+                if matchedFlagObj then
+                    local inc = matchedFlagObj.Increment or 1
+                    local cur = matchedFlagObj.CurrentValue or 0
+                    local min = (matchedFlagObj.Range and matchedFlagObj.Range[1]) or -math.huge
+                    local max = (matchedFlagObj.Range and matchedFlagObj.Range[2]) or math.huge
+                    local target = math.clamp(cur + delta * inc, min, max)
+                    pcall(function() matchedFlagObj:Set(target) end)
+                else
+                    local mainBar = desc:FindFirstChild("Main")
+                    local infoLabel = mainBar and mainBar:FindFirstChild("Information")
+                    if infoLabel and infoLabel:IsA("TextLabel") then
+                        local curNum = tonumber(infoLabel.Text:match("[%-%d%.]+"))
+                        if curNum then
+                            local target = curNum + delta * 1
+                            infoLabel.Text = tostring(target)
+                        end
+                    end
+                end
+            end
+
+            stepMinus.MouseButton1Click:Connect(function()
+                AdjustSlider(-1)
             end)
             stepPlus.MouseButton1Click:Connect(function()
-                PlayUISound("stepper")
+                AdjustSlider(1)
             end)
         end
 
@@ -2730,35 +2812,45 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 
 -- Global Window Open/Close Keybind Hook
--- Ensures pressing RightControl, K, or any configured toggle key ALWAYS opens/closes the menu cleanly
+-- Ensures pressing RightControl, K, Insert, or any configured toggle key ALWAYS opens/closes the menu cleanly
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    local isToggleKey = (input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.K)
-    if S.MenuKeybind and Enum.KeyCode[S.MenuKeybind] and input.KeyCode == Enum.KeyCode[S.MenuKeybind] then
+    local isToggleKey = (input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.Insert)
+    if S.MenuKeybind and pcall(function() return Enum.KeyCode[S.MenuKeybind] end) and Enum.KeyCode[S.MenuKeybind] and input.KeyCode == Enum.KeyCode[S.MenuKeybind] then
         isToggleKey = true
     end
-    if S.MenuToggleKey and Enum.KeyCode[S.MenuToggleKey] and input.KeyCode == Enum.KeyCode[S.MenuToggleKey] then
+    if S.MenuToggleKey and pcall(function() return Enum.KeyCode[S.MenuToggleKey] end) and Enum.KeyCode[S.MenuToggleKey] and input.KeyCode == Enum.KeyCode[S.MenuToggleKey] then
         isToggleKey = true
     end
     if isToggleKey then
         local rGui = FindRayfieldGui and FindRayfieldGui()
         local mFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
-        if mFrame then
-            if mFrame.Visible and mFrame.AbsoluteSize.Y > 60 then
-                mFrame.Visible = false
+        if mFrame and rGui then
+            local isHiddenOrClosed = (not rGui.Enabled) or (not mFrame.Visible) or (mFrame.BackgroundTransparency > 0.8) or (mFrame.AbsoluteSize.Y <= 60)
+            if not isHiddenOrClosed then
+                -- Close cleanly
+                TweenService:Create(mFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                    BackgroundTransparency = 1
+                }):Play()
+                task.delay(0.25, function()
+                    mFrame.Visible = false
+                    rGui.Enabled = false
+                    pcall(PatchRayfieldDOM)
+                end)
             else
+                -- Reopen & Restore cleanly to full Rayfield window
+                rGui.Enabled = true
                 mFrame.Visible = true
-                if mFrame.AbsoluteSize.Y <= 60 then
-                    mFrame.Size = UDim2.new(0, 500, 0, 475)
-                end
+                local targetTrans = 1 - (S.UIOpacity or 1.0)
+                mFrame.BackgroundTransparency = targetTrans
+                TweenService:Create(mFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, 500, 0, 475),
+                    BackgroundTransparency = targetTrans
+                }):Play()
+                task.delay(0.05, function()
+                    pcall(PatchRayfieldDOM)
+                end)
             end
-            pcall(function()
-                local isExpanded = (mFrame.Visible and mFrame.AbsoluteSize.Y > 60)
-                local halo = mFrame.Parent and mFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
-                if halo then halo.Visible = isExpanded end
-                local bb = mFrame.Parent and mFrame.Parent:FindFirstChild("TASFF_BottomBar")
-                if bb then bb.Visible = isExpanded end
-            end)
         end
     end
 end)

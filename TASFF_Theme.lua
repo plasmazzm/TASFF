@@ -140,13 +140,15 @@ local ControlTooltips = {
 --- Returns Rayfield Window Config
 local function GetWindowConfig(themeColors, selectedThemeName)
     local tc = themeColors or ThemeColorDefaults
+    local toggleKey = (typeof(S.MenuToggleKey) == "EnumItem" and S.MenuToggleKey)
+        or (typeof(S.MenuToggleKey) == "string" and Enum.KeyCode[S.MenuToggleKey])
+        or Enum.KeyCode.K
     return {
         Name            = "TASFF " .. (S.CurrentVersion or "2.3.0") .. " - " .. (selectedThemeName or "Default"),
-        Icon            = 7488932264,
+        Icon            = 0,
         LoadingTitle    = "The Aimbot Script Final Form",
         LoadingSubtitle = "by Plasmazzm",
-        ToggleUIKeybind = S.MenuToggleKey or "RightControl",
-        Keybind         = S.MenuToggleKey or "RightControl",
+        ToggleUIKeybind = toggleKey,
         Theme = {
             TextColor                     = tc.TextColor,
             Background                    = tc.Background,
@@ -2009,7 +2011,7 @@ local function PatchRayfieldDOM()
     local function SyncRayfieldFade()
         local topTrans = (topbar and topbar.BackgroundTransparency) or mainFrame.BackgroundTransparency
         local mainTrans = mainFrame.BackgroundTransparency
-        local isVis = (mainFrame.Visible and topTrans < 0.95 and mainTrans < 0.95)
+        local isVis = ((not rGui or rGui.Enabled) and mainFrame.Visible and topTrans < 0.95 and mainTrans < 0.95)
         local isExpanded = (mainFrame.AbsoluteSize.Y > 60)
 
         -- CyberStroke
@@ -2125,6 +2127,9 @@ local function PatchRayfieldDOM()
         if topbar then
             topbar:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
             topbar:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
+        end
+        if rGui then
+            rGui:GetPropertyChangedSignal("Enabled"):Connect(SyncRayfieldFade)
         end
     end
     SyncRayfieldFade()
@@ -2811,49 +2816,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
--- Global Window Open/Close Keybind Hook
--- Ensures pressing RightControl, K, Insert, or any configured toggle key ALWAYS opens/closes the menu cleanly
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    local isToggleKey = (input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.Insert)
-    if S.MenuKeybind and pcall(function() return Enum.KeyCode[S.MenuKeybind] end) and Enum.KeyCode[S.MenuKeybind] and input.KeyCode == Enum.KeyCode[S.MenuKeybind] then
-        isToggleKey = true
-    end
-    if S.MenuToggleKey and pcall(function() return Enum.KeyCode[S.MenuToggleKey] end) and Enum.KeyCode[S.MenuToggleKey] and input.KeyCode == Enum.KeyCode[S.MenuToggleKey] then
-        isToggleKey = true
-    end
-    if isToggleKey then
-        local rGui = FindRayfieldGui and FindRayfieldGui()
-        local mFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
-        if mFrame and rGui then
-            local isHiddenOrClosed = (not rGui.Enabled) or (not mFrame.Visible) or (mFrame.BackgroundTransparency > 0.8) or (mFrame.AbsoluteSize.Y <= 60)
-            if not isHiddenOrClosed then
-                -- Close cleanly
-                TweenService:Create(mFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-                    BackgroundTransparency = 1
-                }):Play()
-                task.delay(0.25, function()
-                    mFrame.Visible = false
-                    rGui.Enabled = false
-                    pcall(PatchRayfieldDOM)
-                end)
-            else
-                -- Reopen & Restore cleanly to full Rayfield window
-                rGui.Enabled = true
-                mFrame.Visible = true
-                local targetTrans = 1 - (S.UIOpacity or 1.0)
-                mFrame.BackgroundTransparency = targetTrans
-                TweenService:Create(mFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Size = UDim2.new(0, 500, 0, 475),
-                    BackgroundTransparency = targetTrans
-                }):Play()
-                task.delay(0.05, function()
-                    pcall(PatchRayfieldDOM)
-                end)
-            end
-        end
-    end
-end)
+
 
 -- Defer initial DOM patch until UI is completely built by TASFF_UI.lua
 task.spawn(function()

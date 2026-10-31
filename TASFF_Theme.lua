@@ -1406,33 +1406,44 @@ end
 TASFFEnv.Theme.SetTabBadge = SetTabBadge
 
 -- Universal Atmospheric Carbon Weave Texture & Control Hover Glow Helpers
-local UNIVERSAL_CARBON_TEXTURE = "rbxassetid://2151741365"  -- universal carbon weave tile for all elements
-
+-- Procedural carbon-weave overlay using diagonal UIGradient stripes (no rbxassetid needed)
 local function AttachCarbonOverlay(targetFrame, transparency)
-    if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") or targetFrame:FindFirstChild("CarbonFolder") then return end
-    local isListContainer = targetFrame:FindFirstChildOfClass("UIListLayout")
-    local carbon = Instance.new("ImageLabel")
+    if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
+    local alpha = transparency or 0.80  -- base background transparency (lower = more visible)
+
+    local carbon = Instance.new("Frame")
     carbon.Name = "CarbonOverlay"
     carbon.Size = UDim2.new(1, 0, 1, 0)
     carbon.Position = UDim2.new(0, 0, 0, 0)
-    carbon.BackgroundTransparency = 1
-    carbon.Image = UNIVERSAL_CARBON_TEXTURE
-    carbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
-    carbon.TileSize = UDim2.new(0, 16, 0, 16)
-    carbon.ScaleType = Enum.ScaleType.Tile
-    carbon.ImageTransparency = transparency or 0.38  -- clearly visible high-contrast weave
+    carbon.BackgroundColor3 = Color3.fromRGB(30, 32, 42)
+    carbon.BackgroundTransparency = alpha
+    carbon.BorderSizePixel = 0
     carbon.ZIndex = math.max(1, targetFrame.ZIndex)
     Instance.new("UICorner", carbon).CornerRadius = UDim.new(0, 6)
 
-    if isListContainer then
-        -- Put inside a Folder so Roblox UIListLayout ignores it completely (no layout shift / infinite expansion)
-        local f = Instance.new("Folder")
-        f.Name = "CarbonFolder"
-        carbon.Parent = f
-        f.Parent = targetFrame
-    else
-        carbon.Parent = targetFrame
-    end
+    -- Diagonal stripe gradient (visible carbon fiber effect)
+    local grad = Instance.new("UIGradient", carbon)
+    grad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,    Color3.fromRGB(160, 165, 185)),
+        ColorSequenceKeypoint.new(0.18, Color3.fromRGB(210, 215, 235)),
+        ColorSequenceKeypoint.new(0.36, Color3.fromRGB(155, 158, 178)),
+        ColorSequenceKeypoint.new(0.54, Color3.fromRGB(205, 210, 230)),
+        ColorSequenceKeypoint.new(0.72, Color3.fromRGB(158, 162, 182)),
+        ColorSequenceKeypoint.new(0.90, Color3.fromRGB(208, 213, 232)),
+        ColorSequenceKeypoint.new(1,    Color3.fromRGB(160, 165, 185)),
+    })
+    grad.Rotation = 45
+    grad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0,    alpha + 0.05),
+        NumberSequenceKeypoint.new(0.18, alpha - 0.08),
+        NumberSequenceKeypoint.new(0.36, alpha + 0.05),
+        NumberSequenceKeypoint.new(0.54, alpha - 0.08),
+        NumberSequenceKeypoint.new(0.72, alpha + 0.05),
+        NumberSequenceKeypoint.new(0.90, alpha - 0.08),
+        NumberSequenceKeypoint.new(1,    alpha + 0.05),
+    })
+
+    carbon.Parent = targetFrame
 end
 
 local function AttachHoverGlow(card)
@@ -1503,21 +1514,50 @@ local function PatchRayfieldDOM()
         end)
     end
 
-    -- 0a. Atmospheric Scanline Grid on Window Background (visible carbon weave)
+    -- 0a. Atmospheric Scanline Grid on Window Background (procedurally drawn — no rbxassetid)
     local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
-    if existingMesh then existingMesh:Destroy() end  -- always recreate so settings apply fresh
-    local mCarbon = Instance.new("ImageLabel")
+    if existingMesh then existingMesh:Destroy() end
+
+    local mCarbon = Instance.new("Frame")
     mCarbon.Name = "MainCarbonMesh"
     mCarbon.Size = UDim2.new(1, 0, 1, 0)
     mCarbon.Position = UDim2.new(0, 0, 0, 0)
-    mCarbon.BackgroundTransparency = 1
-    mCarbon.Image = UNIVERSAL_CARBON_TEXTURE  -- carbon fiber weave
-    mCarbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
-    mCarbon.ScaleType = Enum.ScaleType.Tile
-    mCarbon.TileSize = UDim2.new(0, 16, 0, 16)
-    mCarbon.ImageTransparency = 0.35  -- clearly visible atmospheric carbon texture
+    mCarbon.BackgroundColor3 = Color3.fromRGB(25, 28, 38)
+    mCarbon.BackgroundTransparency = 0.78  -- slightly visible dark tint layer
+    mCarbon.BorderSizePixel = 0
     mCarbon.ZIndex = 2
     Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
+
+    -- Horizontal scanline effect using UIGradient (18 alternating keypoints = 9 scanline bands)
+    local scanGrad = Instance.new("UIGradient", mCarbon)
+    scanGrad.Rotation = 90  -- horizontal bands
+    scanGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,      Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0.055,  Color3.fromRGB(40,  44,  58)),
+        ColorSequenceKeypoint.new(0.11,   Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0.165,  Color3.fromRGB(40,  44,  58)),
+        ColorSequenceKeypoint.new(0.22,   Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0.275,  Color3.fromRGB(40,  44,  58)),
+        ColorSequenceKeypoint.new(0.33,   Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0.385,  Color3.fromRGB(40,  44,  58)),
+        ColorSequenceKeypoint.new(0.44,   Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0.495,  Color3.fromRGB(40,  44,  58)),
+        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0.605,  Color3.fromRGB(40,  44,  58)),
+        ColorSequenceKeypoint.new(0.66,   Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0.715,  Color3.fromRGB(40,  44,  58)),
+        ColorSequenceKeypoint.new(0.77,   Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0.825,  Color3.fromRGB(40,  44,  58)),
+        ColorSequenceKeypoint.new(0.88,   Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0.935,  Color3.fromRGB(40,  44,  58)),
+        ColorSequenceKeypoint.new(1,      Color3.fromRGB(20,  22,  32)),
+    })
+    scanGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0,    0.72),
+        NumberSequenceKeypoint.new(0.5,  0.60),
+        NumberSequenceKeypoint.new(1,    0.72),
+    })
+
     mCarbon.Parent = mainFrame
 
     -- Make Rayfield's Elements scroll container transparent so the carbon background shines through!
@@ -1558,27 +1598,58 @@ local function PatchRayfieldDOM()
         cyberStroke.Color = GetThemeAccentColor()
     end
 
-    -- 0c. Centered Ambient Halo Styling (100% Centered & Symmetrical Halo)
+    -- 0c. Centered Ambient Halo (procedurally drawn via UIStroke in OverlayGui — no rbxassetid)
     local legacyShadow = mainFrame:FindFirstChild("GlassShadow")
     if legacyShadow then legacyShadow:Destroy() end
+    -- Remove any legacy aura parented in Rayfield's ScreenGui (old location)
+    if mainFrame.Parent then
+        local legacyAura = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
+        if legacyAura then legacyAura:Destroy() end
+    end
 
-    local ambientAura = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
-    if not ambientAura and mainFrame.Parent then
-        ambientAura = Instance.new("ImageLabel", mainFrame.Parent)
+    -- Create/update in OverlayGui so it survives Rayfield open/close without being destroyed
+    local ambientAura = OverlayGui:FindFirstChild("TASFF_AmbientAura")
+    if not ambientAura then
+        ambientAura = Instance.new("Frame", OverlayGui)
         ambientAura.Name = "TASFF_AmbientAura"
         ambientAura.BackgroundTransparency = 1
-        ambientAura.Image = "rbxassetid://5028857084" -- Soft radial blur glow
-        ambientAura.ScaleType = Enum.ScaleType.Slice
-        ambientAura.SliceCenter = Rect.new(24, 24, 276, 276)
-        ambientAura.ImageColor3 = GetThemeAccentColor()
-        ambientAura.ImageTransparency = 0.40
-        ambientAura.ZIndex = 0
+        ambientAura.BorderSizePixel = 0
+        ambientAura.ZIndex = 1
+        Instance.new("UICorner", ambientAura).CornerRadius = UDim.new(0, 12)
+        -- Outer glow ring
+        local auraStroke = Instance.new("UIStroke", ambientAura)
+        auraStroke.Name = "AuraStroke"
+        auraStroke.Thickness = 14
+        auraStroke.Color = GetThemeAccentColor()
+        auraStroke.Transparency = 0.40
+        -- Inner softer glow ring
+        local auraStroke2 = Instance.new("UIStroke")
+        auraStroke2.Name = "AuraStroke2"
+        auraStroke2.Thickness = 28
+        auraStroke2.Color = GetThemeAccentColor()
+        auraStroke2.Transparency = 0.72
+        auraStroke2.Parent = ambientAura
     end
-    if ambientAura then
-        ambientAura.AnchorPoint = mainFrame.AnchorPoint
-        ambientAura.Position = mainFrame.Position
-        ambientAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 48, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 48)
-        ambientAura.ImageColor3 = GetThemeAccentColor()
+
+    -- Always sync position/size to mainFrame (absolutely, via AbsolutePosition so it's exact)
+    local function SyncAuraPosition()
+        if not (mainFrame and mainFrame.Parent and ambientAura and ambientAura.Parent) then return end
+        local mPos = mainFrame.AbsolutePosition
+        local mSize = mainFrame.AbsoluteSize
+        local bleed = 22  -- px bleed beyond menu edges
+        ambientAura.Position = UDim2.new(0, mPos.X - bleed, 0, mPos.Y - bleed)
+        ambientAura.Size = UDim2.new(0, mSize.X + bleed * 2, 0, mSize.Y + bleed * 2)
+        local aStroke = ambientAura:FindFirstChild("AuraStroke")
+        if aStroke then aStroke.Color = GetThemeAccentColor() end
+        local aStroke2 = ambientAura:FindFirstChild("AuraStroke2")
+        if aStroke2 then aStroke2.Color = GetThemeAccentColor() end
+    end
+    SyncAuraPosition()
+    if not mainFrame:FindFirstChild("AuraSyncHooked") then
+        local ahook = Instance.new("BoolValue", mainFrame)
+        ahook.Name = "AuraSyncHooked"
+        mainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(SyncAuraPosition)
+        mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncAuraPosition)
     end
 
     local nativeShadow = mainFrame:FindFirstChild("Shadow")
@@ -1603,6 +1674,15 @@ local function PatchRayfieldDOM()
     if topbar then
         -- Reset topbar to Rayfield default height (prevent accidental oversizing)
         topbar.Size = UDim2.new(1, 0, 0, 45)
+        -- Lock topbar height so Rayfield cannot resize it back
+        if not topbar:FindFirstChild("TopbarSizeHooked") then
+            Instance.new("BoolValue", topbar).Name = "TopbarSizeHooked"
+            topbar:GetPropertyChangedSignal("Size"):Connect(function()
+                if topbar.Size.Y.Offset ~= 45 then
+                    topbar.Size = UDim2.new(1, 0, 0, 45)
+                end
+            end)
+        end
         local topbarLine = topbar:FindFirstChild("TopbarAccentLine")
         if not topbarLine then
             topbarLine = Instance.new("Frame", topbar)
@@ -1715,18 +1795,31 @@ local function PatchRayfieldDOM()
         barStroke.Thickness = 1
         barStroke.Transparency = 0.5
 
-        -- Carbon texture on bottom bar
-        local barCarbon = Instance.new("ImageLabel", bottomBar)
+        -- Carbon texture on bottom bar (procedural diagonal stripe — no rbxassetid)
+        local barCarbon = Instance.new("Frame", bottomBar)
         barCarbon.Name = "BarCarbon"
         barCarbon.Size = UDim2.new(1, 0, 1, 0)
-        barCarbon.BackgroundTransparency = 1
-        barCarbon.Image = UNIVERSAL_CARBON_TEXTURE
-        barCarbon.ImageColor3 = Color3.fromRGB(240, 240, 255)
-        barCarbon.ScaleType = Enum.ScaleType.Tile
-        barCarbon.TileSize = UDim2.new(0, 16, 0, 16)
-        barCarbon.ImageTransparency = 0.40
+        barCarbon.BackgroundColor3 = Color3.fromRGB(28, 30, 42)
+        barCarbon.BackgroundTransparency = 0.82
+        barCarbon.BorderSizePixel = 0
         barCarbon.ZIndex = 101
         Instance.new("UICorner", barCarbon).CornerRadius = UDim.new(0, 6)
+        local barCarbGrad = Instance.new("UIGradient", barCarbon)
+        barCarbGrad.Rotation = 45
+        barCarbGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0,    Color3.fromRGB(150, 155, 175)),
+            ColorSequenceKeypoint.new(0.25, Color3.fromRGB(200, 205, 225)),
+            ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(150, 155, 175)),
+            ColorSequenceKeypoint.new(0.75, Color3.fromRGB(200, 205, 225)),
+            ColorSequenceKeypoint.new(1,    Color3.fromRGB(150, 155, 175)),
+        })
+        barCarbGrad.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0,    0.88),
+            NumberSequenceKeypoint.new(0.25, 0.75),
+            NumberSequenceKeypoint.new(0.5,  0.88),
+            NumberSequenceKeypoint.new(0.75, 0.75),
+            NumberSequenceKeypoint.new(1,    0.88),
+        })
 
         -- Accent separator line at top of bar (mirrors topbar bottom line)
         local barLine = Instance.new("Frame", bottomBar)
@@ -1904,11 +1997,8 @@ local function PatchRayfieldDOM()
             bbHook.Name = "BottomBarSyncHooked"
             mainFrame:GetPropertyChangedSignal("AbsolutePosition"):Connect(SyncBottomBarPosition)
             mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncBottomBarPosition)
-            RunService.RenderStepped:Connect(function()
-                if mainFrame and mainFrame.Parent and mainFrame.Visible and bottomBar and bottomBar.Parent and bottomBar.Visible then
-                    SyncBottomBarPosition()
-                end
-            end)
+            -- Also sync when mainFrame visibility changes
+            mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncBottomBarPosition)
         end
     end
 
@@ -1996,16 +2086,28 @@ local function PatchRayfieldDOM()
             cStroke.Enabled = isVis
         end
 
-        -- Ambient Aura Halo Sync (100% symmetrically centered)
-        if mainFrame.Parent then
-            local aAura = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
-            if aAura then
-                aAura.Visible = (isVis and isExpanded)
-                aAura.ImageColor3 = GetThemeAccentColor()
-                aAura.ImageTransparency = math.clamp(0.40 + mainTrans * 0.60, 0, 1)
-                aAura.AnchorPoint = mainFrame.AnchorPoint
-                aAura.Position = mainFrame.Position
-                aAura.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 48, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 48)
+        -- Ambient Aura Halo Sync (in OverlayGui, positioned via AbsolutePosition)
+        local aAura = OverlayGui:FindFirstChild("TASFF_AmbientAura")
+        if aAura then
+            aAura.Visible = (isVis and isExpanded)
+            local aStroke = aAura:FindFirstChild("AuraStroke")
+            local aStroke2 = aAura:FindFirstChild("AuraStroke2")
+            local acc = GetThemeAccentColor()
+            if aStroke then
+                aStroke.Color = acc
+                aStroke.Transparency = math.clamp(0.40 + mainTrans * 0.60, 0, 1)
+            end
+            if aStroke2 then
+                aStroke2.Color = acc
+                aStroke2.Transparency = math.clamp(0.72 + mainTrans * 0.28, 0, 1)
+            end
+            -- Keep aura centered on mainFrame
+            if mainFrame and mainFrame.Parent then
+                local mPos = mainFrame.AbsolutePosition
+                local mSize = mainFrame.AbsoluteSize
+                local bleed = 22
+                aAura.Position = UDim2.new(0, mPos.X - bleed, 0, mPos.Y - bleed)
+                aAura.Size = UDim2.new(0, mSize.X + bleed * 2, 0, mSize.Y + bleed * 2)
             end
         end
 
@@ -2025,11 +2127,11 @@ local function PatchRayfieldDOM()
             end
         end
 
-        -- Main Window Carbon Mesh
+        -- Main Window Carbon Mesh (procedural Frame — sync BackgroundTransparency)
         local mMesh = mainFrame:FindFirstChild("MainCarbonMesh")
         if mMesh then
             mMesh.Visible = (isVis and isExpanded)
-            mMesh.ImageTransparency = math.clamp(0.60 + mainTrans * 0.40, 0, 1)
+            mMesh.BackgroundTransparency = math.clamp(0.78 + mainTrans * 0.22, 0, 1)
         end
 
         -- External TASFF_BottomBar sync (located in OverlayGui directly below menu)

@@ -352,10 +352,19 @@ HomeTab:CreateParagraph({
     Content = "Active features are marked [V], inactive [X]. Select a category from the dropdown below."
 })
 
--- UI Element Breakdown paragraph (counts populated by TASFF_Theme PatchRayfieldDOM)
+-- UI Element Breakdown paragraph (counts pulled directly from TASFF_Lists.lua)
 local FeatureOverviewParagraph = HomeTab:CreateParagraph({
     Title   = "UI Element Breakdown",
-    Content = "Scanning elements..."
+    Content = string.format(
+        "Toggles: %d  |  Buttons: %d  |  Sliders: %d\nDropdowns: %d  |  Keybinds: %d  |  Color Pickers: %d  |  Paragraphs: %d",
+        S.ToggleCount or 109,
+        S.ButtonCount or 36,
+        S.SliderCount or 40,
+        S.DropdownCount or 44,
+        S.KeybindCount or 6,
+        S.ColorPickerCount or 16,
+        S.ParagraphCount or 73
+    )
 })
 S.FeatureOverviewParagraph = FeatureOverviewParagraph
 

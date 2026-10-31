@@ -1406,39 +1406,36 @@ end
 TASFFEnv.Theme.SetTabBadge = SetTabBadge
 
 -- Universal Atmospheric Carbon Weave Texture & Control Hover Glow Helpers
--- Procedural carbon texture: applies a UIGradient directly onto the frame's own background.
--- Zero child Frames added → no AutomaticSize conflicts, no paragraph inflation.
+-- Applies UIGradient directly onto the frame background — zero child Frames, no AutomaticSize conflicts.
 local function AttachCarbonOverlay(targetFrame, _unused)
     if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
-    -- Mark as applied
+    -- Mark as applied (BoolValue = no size impact)
     local marker = Instance.new("BoolValue")
     marker.Name = "CarbonOverlay"
     marker.Parent = targetFrame
 
-    -- Apply diagonal stripe UIGradient directly on the frame background
-    -- (removes any existing UIGradient first so we don't double-stack)
+    -- Remove any existing UIGradient that's not the CyberGrad
     local existing = targetFrame:FindFirstChildOfClass("UIGradient")
     if existing and existing.Name ~= "CyberGrad" then existing:Destroy() end
 
+    -- Diagonal carbon-weave stripe gradient applied DIRECTLY to the frame's background.
+    -- High contrast: shifts between a darker and lighter band of the element's dark theme.
     local grad = Instance.new("UIGradient")
     grad.Name = "CarbonGradient"
     grad.Rotation = 45
+    -- Colors go from a near-black to a noticeably lighter blue-gray, creating visible diagonal striping
     grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,    Color3.fromRGB(38,  40,  55)),
-        ColorSequenceKeypoint.new(0.20, Color3.fromRGB(52,  55,  72)),
-        ColorSequenceKeypoint.new(0.40, Color3.fromRGB(35,  37,  50)),
-        ColorSequenceKeypoint.new(0.60, Color3.fromRGB(50,  53,  70)),
-        ColorSequenceKeypoint.new(0.80, Color3.fromRGB(36,  38,  52)),
-        ColorSequenceKeypoint.new(1,    Color3.fromRGB(38,  40,  55)),
+        ColorSequenceKeypoint.new(0,    Color3.fromRGB(18,  20,  30)),
+        ColorSequenceKeypoint.new(0.20, Color3.fromRGB(50,  53,  72)),
+        ColorSequenceKeypoint.new(0.40, Color3.fromRGB(18,  20,  30)),
+        ColorSequenceKeypoint.new(0.60, Color3.fromRGB(50,  53,  72)),
+        ColorSequenceKeypoint.new(0.80, Color3.fromRGB(18,  20,  30)),
+        ColorSequenceKeypoint.new(1,    Color3.fromRGB(50,  53,  72)),
     })
-    grad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0,    0.55),
-        NumberSequenceKeypoint.new(0.20, 0.30),
-        NumberSequenceKeypoint.new(0.40, 0.55),
-        NumberSequenceKeypoint.new(0.60, 0.30),
-        NumberSequenceKeypoint.new(0.80, 0.55),
-        NumberSequenceKeypoint.new(1,    0.55),
-    })
+    grad.Transparency = NumberSequence.new(
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(1, 0)
+    )
     grad.Parent = targetFrame
 end
 
@@ -1479,38 +1476,14 @@ local function PatchRayfieldDOM()
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
     end
 
-    -- 0. Window Dimensions State & Persistent Size Preserver across Open/Close
-    S.DesiredWindowWidth = S.DesiredWindowWidth or 640
+    -- 0. Window initial size (applied once — no hooks, no GetPropertyChangedSignal for size)
+    -- IMPORTANT: Do NOT add any AbsoluteSize listeners here. They fight Rayfield's open/close tween
+    -- and permanently break the toggle keybind. Just set size once, let Rayfield manage it.
+    S.DesiredWindowWidth  = S.DesiredWindowWidth  or 640
     S.DesiredWindowHeight = S.DesiredWindowHeight or 480
 
-    if mainFrame.AbsoluteSize.X < 600 and mainFrame.AbsoluteSize.Y > 100 then
-        mainFrame.Size = UDim2.new(0, S.DesiredWindowWidth, 0, math.max(S.DesiredWindowHeight, mainFrame.AbsoluteSize.Y))
-    end
-
-    if not mainFrame:FindFirstChild("SizePreserverHooked") then
-        local spHook = Instance.new("BoolValue", mainFrame)
-        spHook.Name = "SizePreserverHooked"
-
-        local _sizeDebounce = false
-        mainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-            if _resizing or _sizeDebounce then return end
-            -- Rayfield resets to 500px width whenever user toggles/opens the window
-            if mainFrame.Visible and mainFrame.AbsoluteSize.Y > 120 and mainFrame.AbsoluteSize.X < 590 then
-                _sizeDebounce = true
-                task.defer(function()
-                    if mainFrame and mainFrame.Parent and mainFrame.Visible and mainFrame.AbsoluteSize.Y > 120 then
-                        local tw = S.DesiredWindowWidth or 640
-                        local th = S.DesiredWindowHeight or math.max(480, mainFrame.AbsoluteSize.Y)
-                        mainFrame.Size = UDim2.new(0, tw, 0, th)
-                    end
-                    task.wait(0.2)
-                    _sizeDebounce = false
-                end)
-            end
-        end)
-    end
-
     -- 0a. Atmospheric Scanline Grid on Window Background (procedurally drawn — no rbxassetid)
+    -- Destroyed + recreated each PatchRayfieldDOM so it always overlays correctly.
     local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
     if existingMesh then existingMesh:Destroy() end
 
@@ -1518,41 +1491,39 @@ local function PatchRayfieldDOM()
     mCarbon.Name = "MainCarbonMesh"
     mCarbon.Size = UDim2.new(1, 0, 1, 0)
     mCarbon.Position = UDim2.new(0, 0, 0, 0)
-    mCarbon.BackgroundColor3 = Color3.fromRGB(25, 28, 38)
-    mCarbon.BackgroundTransparency = 0.78  -- slightly visible dark tint layer
+    mCarbon.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    mCarbon.BackgroundTransparency = 0.60  -- visible overlay
     mCarbon.BorderSizePixel = 0
-    mCarbon.ZIndex = 2
+    mCarbon.ZIndex = 3   -- above Elements scroll bg
+    mCarbon.Active = false  -- pass-through clicks
     Instance.new("UICorner", mCarbon).CornerRadius = UDim.new(0, 8)
 
-    -- Horizontal scanline effect using UIGradient (18 alternating keypoints = 9 scanline bands)
+    -- Horizontal scanlines: dark / bright / dark alternating — HIGH CONTRAST so they're visible
     local scanGrad = Instance.new("UIGradient", mCarbon)
-    scanGrad.Rotation = 90  -- horizontal bands
+    scanGrad.Rotation = 90
     scanGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,      Color3.fromRGB(20,  22,  32)),
-        ColorSequenceKeypoint.new(0.055,  Color3.fromRGB(40,  44,  58)),
-        ColorSequenceKeypoint.new(0.11,   Color3.fromRGB(20,  22,  32)),
-        ColorSequenceKeypoint.new(0.165,  Color3.fromRGB(40,  44,  58)),
-        ColorSequenceKeypoint.new(0.22,   Color3.fromRGB(20,  22,  32)),
-        ColorSequenceKeypoint.new(0.275,  Color3.fromRGB(40,  44,  58)),
-        ColorSequenceKeypoint.new(0.33,   Color3.fromRGB(20,  22,  32)),
-        ColorSequenceKeypoint.new(0.385,  Color3.fromRGB(40,  44,  58)),
-        ColorSequenceKeypoint.new(0.44,   Color3.fromRGB(20,  22,  32)),
-        ColorSequenceKeypoint.new(0.495,  Color3.fromRGB(40,  44,  58)),
-        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(20,  22,  32)),
-        ColorSequenceKeypoint.new(0.605,  Color3.fromRGB(40,  44,  58)),
-        ColorSequenceKeypoint.new(0.66,   Color3.fromRGB(20,  22,  32)),
-        ColorSequenceKeypoint.new(0.715,  Color3.fromRGB(40,  44,  58)),
-        ColorSequenceKeypoint.new(0.77,   Color3.fromRGB(20,  22,  32)),
-        ColorSequenceKeypoint.new(0.825,  Color3.fromRGB(40,  44,  58)),
-        ColorSequenceKeypoint.new(0.88,   Color3.fromRGB(20,  22,  32)),
-        ColorSequenceKeypoint.new(0.935,  Color3.fromRGB(40,  44,  58)),
-        ColorSequenceKeypoint.new(1,      Color3.fromRGB(20,  22,  32)),
+        ColorSequenceKeypoint.new(0,      Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0.055,  Color3.fromRGB(55,  58,  80)),
+        ColorSequenceKeypoint.new(0.11,   Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0.165,  Color3.fromRGB(55,  58,  80)),
+        ColorSequenceKeypoint.new(0.22,   Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0.275,  Color3.fromRGB(55,  58,  80)),
+        ColorSequenceKeypoint.new(0.33,   Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0.385,  Color3.fromRGB(55,  58,  80)),
+        ColorSequenceKeypoint.new(0.44,   Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0.495,  Color3.fromRGB(55,  58,  80)),
+        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0.605,  Color3.fromRGB(55,  58,  80)),
+        ColorSequenceKeypoint.new(0.66,   Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0.715,  Color3.fromRGB(55,  58,  80)),
+        ColorSequenceKeypoint.new(0.77,   Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0.825,  Color3.fromRGB(55,  58,  80)),
+        ColorSequenceKeypoint.new(0.88,   Color3.fromRGB(10,  10,  16)),
+        ColorSequenceKeypoint.new(0.935,  Color3.fromRGB(55,  58,  80)),
+        ColorSequenceKeypoint.new(1,      Color3.fromRGB(10,  10,  16)),
     })
-    scanGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0,    0.72),
-        NumberSequenceKeypoint.new(0.5,  0.60),
-        NumberSequenceKeypoint.new(1,    0.72),
-    })
+    -- Full opacity so gradient colours are pure; BackgroundTransparency above controls overall visibility
+    scanGrad.Transparency = NumberSequence.new(NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0))
 
     mCarbon.Parent = mainFrame
 
@@ -1671,7 +1642,8 @@ local function PatchRayfieldDOM()
             if ln:IsA("Frame") then ln.BackgroundColor3 = acc end
         end
     end
-    SyncAuraPosition()
+    SyncAuraPosition()  -- defer so menu has its final AbsolutePosition
+    task.defer(SyncAuraPosition)
     if not mainFrame:FindFirstChild("AuraSyncHooked") then
         local ahook = Instance.new("BoolValue", mainFrame)
         ahook.Name = "AuraSyncHooked"
@@ -2144,11 +2116,11 @@ local function PatchRayfieldDOM()
             end
         end
 
-        -- Main Window Carbon Mesh (procedural Frame — sync BackgroundTransparency)
+        -- Main Window Carbon Mesh (procedural Frame — stays at 0.60 base when visible)
         local mMesh = mainFrame:FindFirstChild("MainCarbonMesh")
         if mMesh then
             mMesh.Visible = (isVis and isExpanded)
-            mMesh.BackgroundTransparency = math.clamp(0.78 + mainTrans * 0.22, 0, 1)
+            mMesh.BackgroundTransparency = math.clamp(0.60 + mainTrans * 0.40, 0, 1)
         end
 
         -- External TASFF_BottomBar sync (located in OverlayGui directly below menu)
@@ -2455,7 +2427,7 @@ local function PatchRayfieldDOM()
                         Instance.new("UICorner", leftBar).CornerRadius = UDim.new(0, 2)
                     end
 
-                    -- Apply black outline box stroke to actual configuration element cards only
+                    -- Apply visible section box: dark fill + accent outline on each card in the section
                     local pastSec2 = false
                     for _, child in ipairs(boxContainer:GetChildren()) do
                         if child == secFrame then
@@ -2464,12 +2436,25 @@ local function PatchRayfieldDOM()
                             if child.Name == "SectionTitle" then break end
                             if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
                                 local isCard = child:FindFirstChild("Title") or child:FindFirstChild("Content") or child:FindFirstChild("Interact") or child:FindFirstChild("Switch") or child:FindFirstChild("Slider")
-                                if isCard and not child:FindFirstChild("SectionBoxStroke") then
-                                    local sboxStroke = Instance.new("UIStroke", child)
-                                    sboxStroke.Name = "SectionBoxStroke"
-                                    sboxStroke.Color = Color3.fromRGB(0, 0, 0)
-                                    sboxStroke.Thickness = 1.2
-                                    sboxStroke.Transparency = 0.35
+                                if isCard then
+                                    -- Dark fill — slightly darker than element background
+                                    if not child:FindFirstChild("SectionBoxStroke") then
+                                        -- Apply a visible accent-colored box outline
+                                        local sboxStroke = Instance.new("UIStroke", child)
+                                        sboxStroke.Name = "SectionBoxStroke"
+                                        sboxStroke.Color = GetThemeAccentColor()
+                                        sboxStroke.Thickness = 1.0
+                                        sboxStroke.Transparency = 0.60
+                                        -- Also give the card a slightly darker fill via BackgroundColor3
+                                        pcall(function()
+                                            local orig = child.BackgroundColor3
+                                            child.BackgroundColor3 = Color3.fromRGB(
+                                                math.clamp(math.floor(orig.R * 255 * 0.80), 0, 255),
+                                                math.clamp(math.floor(orig.G * 255 * 0.80), 0, 255),
+                                                math.clamp(math.floor(orig.B * 255 * 0.80), 0, 255)
+                                            )
+                                        end)
+                                    end
                                 end
                             end
                         end

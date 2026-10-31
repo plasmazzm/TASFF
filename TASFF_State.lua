@@ -248,7 +248,7 @@ _G.TASFF_State = {
     },
 
     -- // ── Script Meta ────────────────────────────────────────── // --
-    MenuToggleKey               = "RightControl", -- keybind to toggle/reopen the menu (also supports K, Insert)
+    MenuToggleKey               = "K", -- default Rayfield toggle keybind (avoids conflict with RightShift)
     MasterSwitchKeybind         = "RightShift", -- keybind to toggle master switch on/off
     AimbotKeybind               = "E",
     PanicKeybind                = "Delete",

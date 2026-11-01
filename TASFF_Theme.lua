@@ -1984,6 +1984,30 @@ local function PatchRayfieldDOM()
         end)
     end
 
+    if S.AdvancedThemeLayoutPatchEnabled ~= true then
+        if not mainFrame:FindFirstChild("SafeBottomBarTracker") then
+            local tracker = Instance.new("BoolValue")
+            tracker.Name = "SafeBottomBarTracker"
+            tracker.Parent = mainFrame
+            table.insert(Connections, RunService.RenderStepped:Connect(function()
+                if not bottomBar or not bottomBar.Parent or not mainFrame.Parent then return end
+                local visible = mainFrame.Visible and (not rGui or rGui.Enabled ~= false)
+                bottomBar.Visible = visible and mainFrame.AbsoluteSize.Y > 60
+                if bottomBar.Visible then
+                    local parentPosition = mainFrame.Parent.AbsolutePosition
+                    local absolutePosition = mainFrame.AbsolutePosition
+                    bottomBar.AnchorPoint = Vector2.new(0, 0)
+                    bottomBar.Position = UDim2.fromOffset(
+                        absolutePosition.X - parentPosition.X,
+                        absolutePosition.Y - parentPosition.Y + mainFrame.AbsoluteSize.Y + 4
+                    )
+                    bottomBar.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X, 26)
+                end
+            end))
+        end
+        return true
+    end
+
     -- 1. Window Resize Handle is now on TASFF_BottomBar (external). Remove any legacy one inside mainFrame.
     local legacyResize = mainFrame:FindFirstChild("ResizeHandle")
     if legacyResize then legacyResize:Destroy() end

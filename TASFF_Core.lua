@@ -4767,7 +4767,13 @@ getgenv().TASFF.Cleanup = function()
     for _, parent in ipairs(parentsToClean) do
         pcall(function()
             for _, child in ipairs(parent:GetChildren()) do
-                if child.Name == "TASFF_UI" or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                if child.Name == "TASFF_UI"
+                    or child.Name == "TASFF_OverlayGui"
+                    or child.Name == "TASFF_BottomBar"
+                    or child.Name == "TASFF_AmbientHalo"
+                    or child.Name == "TASFF_AmbientAura"
+                    or child.Name:find("Rayfield")
+                    or child.Name:find("Sirius") then
                     pcall(function() child:Destroy() end)
                 end
             end

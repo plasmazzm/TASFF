@@ -2862,8 +2862,6 @@ local RayfieldVisibilityBound = false
 local function SyncRayfieldVisibility()
     local rGui = FindRayfieldGui and FindRayfieldGui()
     local mainFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
-    -- Do not hide custom UI merely because Rayfield has not mounted yet or is
-    -- temporarily being rebuilt during reinjection.
     if not rGui or not mainFrame then return end
     local isVisible = rGui.Enabled ~= false and mainFrame.Visible ~= false
 
@@ -2871,17 +2869,10 @@ local function SyncRayfieldVisibility()
         OverlayGui.Enabled = isVisible
     end
 
-    if rGui and rGui.Parent then
+    local parent = mainFrame.Parent
+    if parent then
         for _, name in ipairs({"TASFF_AmbientHalo", "TASFF_BottomBar"}) do
-            local external = rGui.Parent:FindFirstChild(name)
-            if external and external:IsA("GuiObject") then
-                external.Visible = isVisible
-            end
-        end
-    end
-    if mainFrame.Parent then
-        for _, name in ipairs({"TASFF_AmbientHalo", "TASFF_BottomBar"}) do
-            local external = mainFrame.Parent:FindFirstChild(name)
+            local external = parent:FindFirstChild(name)
             if external and external:IsA("GuiObject") then
                 external.Visible = isVisible
             end
@@ -2919,9 +2910,7 @@ local function DestroyTheme()
 
     if OverlayGui then
         OverlayGui.Enabled = false
-        if OverlayGui.Parent then
-            OverlayGui:Destroy()
-        end
+        pcall(function() OverlayGui:Destroy() end)
     end
 
     local parents = {}
@@ -2931,3 +2920,46 @@ local function DestroyTheme()
             if h then table.insert(parents, h) end
         end
     end)
+    pcall(function() table.insert(parents, game:GetService("CoreGui")) end)
+    pcall(function()
+        local pg = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        if pg then table.insert(parents, pg) end
+    end)
+    for _, parent in ipairs(parents) do
+        for _, name in ipairs({
+            "TASFF_AmbientHalo",
+            "TASFF_BottomBar",
+            "TASFF_AmbientAura",
+        }) do
+            local child = parent:FindFirstChild(name)
+            if child then
+                pcall(function() child:Destroy() end)
+            end
+        end
+    end
+end
+
+TASFFEnv.Theme.BindRayfieldVisibility = BindRayfieldVisibility
+TASFFEnv.Theme.SyncRayfieldVisibility = SyncRayfieldVisibility
+TASFFEnv.Theme.Destroy = DestroyTheme
+
+-- Defer initial DOM patch until UI is completely built by TASFF_UI.lua
+task.spawn(function()
+    while not (S.UIInitialized or S.ScriptInitialized) do
+        task.wait(0.2)
+    end
+    task.wait(0.2)
+    for i = 1, 2 do
+        task.wait(0.4)
+        local ok, res = pcall(PatchRayfieldDOM)
+        if ok and res then
+            S.ThemePatchDone = true
+        elseif not ok then
+            warn("[TASFF Theme] PatchRayfieldDOM error on pass " .. i .. ": " .. tostring(res))
+        end
+    end
+end)
+
+TASFFEnv.Theme.PatchRayfieldDOM = PatchRayfieldDOM
+
+print("[TASFF Theme v" .. (S.CurrentVersion or "2.3.0") .. "] Theme module and extensions fully loaded.")

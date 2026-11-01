@@ -1586,7 +1586,7 @@ local function PatchRayfieldDOM()
             bottomBar = Instance.new("Frame")
             bottomBar.Name = "TASFF_BottomBar"
             bottomBar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
-            bottomBar.BackgroundTransparency = 0.1
+            bottomBar.BackgroundTransparency = 0
             bottomBar.BorderSizePixel = 0
             bottomBar.ZIndex = mainFrame.ZIndex + 10
             bottomBar.Parent = parent
@@ -1606,6 +1606,20 @@ local function PatchRayfieldDOM()
             label.TextXAlignment = Enum.TextXAlignment.Left
             label.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [TASFF]"
             label.Parent = bottomBar
+        end
+        bottomBar.BackgroundColor3 = Color3.fromRGB(14, 18, 26)
+        bottomBar.BackgroundTransparency = 0
+        bottomBar.ZIndex = math.max(bottomBar.ZIndex, mainFrame.ZIndex + 10)
+        local bottomStroke = bottomBar:FindFirstChildOfClass("UIStroke")
+        if bottomStroke then
+            bottomStroke.Color = GetThemeAccentColor()
+            bottomStroke.Transparency = 0
+            bottomStroke.Thickness = 1
+        end
+        local statusLabel = bottomBar:FindFirstChild("SafeStatus")
+        if statusLabel then
+            statusLabel.TextColor3 = Color3.fromRGB(235, 240, 250)
+            statusLabel.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [TASFF]"
         end
 
         local topbar = mainFrame:FindFirstChild("Topbar", true)
@@ -1651,12 +1665,15 @@ local function PatchRayfieldDOM()
             if bellStroke then bellStroke.Color = GetThemeAccentColor() end
         end
 
-        -- Add decoration only to existing cards. No native visibility, size,
-        -- parent, or layout properties are changed in the safe path.
-        for _, desc in ipairs(mainFrame:GetDescendants()) do
-            if desc:IsA("Frame") and desc.Parent and
-                (desc.Parent.Name == "Elements" or desc.Parent:FindFirstChildOfClass("UIListLayout")) and
-                not desc:FindFirstChild("SafeCardDecoration") then
+        -- Add decoration only to direct children of Rayfield's content list.
+        -- No native visibility, size, parent, or layout properties are changed.
+        local elements = mainFrame:FindFirstChild("Elements", true)
+        if elements then
+            for _, desc in ipairs(elements:GetChildren()) do
+                if desc:IsA("Frame") and desc.Name ~= "Template" and
+                    (desc:FindFirstChild("Title") or desc:FindFirstChild("Content") or
+                     desc:FindFirstChild("Interact") or desc:FindFirstChild("Switch")) and
+                    not desc:FindFirstChild("SafeCardDecoration") then
                 local marker = Instance.new("BoolValue")
                 marker.Name = "SafeCardDecoration"
                 marker.Parent = desc
@@ -1664,8 +1681,23 @@ local function PatchRayfieldDOM()
                 stroke.Name = "SafeCardStroke"
                 stroke.Color = GetThemeAccentColor()
                 stroke.Thickness = 1
-                stroke.Transparency = 0.72
+                stroke.Transparency = 0.45
                 stroke.Parent = desc
+                local gradient = Instance.new("UIGradient")
+                gradient.Name = "SafeCardGradient"
+                gradient.Rotation = 35
+                gradient.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Color3.fromRGB(28, 34, 46)),
+                    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(15, 18, 26)),
+                    ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 34, 46)),
+                })
+                gradient.Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0.35),
+                    NumberSequenceKeypoint.new(0.5, 0.7),
+                    NumberSequenceKeypoint.new(1, 0.35),
+                })
+                gradient.Parent = desc
+                end
             end
         end
 

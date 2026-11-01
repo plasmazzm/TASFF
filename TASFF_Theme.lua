@@ -404,12 +404,14 @@ local function ApplyRayfieldTheme(themeColors)
     elseif type(rGui) == "table" then
         mainFrame = rGui.Main or rGui.main
     end
+    if mainFrame and typeof(mainFrame) ~= "Instance" then
+        mainFrame = nil
+    end
     if not mainFrame then
         rGui = FindRayfieldGui and FindRayfieldGui()
         mainFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
     end
-    if not rGui then return false end
-    if not mainFrame then return false end
+    if not rGui or not mainFrame or typeof(mainFrame) ~= "Instance" then return false end
 
     local function setColor(instance, property, color)
         if color and instance and instance:IsA("GuiObject") then
@@ -1407,32 +1409,34 @@ FindRayfieldGui = function()
         if pg then table.insert(containers, pg) end
     end)
 
+    local function isRayfieldScreenGui(screenGui)
+        if not screenGui or not screenGui:IsA("ScreenGui") then return false end
+        if screenGui.Name == "TASFF_OverlayGui" or screenGui.Name == "TASFF_Overlay" then return false end
+
+        local main = screenGui:FindFirstChild("Main", true)
+        return main ~= nil and main:IsA("GuiObject")
+    end
+
     for _, container in ipairs(containers) do
-        -- 1. Try finding Main frame recursively
-        local main = container:FindFirstChild("Main", true)
-        if main and main:IsA("GuiObject") and main:FindFirstChild("Topbar") and main:FindFirstChild("Elements") then
-            local sg = main:FindFirstAncestorWhichIsA("ScreenGui")
-            if sg and sg.Name ~= "TASFF_OverlayGui" and sg.Name ~= "TASFF_Overlay" then
-                return sg
-            end
-            if main.Parent and main.Parent:IsA("ScreenGui") then return main.Parent end
-        end
-        -- 2. Try by direct child
+        -- Prefer a named Rayfield/Sirius GUI when several ScreenGuis exist.
         for _, child in ipairs(container:GetChildren()) do
-            if child:IsA("ScreenGui") and child.Name ~= "TASFF_OverlayGui" and child.Name ~= "TASFF_Overlay" then
-                local m = child:FindFirstChild("Main")
-                if m and m:IsA("GuiObject") and m:FindFirstChild("Topbar") and m:FindFirstChild("Elements") then
+            if isRayfieldScreenGui(child) then
+                local name = child.Name:lower()
+                if name:find("rayfield") or name:find("sirius") then
                     return child
                 end
             end
         end
-        -- 3. Try by name
+
+        -- Rayfield versions and forks use different internal child layouts.
         for _, child in ipairs(container:GetChildren()) do
-            if child:IsA("ScreenGui") and child.Name ~= "TASFF_OverlayGui" and child.Name ~= "TASFF_Overlay" then
-                local n = child.Name:lower()
-                if n:find("rayfield") or n:find("sirius") then
-                    return child
-                end
+            if isRayfieldScreenGui(child) then return child end
+        end
+
+        -- Some executors place the ScreenGui below a non-ScreenGui wrapper.
+        for _, descendant in ipairs(container:GetDescendants()) do
+            if isRayfieldScreenGui(descendant) then
+                return descendant
             end
         end
     end
@@ -2848,7 +2852,10 @@ local RayfieldVisibilityBound = false
 local function SyncRayfieldVisibility()
     local rGui = FindRayfieldGui and FindRayfieldGui()
     local mainFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
-    local isVisible = rGui ~= nil and rGui.Enabled ~= false and mainFrame ~= nil and mainFrame.Visible ~= false
+    -- Do not hide custom UI merely because Rayfield has not mounted yet or is
+    -- temporarily being rebuilt during reinjection.
+    if not rGui or not mainFrame then return end
+    local isVisible = rGui.Enabled ~= false and mainFrame.Visible ~= false
 
     if OverlayGui then
         OverlayGui.Enabled = isVisible

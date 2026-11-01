@@ -222,6 +222,36 @@ end
 
 LoadColorSettings()
 
+local function ApplyGlobalThemePalette(themeName)
+    local palette = GlobalThemePalettes[themeName]
+    if not palette then return false end
+
+    for _, entry in ipairs(GlobalThemeColorFields) do
+        local color = ColorFromHex and ColorFromHex(palette[entry.role])
+        if not color then
+            local hex = palette[entry.role]
+            local value = tonumber(string.gsub(hex, "^#", ""), 16)
+            color = Color3.fromRGB(
+                bit32.band(bit32.rshift(value, 16), 255),
+                bit32.band(bit32.rshift(value, 8), 255),
+                bit32.band(value, 255)
+            )
+        end
+        if entry.field then
+            S[entry.field] = color
+        elseif entry.themeField then
+            ThemeColors[entry.themeField] = color
+        end
+    end
+
+    if TASFFTheme and TASFFTheme.ApplyRayfieldTheme then
+        TASFFTheme.ApplyRayfieldTheme(ThemeColors)
+    end
+    return true
+end
+
+ApplyGlobalThemePalette(selectedGlobalTheme)
+
 -- Auto-load persisted key on startup
 if (TASFFEnv.Capabilities or {}).FileRead then
     local kf = S.KeyFileName or "TASFF_Key.dat"
@@ -2768,6 +2798,7 @@ local ThemeDropdown = CustomizationTab:CreateDropdown({
         selectedGlobalTheme = themeName
         UpdateGlobalThemeMonitor(selectedGlobalTheme)
         UpdateWindowTitle(selectedGlobalTheme)
+        ApplyGlobalThemePalette(selectedGlobalTheme)
         ScheduleColorSettingsSave()
     end,
 })
@@ -2811,6 +2842,9 @@ CustomizationTab:CreateButton({
                 local control = Rayfield.Flags and Rayfield.Flags[flag]
                 if control then control:Set(color) end
             end
+        end
+        if TASFFTheme and TASFFTheme.ApplyRayfieldTheme then
+            TASFFTheme.ApplyRayfieldTheme(ThemeColors)
         end
         -- Turn off all individual preset override toggles so the chosen theme's colors are active without override conflicts
         local PresetOverrideFlags = {
@@ -3999,6 +4033,9 @@ if TASFFTheme and TASFFTheme.BindRayfieldVisibility then
     task.spawn(function()
         for _ = 1, 20 do
             if TASFFTheme.BindRayfieldVisibility() then
+                if TASFFTheme.ApplyRayfieldTheme then
+                    TASFFTheme.ApplyRayfieldTheme(ThemeColors)
+                end
                 break
             end
             task.wait(0.1)

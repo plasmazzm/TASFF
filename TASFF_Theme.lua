@@ -1485,6 +1485,10 @@ end
 
 -- Patch sections, tooltips, search bar, state dots, tab badges, and resize handle
 local function PatchRayfieldDOM()
+    if S.AdvancedThemePatchEnabled ~= true then
+        return false
+    end
+
     local rGui = FindRayfieldGui()
     if not rGui then return false end
 
@@ -2778,6 +2782,68 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 
 
+
+local RayfieldVisibilityConnections = {}
+local RayfieldVisibilityBound = false
+
+local function SyncRayfieldVisibility()
+    local rGui = FindRayfieldGui and FindRayfieldGui()
+    local mainFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
+    local isVisible = rGui ~= nil and rGui.Enabled ~= false and mainFrame ~= nil and mainFrame.Visible ~= false
+
+    if OverlayGui then
+        OverlayGui.Enabled = isVisible
+    end
+
+    if rGui and rGui.Parent then
+        for _, name in ipairs({"TASFF_AmbientHalo", "TASFF_BottomBar"}) do
+            local external = rGui.Parent:FindFirstChild(name)
+            if external and external:IsA("GuiObject") then
+                external.Visible = isVisible
+            end
+        end
+    end
+end
+
+local function BindRayfieldVisibility()
+    if RayfieldVisibilityBound then
+        SyncRayfieldVisibility()
+        return
+    end
+
+    local rGui = FindRayfieldGui and FindRayfieldGui()
+    local mainFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
+    if not rGui or not mainFrame then
+        return false
+    end
+
+    RayfieldVisibilityBound = true
+    table.insert(RayfieldVisibilityConnections, rGui:GetPropertyChangedSignal("Enabled"):Connect(SyncRayfieldVisibility))
+    table.insert(RayfieldVisibilityConnections, mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldVisibility))
+    table.insert(Connections, RayfieldVisibilityConnections[#RayfieldVisibilityConnections])
+    table.insert(Connections, RayfieldVisibilityConnections[#RayfieldVisibilityConnections - 1])
+    SyncRayfieldVisibility()
+    return true
+end
+
+local function DestroyTheme()
+    for _, conn in ipairs(RayfieldVisibilityConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(RayfieldVisibilityConnections)
+    RayfieldVisibilityBound = false
+
+    if OverlayGui then
+        OverlayGui.Enabled = false
+        if OverlayGui.Parent then
+            OverlayGui:Destroy()
+        end
+    end
+end
+
+TASFFEnv.Theme.BindRayfieldVisibility = BindRayfieldVisibility
+TASFFEnv.Theme.SyncRayfieldVisibility = SyncRayfieldVisibility
+TASFFEnv.Theme.Destroy = DestroyTheme
 
 -- Defer initial DOM patch until UI is completely built by TASFF_UI.lua
 task.spawn(function()

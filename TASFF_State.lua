@@ -363,6 +363,7 @@ _G.TASFF_State = {
     MobileModeEnabled           = false,     -- mobile touch mode
     UIOpacity                   = 1.0,       -- window opacity (0.3 to 1.0)
     AdvancedThemePatchEnabled   = true,      -- apply TASFF visual enhancements after native Rayfield controls are built
+    AdvancedThemeLayoutPatchEnabled = false, -- keep native Rayfield layout and visibility authoritative
     EventLog                    = {},        -- session event log entries
     LastTouchedDef              = "Master Switch",
     LastTouchedDefText          = "Global killswitch for all combat systems.",
@@ -477,4 +478,3 @@ _G.TASFF_State = {
 }
 
 
-print("[TASFF State] Shared state table initialised.")

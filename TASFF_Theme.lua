@@ -1586,7 +1586,7 @@ local function PatchRayfieldDOM()
             bottomBar = Instance.new("Frame")
             bottomBar.Name = "TASFF_BottomBar"
             bottomBar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
-            bottomBar.BackgroundTransparency = 0
+            bottomBar.BackgroundTransparency = 0.18
             bottomBar.BorderSizePixel = 0
             bottomBar.ZIndex = mainFrame.ZIndex + 10
             bottomBar.Parent = parent
@@ -1608,7 +1608,7 @@ local function PatchRayfieldDOM()
             label.Parent = bottomBar
         end
         bottomBar.BackgroundColor3 = Color3.fromRGB(14, 18, 26)
-        bottomBar.BackgroundTransparency = 0
+        bottomBar.BackgroundTransparency = 0.18
         bottomBar.ZIndex = math.max(bottomBar.ZIndex, mainFrame.ZIndex + 10)
         local bottomStroke = bottomBar:FindFirstChildOfClass("UIStroke")
         if bottomStroke then
@@ -1636,33 +1636,8 @@ local function PatchRayfieldDOM()
             end
             accentLine.BackgroundColor3 = GetThemeAccentColor()
 
-            local bell = topbar:FindFirstChild("SafeNotificationBell")
-            if not bell then
-                bell = Instance.new("TextButton")
-                bell.Name = "SafeNotificationBell"
-                bell.Size = UDim2.fromOffset(24, 22)
-                bell.Position = UDim2.new(1, -92, 0.5, -11)
-                bell.BackgroundColor3 = Color3.fromRGB(28, 32, 42)
-                bell.BackgroundTransparency = 0.15
-                bell.BorderSizePixel = 0
-                bell.Font = Enum.Font.GothamBold
-                bell.TextSize = 11
-                bell.TextColor3 = Color3.fromRGB(220, 230, 240)
-                bell.Text = "N"
-                bell.ZIndex = topbar.ZIndex + 2
-                bell.Parent = topbar
-                Instance.new("UICorner", bell).CornerRadius = UDim.new(0, 5)
-                local bellStroke = Instance.new("UIStroke", bell)
-                bellStroke.Color = GetThemeAccentColor()
-                bellStroke.Thickness = 1
-                bell.MouseButton1Click:Connect(function()
-                    if TASFFEnv.Theme.ToggleNotificationDrawer then
-                        TASFFEnv.Theme.ToggleNotificationDrawer()
-                    end
-                end)
-            end
-            local bellStroke = bell:FindFirstChildOfClass("UIStroke")
-            if bellStroke then bellStroke.Color = GetThemeAccentColor() end
+            local safeBell = topbar:FindFirstChild("SafeNotificationBell")
+            if safeBell then safeBell:Destroy() end
         end
 
         -- Add decoration only to direct children of Rayfield's content list.
@@ -1712,7 +1687,7 @@ local function PatchRayfieldDOM()
                 local absolutePosition = mainFrame.AbsolutePosition
                 local visible = mainFrame.Visible and rGui.Enabled ~= false
                 OverlayGui.Enabled = visible
-                HUDStrip.Visible = visible and (S.HUDStripEnabled ~= false)
+                HUDStrip.Visible = S.HUDStripEnabled ~= false
                 halo.Visible = visible
                 halo.Position = UDim2.fromOffset(
                     absolutePosition.X - parentPosition.X - 8,
@@ -1720,25 +1695,13 @@ local function PatchRayfieldDOM()
                 )
                 halo.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X + 16, mainFrame.AbsoluteSize.Y + 16)
                 bottomBar.Visible = visible
+                bottomBar.BackgroundTransparency = 0.18
                 bottomBar.Position = UDim2.fromOffset(
                     absolutePosition.X - parentPosition.X,
                     absolutePosition.Y - parentPosition.Y + mainFrame.AbsoluteSize.Y + 4
                 )
                 bottomBar.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X, 26)
 
-                local safeBell = topbar and topbar:FindFirstChild("SafeNotificationBell")
-                if safeBell and topbar then
-                    local leftControlX = topbar.AbsoluteSize.X - 128
-                    for _, child in ipairs(topbar:GetChildren()) do
-                        if child ~= safeBell and child:IsA("GuiObject") then
-                            local childX = child.AbsolutePosition.X - topbar.AbsolutePosition.X
-                            if childX > topbar.AbsoluteSize.X * 0.55 then
-                                leftControlX = math.min(leftControlX, childX - safeBell.AbsoluteSize.X - 6)
-                            end
-                        end
-                    end
-                    safeBell.Position = UDim2.fromOffset(math.max(8, leftControlX), math.floor((topbar.AbsoluteSize.Y - safeBell.AbsoluteSize.Y) / 2))
-                end
             end))
         end
         return true

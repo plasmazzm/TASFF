@@ -3992,73 +3992,19 @@ for key, color in pairs(PersistedColorValues) do
     end
 end
 
--- // ============================================================ // --
--- Replaces the old push-based EnforceActiveTabState approach, which had two bugs:
---  1. Tab button clicks were tracked via MouseButton1Click — Rayfield may use Activated
---     or overlay frames, so the click often didn't register, leaving CurrentActiveTabName
---     permanently stuck on "Home".
---  2. On window reopen, the Visible handler immediately forced "Home" visible and hid
---     whatever tab Rayfield had natively selected, causing the wrong-tab symptom.
---
--- New approach: we attach a Visible observer to EACH tab container. Whenever Rayfield
--- itself shows a container (via its own internal routing), we record that as the active
--- tab and hide any others that leaked visibility. This is purely reactive — no timer
--- polls, no forced overrides on window open.
-
-local TabRegistry = {
-    { Name = "Home",       Tab = HomeTab         },
-    { Name = "Combat",     Tab = MainTab         },
-    { Name = "Visuals",    Tab = VisualTab       },
-    { Name = "Triggerbot", Tab = TriggerbotTab   },
-    { Name = "Intel",      Tab = IntelTab        },
-    { Name = "Advanced",   Tab = AdvancedTab     },
-    { Name = "Settings",   Tab = SettingsTab     },
-    { Name = "Presets",    Tab = PresetsTab      },
-    { Name = "Theming",    Tab = CustomizationTab},
-    { Name = "Misc",       Tab = MiscTab         },
-    { Name = "System",     Tab = SystemTab       },
-    { Name = "Update Log", Tab = UpdateLogTab    },
-}
-
-local function ResolveTabContainer(tabObj)
-    if type(tabObj) ~= "table" then return nil end
-    return tabObj.Container or tabObj.ElementsFrame or tabObj.Frame or tabObj.Page or tabObj.Scroller
-end
-
--- Observe each tab container. When Rayfield makes a container Visible, record it as the
--- canonical active tab and collapse any other container that incorrectly became visible
--- at the same time (e.g. due to animation or Rayfield re-render).
-local _tabSyncGuard = false  -- prevents re-entrant chained callbacks
-
-for _, entry in ipairs(TabRegistry) do
-    local c = ResolveTabContainer(entry.Tab)
-    if c and typeof(c) == "Instance" then
-        table.insert(getgenv().TASFF.Connections, c:GetPropertyChangedSignal("Visible"):Connect(function()
-            if _tabSyncGuard then return end
-            if not c.Visible then return end  -- only care about containers becoming visible
-            -- This container just became visible — it is now the active tab
-            local activeName = entry.Name
-            S._CurrentActiveTab = activeName
-            -- Collapse all other tab containers that might also be showing
-            _tabSyncGuard = true
-            for _, other in ipairs(TabRegistry) do
-                if other.Name ~= activeName then
-                    local oc = ResolveTabContainer(other.Tab)
-                    if oc and typeof(oc) == "Instance" and oc.Visible then
-                        pcall(function() oc.Visible = false end)
-                    end
-                end
-            end
-            _tabSyncGuard = false
-            if TASFFTheme and TASFFTheme.PatchRayfieldDOM then
-                task.defer(TASFFTheme.PatchRayfieldDOM)
-            end
-        end))
-    end
-end
-
 S.UIInitialized = true
 print("[TASFF UI] Interface constructed. Configuration loaded.")
+
+if TASFFTheme and TASFFTheme.BindRayfieldVisibility then
+    task.spawn(function()
+        for _ = 1, 20 do
+            if TASFFTheme.BindRayfieldVisibility() then
+                break
+            end
+            task.wait(0.1)
+        end
+    end)
+end
 
 -- Trigger theme runtime patch immediately upon UI creation
 if TASFFTheme and TASFFTheme.PatchRayfieldDOM then
@@ -4067,9 +4013,3 @@ if TASFFTheme and TASFFTheme.PatchRayfieldDOM then
         TASFFTheme.PatchRayfieldDOM()
     end)
 end
-
-
-
-
-
-

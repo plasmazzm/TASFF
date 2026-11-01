@@ -1558,7 +1558,81 @@ end
 -- Patch sections, tooltips, search bar, state dots, tab badges, and resize handle
 local function PatchRayfieldDOM()
     if S.AdvancedThemePatchEnabled ~= true then
-        return false
+        local rGui = FindRayfieldGui()
+        local mainFrame = rGui and rGui:FindFirstChild("Main", true)
+        if not mainFrame or not mainFrame.Parent then return false end
+
+        local parent = mainFrame.Parent
+        local halo = parent:FindFirstChild("TASFF_AmbientHalo")
+        if not halo then
+            halo = Instance.new("Frame")
+            halo.Name = "TASFF_AmbientHalo"
+            halo.BackgroundColor3 = GetThemeAccentColor()
+            halo.BackgroundTransparency = 0.88
+            halo.BorderSizePixel = 0
+            halo.ZIndex = math.max(0, mainFrame.ZIndex - 1)
+            halo.Parent = parent
+            local stroke = Instance.new("UIStroke")
+            stroke.Name = "HaloStroke"
+            stroke.Color = GetThemeAccentColor()
+            stroke.Thickness = 8
+            stroke.Transparency = 0.75
+            stroke.Parent = halo
+            Instance.new("UICorner", halo).CornerRadius = UDim.new(0, 10)
+        end
+
+        local bottomBar = parent:FindFirstChild("TASFF_BottomBar")
+        if not bottomBar then
+            bottomBar = Instance.new("Frame")
+            bottomBar.Name = "TASFF_BottomBar"
+            bottomBar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
+            bottomBar.BackgroundTransparency = 0.1
+            bottomBar.BorderSizePixel = 0
+            bottomBar.ZIndex = mainFrame.ZIndex + 10
+            bottomBar.Parent = parent
+            Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 6)
+            local barStroke = Instance.new("UIStroke", bottomBar)
+            barStroke.Color = GetThemeAccentColor()
+            barStroke.Transparency = 0.45
+
+            local label = Instance.new("TextLabel")
+            label.Name = "SafeStatus"
+            label.BackgroundTransparency = 1
+            label.Size = UDim2.new(1, -12, 1, 0)
+            label.Position = UDim2.fromOffset(8, 0)
+            label.Font = Enum.Font.GothamBold
+            label.TextSize = 10
+            label.TextColor3 = Color3.fromRGB(220, 225, 235)
+            label.TextXAlignment = Enum.TextXAlignment.Left
+            label.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [TASFF]"
+            label.Parent = bottomBar
+        end
+
+        local tracker = mainFrame:FindFirstChild("SafeVisualTracker")
+        if not tracker then
+            tracker = Instance.new("BoolValue")
+            tracker.Name = "SafeVisualTracker"
+            tracker.Parent = mainFrame
+            table.insert(Connections, RunService.RenderStepped:Connect(function()
+                if not mainFrame.Parent or not halo.Parent then return end
+                local parentPosition = parent.AbsolutePosition
+                local absolutePosition = mainFrame.AbsolutePosition
+                local visible = mainFrame.Visible and rGui.Enabled ~= false
+                halo.Visible = visible
+                halo.Position = UDim2.fromOffset(
+                    absolutePosition.X - parentPosition.X - 8,
+                    absolutePosition.Y - parentPosition.Y - 8
+                )
+                halo.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X + 16, mainFrame.AbsoluteSize.Y + 16)
+                bottomBar.Visible = visible
+                bottomBar.Position = UDim2.fromOffset(
+                    absolutePosition.X - parentPosition.X,
+                    absolutePosition.Y - parentPosition.Y + mainFrame.AbsoluteSize.Y + 4
+                )
+                bottomBar.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X, 26)
+            end))
+        end
+        return true
     end
 
     local rGui = FindRayfieldGui()
@@ -1571,7 +1645,6 @@ local function PatchRayfieldDOM()
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
     end
     mainFrame.ClipsDescendants = false
-    mainFrame.ZIndex = 2  -- Ensure mainFrame is above background halo (ZIndex 0)
 
     -- 0a. Atmospheric Scanline Grid on Window Background (directly on mainFrame — CAN NEVER COVER CARDS)
     local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
@@ -1608,13 +1681,6 @@ local function PatchRayfieldDOM()
         ColorSequenceKeypoint.new(1,      Color3.fromRGB(65,  72,  100)),
     })
     scanGrad.Transparency = NumberSequence.new(0)
-
-    -- Make Rayfield's Elements scroll container transparent so the carbon background shines through!
-    for _, el in ipairs(mainFrame:GetDescendants()) do
-        if el.Name == "Elements" and el:IsA("ScrollingFrame") then
-            el.BackgroundTransparency = 1
-        end
-    end
 
     -- 0b. Animated Cyber Neon Border with Rotating Gradient
     local cyberStroke = mainFrame:FindFirstChild("CyberStroke")
@@ -1659,12 +1725,6 @@ local function PatchRayfieldDOM()
     if mainFrame.Parent then
         local legacyAuraParent = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
         if legacyAuraParent then legacyAuraParent:Destroy() end
-    end
-
-    -- Strictly disable/hide any native shadow inside mainFrame so it NEVER obstructs text or controls
-    local nativeShadow = mainFrame:FindFirstChild("Shadow")
-    if nativeShadow then
-        nativeShadow.Visible = false
     end
 
     -- Create genuine soft halo in mainFrame.Parent (the Rayfield ScreenGui) with ZIndex = 0

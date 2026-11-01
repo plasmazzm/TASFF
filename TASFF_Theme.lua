@@ -10,6 +10,7 @@ if not S then warn("[TASFF Theme] State not ready."); return end
 local TASFFEnv = (getgenv and getgenv().TASFF) or {}
 local Connections = TASFFEnv.Connections or {}
 local FindRayfieldGui = nil -- declared forward so early functions (e.g. UpdateDrawerPosition) can call it
+local RayfieldWindow = nil
 
 -- ── Base Theme Defaults ──────────────────────────────────────────
 local ThemeColorDefaults = {
@@ -396,9 +397,18 @@ local function ApplyRayfieldTheme(themeColors)
     if type(themeColors) ~= "table" then return false end
     TASFFEnv.Theme.ActiveThemeColors = themeColors
 
-    local rGui = FindRayfieldGui and FindRayfieldGui()
+    local rGui = RayfieldWindow
+    local mainFrame
+    if rGui and typeof(rGui) == "Instance" then
+        mainFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
+    elseif type(rGui) == "table" then
+        mainFrame = rGui.Main or rGui.main
+    end
+    if not mainFrame then
+        rGui = FindRayfieldGui and FindRayfieldGui()
+        mainFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
+    end
     if not rGui then return false end
-    local mainFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
     if not mainFrame then return false end
 
     local function setColor(instance, property, color)
@@ -436,6 +446,10 @@ local function ApplyRayfieldTheme(themeColors)
     return true
 end
 TASFFEnv.Theme.ApplyRayfieldTheme = ApplyRayfieldTheme
+TASFFEnv.Theme.SetRayfieldWindow = function(window)
+    RayfieldWindow = window
+    return ApplyRayfieldTheme(TASFFEnv.Theme.ActiveThemeColors)
+end
 
 -- // ============================================================ // --
 -- //   RUNTIME UI EXTENSIONS & OVERLAYS                          // --

@@ -1563,6 +1563,14 @@ local function PatchRayfieldDOM()
         if not mainFrame or not mainFrame.Parent then return false end
 
         local parent = mainFrame.Parent
+        mainFrame.BackgroundColor3 = Color3.fromRGB(15, 20, 27)
+        mainFrame.BackgroundTransparency = 0.03
+
+        local oldGrid = mainFrame:FindFirstChild("SafeCarbonGrid")
+        if oldGrid then
+            oldGrid:Destroy()
+        end
+
         local halo = parent:FindFirstChild("TASFF_AmbientHalo")
         if not halo then
             halo = Instance.new("Frame")
@@ -1751,24 +1759,6 @@ local function PatchRayfieldDOM()
                 end
 
             end
-        end
-
-        local grid = mainFrame:FindFirstChild("SafeCarbonGrid")
-        if not grid then
-            grid = Instance.new("UIGradient")
-            grid.Name = "SafeCarbonGrid"
-            grid.Rotation = 90
-            grid.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(12, 16, 24)),
-                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(28, 34, 46)),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 16, 24)),
-            })
-            grid.Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.18),
-                NumberSequenceKeypoint.new(0.5, 0.45),
-                NumberSequenceKeypoint.new(1, 0.18),
-            })
-            grid.Parent = mainFrame
         end
 
         local tracker = mainFrame:FindFirstChild("SafeVisualTracker")

@@ -324,7 +324,7 @@ local Window = Rayfield:CreateWindow(_windowCfg or {
 })
 
 if TASFFTheme and TASFFTheme.SetRayfieldWindow then
-    TASFFTheme.SetRayfieldWindow(Rayfield)
+    TASFFTheme.SetRayfieldWindow(Window)
 end
 
 

@@ -1608,6 +1608,67 @@ local function PatchRayfieldDOM()
             label.Parent = bottomBar
         end
 
+        local topbar = mainFrame:FindFirstChild("Topbar", true)
+        if topbar then
+            local accentLine = topbar:FindFirstChild("SafeAccentLine")
+            if not accentLine then
+                accentLine = Instance.new("Frame")
+                accentLine.Name = "SafeAccentLine"
+                accentLine.Size = UDim2.new(1, 0, 0, 1)
+                accentLine.Position = UDim2.new(0, 0, 1, -1)
+                accentLine.BorderSizePixel = 0
+                accentLine.ZIndex = topbar.ZIndex + 1
+                accentLine.Parent = topbar
+            end
+            accentLine.BackgroundColor3 = GetThemeAccentColor()
+
+            local bell = topbar:FindFirstChild("SafeNotificationBell")
+            if not bell then
+                bell = Instance.new("TextButton")
+                bell.Name = "SafeNotificationBell"
+                bell.Size = UDim2.fromOffset(24, 22)
+                bell.Position = UDim2.new(1, -92, 0.5, -11)
+                bell.BackgroundColor3 = Color3.fromRGB(28, 32, 42)
+                bell.BackgroundTransparency = 0.15
+                bell.BorderSizePixel = 0
+                bell.Font = Enum.Font.GothamBold
+                bell.TextSize = 11
+                bell.TextColor3 = Color3.fromRGB(220, 230, 240)
+                bell.Text = "N"
+                bell.ZIndex = topbar.ZIndex + 2
+                bell.Parent = topbar
+                Instance.new("UICorner", bell).CornerRadius = UDim.new(0, 5)
+                local bellStroke = Instance.new("UIStroke", bell)
+                bellStroke.Color = GetThemeAccentColor()
+                bellStroke.Thickness = 1
+                bell.MouseButton1Click:Connect(function()
+                    if TASFFEnv.Theme.ToggleNotificationDrawer then
+                        TASFFEnv.Theme.ToggleNotificationDrawer()
+                    end
+                end)
+            end
+            local bellStroke = bell:FindFirstChildOfClass("UIStroke")
+            if bellStroke then bellStroke.Color = GetThemeAccentColor() end
+        end
+
+        -- Add decoration only to existing cards. No native visibility, size,
+        -- parent, or layout properties are changed in the safe path.
+        for _, desc in ipairs(mainFrame:GetDescendants()) do
+            if desc:IsA("Frame") and desc.Parent and
+                (desc.Parent.Name == "Elements" or desc.Parent:FindFirstChildOfClass("UIListLayout")) and
+                not desc:FindFirstChild("SafeCardDecoration") then
+                local marker = Instance.new("BoolValue")
+                marker.Name = "SafeCardDecoration"
+                marker.Parent = desc
+                local stroke = Instance.new("UIStroke")
+                stroke.Name = "SafeCardStroke"
+                stroke.Color = GetThemeAccentColor()
+                stroke.Thickness = 1
+                stroke.Transparency = 0.72
+                stroke.Parent = desc
+            end
+        end
+
         local tracker = mainFrame:FindFirstChild("SafeVisualTracker")
         if not tracker then
             tracker = Instance.new("BoolValue")

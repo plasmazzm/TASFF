@@ -392,6 +392,51 @@ local function RenderThemePreviewCard(container, themeName)
 end
 TASFFEnv.Theme.RenderThemePreviewCard = RenderThemePreviewCard
 
+local function ApplyRayfieldTheme(themeColors)
+    if type(themeColors) ~= "table" then return false end
+    TASFFEnv.Theme.ActiveThemeColors = themeColors
+
+    local rGui = FindRayfieldGui and FindRayfieldGui()
+    if not rGui then return false end
+    local mainFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
+    if not mainFrame then return false end
+
+    local function setColor(instance, property, color)
+        if color and instance and instance:IsA("GuiObject") then
+            instance[property] = color
+        end
+    end
+
+    setColor(mainFrame, "BackgroundColor3", themeColors.Background)
+
+    local topbar = mainFrame:FindFirstChild("Topbar", true)
+    setColor(topbar, "BackgroundColor3", themeColors.Topbar)
+
+    local elements = mainFrame:FindFirstChild("Elements", true)
+    if elements and elements:IsA("ScrollingFrame") then
+        elements.BackgroundColor3 = themeColors.Background
+    end
+
+    for _, descendant in ipairs(mainFrame:GetDescendants()) do
+        if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+            descendant.TextColor3 = themeColors.TextColor
+        elseif descendant:IsA("ScrollingFrame") then
+            descendant.ScrollBarImageColor3 = themeColors.TabBackgroundSelected
+        end
+
+        if descendant.Name == "Tab" or descendant.Name == "TabButton" then
+            descendant.BackgroundColor3 = themeColors.ElementBackground
+        elseif descendant.Name == "Interact" or descendant.Name == "Switch" then
+            descendant.BackgroundColor3 = themeColors.ElementBackground
+        elseif descendant.Name == "Slider" or descendant.Name == "SliderBar" or descendant.Name == "Progress" then
+            descendant.BackgroundColor3 = themeColors.TabBackgroundSelected
+        end
+    end
+
+    return true
+end
+TASFFEnv.Theme.ApplyRayfieldTheme = ApplyRayfieldTheme
+
 -- // ============================================================ // --
 -- //   RUNTIME UI EXTENSIONS & OVERLAYS                          // --
 -- // ============================================================ // --

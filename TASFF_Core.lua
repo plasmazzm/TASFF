@@ -1064,6 +1064,9 @@ local function UnloadScript(isRestarting)
     if S.ToolAddedConnection then pcall(function() S.ToolAddedConnection:Disconnect() end); S.ToolAddedConnection = nil end
     if S.ToolRemovedConnection then pcall(function() S.ToolRemovedConnection:Disconnect() end); S.ToolRemovedConnection = nil end
     if getgenv().TASFF and getgenv().TASFF.Cleanup then pcall(getgenv().TASFF.Cleanup) end
+    if TASFFEnv and TASFFEnv.Theme and TASFFEnv.Theme.Destroy then
+        pcall(TASFFEnv.Theme.Destroy)
+    end
     if getgenv().TASFF and getgenv().TASFF.Connections then
         for _, conn in pairs(getgenv().TASFF.Connections) do
             pcall(function() conn:Disconnect() end)
@@ -4727,6 +4730,9 @@ task.spawn(function()
 end)
 
 getgenv().TASFF.Cleanup = function()
+    if TASFFEnv and TASFFEnv.Theme and TASFFEnv.Theme.Destroy then
+        pcall(TASFFEnv.Theme.Destroy)
+    end
     pcall(function() hookmetamethod(game,"__index",oldIndex) end)
     pcall(function() hookmetamethod(game,"__namecall",oldNamecall) end)
     if getgenv().TASFF.Drawings then

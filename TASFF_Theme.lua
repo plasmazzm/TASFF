@@ -1414,7 +1414,16 @@ FindRayfieldGui = function()
         if screenGui.Name == "TASFF_OverlayGui" or screenGui.Name == "TASFF_Overlay" then return false end
 
         local main = screenGui:FindFirstChild("Main", true)
-        return main ~= nil and main:IsA("GuiObject")
+        if not main or not main:IsA("GuiObject") then return false end
+
+        local titleMatch = false
+        for _, label in ipairs(main:GetDescendants()) do
+            if (label:IsA("TextLabel") or label:IsA("TextButton")) and label.Text:find("TASFF", 1, true) then
+                titleMatch = true
+                break
+            end
+        end
+        return titleMatch or main:FindFirstChild("Topbar", true) ~= nil or main:FindFirstChild("Elements", true) ~= nil
     end
 
     for _, container in ipairs(containers) do
@@ -2049,7 +2058,7 @@ local function PatchRayfieldDOM()
     local function SyncRayfieldFade()
         local topTrans = (topbar and topbar.BackgroundTransparency) or mainFrame.BackgroundTransparency
         local mainTrans = mainFrame.BackgroundTransparency
-        local isVis = ((not rGui or rGui.Enabled) and mainFrame.Visible and topTrans < 0.95 and mainTrans < 0.95)
+        local isVis = ((not rGui or rGui.Enabled) and mainFrame.Visible)
         local isExpanded = (mainFrame.AbsoluteSize.Y > 60)
 
         -- CyberStroke
@@ -2309,8 +2318,9 @@ local function PatchRayfieldDOM()
             end
         end
 
-        -- Section Header Collapse/Expand Injection
-        if desc:IsA("GuiObject") and desc.Name == "SectionTitle" then
+        -- Section Header Collapse/Expand Injection. Native Rayfield owns layout
+        -- and visibility by default; this opt-in path is intentionally isolated.
+        if S.AdvancedThemeLayoutPatchEnabled == true and desc:IsA("GuiObject") and desc.Name == "SectionTitle" then
             local secFrame = desc
             if not secFrame:FindFirstChild("CollapseToggle") then
                 local toggleBtn = Instance.new("TextButton")
@@ -2869,6 +2879,14 @@ local function SyncRayfieldVisibility()
             end
         end
     end
+    if mainFrame.Parent then
+        for _, name in ipairs({"TASFF_AmbientHalo", "TASFF_BottomBar"}) do
+            local external = mainFrame.Parent:FindFirstChild(name)
+            if external and external:IsA("GuiObject") then
+                external.Visible = isVisible
+            end
+        end
+    end
 end
 
 local function BindRayfieldVisibility()
@@ -2905,29 +2923,11 @@ local function DestroyTheme()
             OverlayGui:Destroy()
         end
     end
-end
 
-TASFFEnv.Theme.BindRayfieldVisibility = BindRayfieldVisibility
-TASFFEnv.Theme.SyncRayfieldVisibility = SyncRayfieldVisibility
-TASFFEnv.Theme.Destroy = DestroyTheme
-
--- Defer initial DOM patch until UI is completely built by TASFF_UI.lua
-task.spawn(function()
-    while not (S.UIInitialized or S.ScriptInitialized) do
-        task.wait(0.2)
-    end
-    task.wait(0.2)
-    for i = 1, 2 do
-        task.wait(0.4)
-        local ok, res = pcall(PatchRayfieldDOM)
-        if ok and res then
-            S.ThemePatchDone = true
-        elseif not ok then
-            warn("[TASFF Theme] PatchRayfieldDOM error on pass " .. i .. ": " .. tostring(res))
+    local parents = {}
+    pcall(function()
+        if typeof(gethui) == "function" then
+            local h = gethui()
+            if h then table.insert(parents, h) end
         end
-    end
-end)
-
-TASFFEnv.Theme.PatchRayfieldDOM = PatchRayfieldDOM
-
-print("[TASFF Theme v" .. (S.CurrentVersion or "2.3.0") .. "] Theme module and extensions fully loaded.")
+    end)

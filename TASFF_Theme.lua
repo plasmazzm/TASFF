@@ -1711,6 +1711,8 @@ local function PatchRayfieldDOM()
                 local parentPosition = parent.AbsolutePosition
                 local absolutePosition = mainFrame.AbsolutePosition
                 local visible = mainFrame.Visible and rGui.Enabled ~= false
+                OverlayGui.Enabled = visible
+                HUDStrip.Visible = visible and (S.HUDStripEnabled ~= false)
                 halo.Visible = visible
                 halo.Position = UDim2.fromOffset(
                     absolutePosition.X - parentPosition.X - 8,
@@ -1723,6 +1725,20 @@ local function PatchRayfieldDOM()
                     absolutePosition.Y - parentPosition.Y + mainFrame.AbsoluteSize.Y + 4
                 )
                 bottomBar.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X, 26)
+
+                local safeBell = topbar and topbar:FindFirstChild("SafeNotificationBell")
+                if safeBell and topbar then
+                    local leftControlX = topbar.AbsoluteSize.X - 128
+                    for _, child in ipairs(topbar:GetChildren()) do
+                        if child ~= safeBell and child:IsA("GuiObject") then
+                            local childX = child.AbsolutePosition.X - topbar.AbsolutePosition.X
+                            if childX > topbar.AbsoluteSize.X * 0.55 then
+                                leftControlX = math.min(leftControlX, childX - safeBell.AbsoluteSize.X - 6)
+                            end
+                        end
+                    end
+                    safeBell.Position = UDim2.fromOffset(math.max(8, leftControlX), math.floor((topbar.AbsoluteSize.Y - safeBell.AbsoluteSize.Y) / 2))
+                end
             end))
         end
         return true

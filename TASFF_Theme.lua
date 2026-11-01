@@ -1598,14 +1598,36 @@ local function PatchRayfieldDOM()
             local label = Instance.new("TextLabel")
             label.Name = "SafeStatus"
             label.BackgroundTransparency = 1
-            label.Size = UDim2.new(1, -12, 1, 0)
-            label.Position = UDim2.fromOffset(8, 0)
+            label.Size = UDim2.new(1, -220, 1, 0)
+            label.Position = UDim2.fromOffset(32, 0)
             label.Font = Enum.Font.GothamBold
             label.TextSize = 10
             label.TextColor3 = Color3.fromRGB(220, 225, 235)
             label.TextXAlignment = Enum.TextXAlignment.Left
             label.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [TASFF]"
             label.Parent = bottomBar
+
+            local avatar = Instance.new("ImageLabel")
+            avatar.Name = "SafeAvatar"
+            avatar.BackgroundTransparency = 1
+            avatar.Size = UDim2.fromOffset(20, 20)
+            avatar.Position = UDim2.fromOffset(7, 3)
+            avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
+            avatar.ZIndex = bottomBar.ZIndex + 1
+            avatar.Parent = bottomBar
+            Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
+
+            local stats = Instance.new("TextLabel")
+            stats.Name = "SafeStats"
+            stats.BackgroundTransparency = 1
+            stats.Size = UDim2.new(0, 170, 1, 0)
+            stats.Position = UDim2.new(1, -178, 0, 0)
+            stats.Font = Enum.Font.GothamBold
+            stats.TextSize = 9
+            stats.TextColor3 = Color3.fromRGB(180, 215, 220)
+            stats.TextXAlignment = Enum.TextXAlignment.Right
+            stats.Text = "TASFF  |  READY"
+            stats.Parent = bottomBar
         end
         bottomBar.BackgroundColor3 = Color3.fromRGB(14, 18, 26)
         bottomBar.BackgroundTransparency = 0.18
@@ -1620,6 +1642,33 @@ local function PatchRayfieldDOM()
         if statusLabel then
             statusLabel.TextColor3 = Color3.fromRGB(235, 240, 250)
             statusLabel.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [TASFF]"
+        end
+        local avatar = bottomBar:FindFirstChild("SafeAvatar")
+        if avatar then
+            avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
+        else
+            avatar = Instance.new("ImageLabel")
+            avatar.Name = "SafeAvatar"
+            avatar.BackgroundTransparency = 1
+            avatar.Size = UDim2.fromOffset(20, 20)
+            avatar.Position = UDim2.fromOffset(7, 3)
+            avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
+            avatar.ZIndex = bottomBar.ZIndex + 1
+            avatar.Parent = bottomBar
+            Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
+        end
+        if not bottomBar:FindFirstChild("SafeStats") then
+            local stats = Instance.new("TextLabel")
+            stats.Name = "SafeStats"
+            stats.BackgroundTransparency = 1
+            stats.Size = UDim2.new(0, 170, 1, 0)
+            stats.Position = UDim2.new(1, -178, 0, 0)
+            stats.Font = Enum.Font.GothamBold
+            stats.TextSize = 9
+            stats.TextColor3 = Color3.fromRGB(180, 215, 220)
+            stats.TextXAlignment = Enum.TextXAlignment.Right
+            stats.Text = "TASFF  |  READY"
+            stats.Parent = bottomBar
         end
 
         local topbar = mainFrame:FindFirstChild("Topbar", true)
@@ -1637,7 +1686,34 @@ local function PatchRayfieldDOM()
             accentLine.BackgroundColor3 = GetThemeAccentColor()
 
             local safeBell = topbar:FindFirstChild("SafeNotificationBell")
-            if safeBell then safeBell:Destroy() end
+            if not safeBell then
+                safeBell = Instance.new("TextButton")
+                safeBell.Name = "SafeNotificationBell"
+                safeBell.Size = UDim2.fromOffset(22, 22)
+                safeBell.AnchorPoint = Vector2.new(1, 0.5)
+                safeBell.Position = UDim2.new(1, -44, 0.5, 0)
+                safeBell.BackgroundColor3 = Color3.fromRGB(28, 32, 42)
+                safeBell.BackgroundTransparency = 0.2
+                safeBell.BorderSizePixel = 0
+                safeBell.Font = Enum.Font.GothamBold
+                safeBell.TextSize = 10
+                safeBell.TextColor3 = Color3.fromRGB(220, 230, 240)
+                safeBell.Text = "!"
+                safeBell.ZIndex = topbar.ZIndex + 2
+                safeBell.Parent = topbar
+                Instance.new("UICorner", safeBell).CornerRadius = UDim.new(0, 5)
+                local safeBellStroke = Instance.new("UIStroke", safeBell)
+                safeBellStroke.Color = GetThemeAccentColor()
+                safeBellStroke.Thickness = 1
+                safeBell.MouseButton1Click:Connect(function()
+                    if TASFFEnv.Theme.ToggleNotificationDrawer then
+                        TASFFEnv.Theme.ToggleNotificationDrawer()
+                    end
+                end)
+            end
+            safeBell.Position = UDim2.new(1, -44, 0.5, 0)
+            local safeBellStroke = safeBell:FindFirstChildOfClass("UIStroke")
+            if safeBellStroke then safeBellStroke.Color = GetThemeAccentColor() end
         end
 
         -- Add decoration only to direct children of Rayfield's content list.
@@ -1673,7 +1749,26 @@ local function PatchRayfieldDOM()
                 })
                 gradient.Parent = desc
                 end
+
             end
+        end
+
+        local grid = mainFrame:FindFirstChild("SafeCarbonGrid")
+        if not grid then
+            grid = Instance.new("UIGradient")
+            grid.Name = "SafeCarbonGrid"
+            grid.Rotation = 90
+            grid.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(12, 16, 24)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(28, 34, 46)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 16, 24)),
+            })
+            grid.Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.18),
+                NumberSequenceKeypoint.new(0.5, 0.45),
+                NumberSequenceKeypoint.new(1, 0.18),
+            })
+            grid.Parent = mainFrame
         end
 
         local tracker = mainFrame:FindFirstChild("SafeVisualTracker")

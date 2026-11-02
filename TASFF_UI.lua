@@ -282,7 +282,6 @@ local Window = Rayfield:CreateWindow(_windowCfg or {
     Icon            = 0,
     LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
-    ToggleUIKeybind = (typeof(S.MenuToggleKey) == "EnumItem" and S.MenuToggleKey) or (typeof(S.MenuToggleKey) == "string" and Enum.KeyCode[S.MenuToggleKey]) or Enum.KeyCode.K,
     Theme = {
         TextColor                     = ThemeColors.TextColor,
         Background                    = ThemeColors.Background,
@@ -2784,6 +2783,99 @@ local function UpdateGlobalThemeMonitor(themeName)
         end)
     end)
 end
+
+-- Applies a full global preset: visual colours, shared theme tables, the live
+-- Rayfield window and TASFF overlays. Both the dropdown and the apply button
+-- use this so they can never drift out of sync.
+local function ApplyGlobalThemePreset(themeName, silent)
+    local palette = GlobalThemePalettes[themeName]
+    if not palette then return false end
+
+    selectedGlobalTheme = themeName
+
+    local themeFlagMap = {
+        Background = "UIThemeBg",
+        Topbar = "UIThemeTopbar",
+        TabBackgroundSelected = "UIThemeAccent",
+        ElementBackground = "UIThemeElemBg",
+        TextColor = "UIThemeText",
+    }
+
+    for _, entry in ipairs(GlobalThemeColorFields) do
+        local color = ColorFromHex(palette[entry.role])
+        if entry.field then
+            S[entry.field] = color
+            local flag = ColorFlagMap[entry.field]
+            local control = flag and Rayfield.Flags and Rayfield.Flags[flag]
+            if control and control.Set then
+                pcall(function() control:Set(color) end)
+            end
+        elseif entry.themeField then
+            ThemeColors[entry.themeField] = color
+            local flag = themeFlagMap[entry.themeField]
+            local control = flag and Rayfield.Flags and Rayfield.Flags[flag]
+            if control and control.Set then
+                pcall(function() control:Set(color) end)
+            end
+        end
+    end
+
+    if TASFFTheme and TASFFTheme.ApplyRayfieldTheme then
+        TASFFTheme.ApplyRayfieldTheme(ThemeColors)
+    end
+
+    -- Repaint the whole Rayfield interface in one pass. ModifyTheme is the
+    -- only path that refreshes tabs, strokes, inputs, toggles and dropdowns.
+    if Window and Window.ModifyTheme and TASFFTheme and TASFFTheme.BuildRayfieldThemeTable then
+        local originalNotify = Rayfield.Notify
+        Rayfield.Notify = function() end -- suppress Rayfield's own "Theme Changed" toast
+        local ok, err = pcall(function()
+            Window.ModifyTheme(TASFFTheme.BuildRayfieldThemeTable(ThemeColors))
+        end)
+        Rayfield.Notify = originalNotify
+        if not ok and S.DebugMode then
+            warn("[TASFF UI] ModifyTheme failed: " .. tostring(err))
+        end
+    end
+
+    -- Turn off individual preset override toggles so the chosen theme's
+    -- colours are active without override conflicts.
+    local PresetOverrideFlags = {
+        "HighlightPresetToggle", "FOVPresetToggle", "CrosshairPresetToggle",
+        "BoxPresetToggle", "SkelPresetToggle", "SnapPresetToggle",
+        "PrioPresetToggle", "ThreatPresetToggle", "NemesisPresetToggle",
+        "BlacklistPresetToggle", "ChamsPresetToggle", "KillFlashPresetToggle",
+        "VisiblePresetToggle", "HiddenPresetToggle", "EnvESPPresetToggle",
+    }
+    for _, flag in ipairs(PresetOverrideFlags) do
+        local ctrl = Rayfield.Flags and Rayfield.Flags[flag]
+        if ctrl and ctrl.Set then
+            pcall(function() ctrl:Set(false) end)
+        end
+    end
+
+    if _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(S.FOVColor) end
+    if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(S.CrosshairColor) end
+
+    UpdateGlobalThemeMonitor(themeName)
+    UpdateWindowTitle(themeName)
+
+    if TASFFEnv and TASFFEnv.Theme and TASFFEnv.Theme.PatchRayfieldDOM then
+        pcall(TASFFEnv.Theme.PatchRayfieldDOM)
+    end
+    ScheduleColorSettingsSave()
+
+    if not silent and S.Notify then
+        S.Notify({
+            Title = "Global Theme Applied",
+            Content = themeName .. " theme and visual colors applied live.",
+            Duration = 4,
+            Image = "palette",
+        })
+    end
+    return true
+end
+
 GlobalThemeMonitor = CustomizationTab:CreateParagraph({
     Title = "Preset Preview — " .. selectedGlobalTheme,
     Content = "Select a theme to preview its visual and interface colors.",
@@ -2799,11 +2891,7 @@ local ThemeDropdown = CustomizationTab:CreateDropdown({
             warn("[TASFF UI] Ignoring unknown global theme selection: " .. tostring(themeName))
             return
         end
-        selectedGlobalTheme = themeName
-        UpdateGlobalThemeMonitor(selectedGlobalTheme)
-        UpdateWindowTitle(selectedGlobalTheme)
-        ApplyGlobalThemePalette(selectedGlobalTheme)
-        ScheduleColorSettingsSave()
+        ApplyGlobalThemePreset(themeName, true)
     end,
 })
 
@@ -2821,101 +2909,8 @@ UpdateWindowTitle(selectedGlobalTheme)
 CustomizationTab:CreateButton({
     Name = "Apply Chosen Preset",
     Callback = function()
-        local palette = GlobalThemePalettes[selectedGlobalTheme]
-        if not palette then
+        if not ApplyGlobalThemePreset(selectedGlobalTheme, false) then
             warn("[TASFF UI] Cannot apply unknown global theme: " .. tostring(selectedGlobalTheme))
-            return
-        end
-        local themeFlagMap = {
-            Background = "UIThemeBg",
-            Topbar = "UIThemeTopbar",
-            TabBackgroundSelected = "UIThemeAccent",
-            ElementBackground = "UIThemeElemBg",
-            TextColor = "UIThemeText",
-        }
-        for _, entry in ipairs(GlobalThemeColorFields) do
-            local color = ColorFromHex(palette[entry.role])
-            if entry.field then
-                S[entry.field] = color
-                local flag = ColorFlagMap[entry.field]
-                local control = flag and Rayfield.Flags and Rayfield.Flags[flag]
-                if control then control:Set(color) end
-            elseif entry.themeField then
-                ThemeColors[entry.themeField] = color
-                local flag = themeFlagMap[entry.themeField]
-                local control = Rayfield.Flags and Rayfield.Flags[flag]
-                if control then control:Set(color) end
-            end
-        end
-        if TASFFTheme and TASFFTheme.ApplyRayfieldTheme then
-            TASFFTheme.ApplyRayfieldTheme(ThemeColors)
-        end
-        -- Turn off all individual preset override toggles so the chosen theme's colors are active without override conflicts
-        local PresetOverrideFlags = {
-            "HighlightPresetToggle", "FOVPresetToggle", "CrosshairPresetToggle",
-            "BoxPresetToggle", "SkelPresetToggle", "SnapPresetToggle",
-            "PrioPresetToggle", "ThreatPresetToggle", "NemesisPresetToggle",
-            "BlacklistPresetToggle", "ChamsPresetToggle", "KillFlashPresetToggle",
-            "VisiblePresetToggle", "HiddenPresetToggle", "EnvESPPresetToggle",
-        }
-        for _, flag in ipairs(PresetOverrideFlags) do
-            local ctrl = Rayfield.Flags and Rayfield.Flags[flag]
-            if ctrl and ctrl.Set then
-                pcall(function() ctrl:Set(false) end)
-            end
-        end
-
-        if _G.UpdateFOVCircleColor then _G.UpdateFOVCircleColor(S.FOVColor) end
-        if _G.UpdateCrosshairColor then _G.UpdateCrosshairColor(S.CrosshairColor) end
-        UpdateWindowTitle(selectedGlobalTheme)
-        ScheduleColorSettingsSave()
-
-        -- Dynamic live theme repaint
-        if Window and Window.ModifyTheme then
-            pcall(function()
-                Window.ModifyTheme({
-                    TextColor                     = ThemeColors.TextColor,
-                    Background                    = ThemeColors.Background,
-                    Topbar                        = ThemeColors.Topbar,
-                    Shadow                        = Color3.fromRGB(10, 10, 10),
-                    NotificationBackground        = Color3.fromRGB(15, 15, 15),
-                    NotificationActionsBackground = Color3.fromRGB(35, 35, 35),
-                    TabBackground                 = Color3.fromRGB(25, 25, 25),
-                    TabStroke                     = ThemeColors.ElementBackground,
-                    TabBackgroundSelected         = ThemeColors.TabBackgroundSelected,
-                    TabTextColor                  = ThemeColors.TextColor,
-                    SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
-                    ElementBackground             = ThemeColors.ElementBackground,
-                    ElementBackgroundHover        = Color3.fromRGB(35, 35, 35),
-                    SecondaryElementBackground    = Color3.fromRGB(20, 20, 20),
-                    ElementStroke                 = Color3.fromRGB(40, 40, 40),
-                    SecondaryElementStroke        = Color3.fromRGB(35, 35, 35),
-                    SliderBackground              = ThemeColors.ElementBackground,
-                    SliderProgress                = ThemeColors.TabBackgroundSelected,
-                    SliderStroke                  = ThemeColors.TabBackgroundSelected,
-                    ToggleBackground              = ThemeColors.ElementBackground,
-                    ToggleEnabled                 = ThemeColors.TabBackgroundSelected,
-                    ToggleDisabled                = Color3.fromRGB(60, 60, 60),
-                    ToggleEnabledStroke           = ThemeColors.TabBackgroundSelected,
-                    ToggleDisabledStroke          = Color3.fromRGB(80, 80, 80),
-                    ToggleEnabledOuterStroke      = ThemeColors.TabBackgroundSelected,
-                    ToggleDisabledOuterStroke     = Color3.fromRGB(45, 45, 45),
-                    DropdownSelected              = ThemeColors.TabBackgroundSelected,
-                    DropdownUnselected            = Color3.fromRGB(25, 25, 25),
-                    InputBackground               = Color3.fromRGB(20, 20, 20),
-                    InputStroke                   = ThemeColors.TabBackgroundSelected,
-                    PlaceholderColor              = Color3.fromRGB(150, 150, 150),
-                })
-            end)
-        end
-
-        if S.Notify then
-            S.Notify({
-                Title = "Global Theme Applied",
-                Content = selectedGlobalTheme .. " theme and visual colors applied live.",
-                Duration = 4,
-                Image = "palette",
-            })
         end
     end,
 })
@@ -4052,5 +4047,8 @@ if TASFFTheme and TASFFTheme.PatchRayfieldDOM then
     task.spawn(function()
         task.wait(0.15)
         TASFFTheme.PatchRayfieldDOM()
+        -- Re-apply the persisted preset after the DOM patch so a saved theme
+        -- fully repaints on load instead of only its partial colors.
+        ApplyGlobalThemePreset(selectedGlobalTheme, true)
     end)
 end

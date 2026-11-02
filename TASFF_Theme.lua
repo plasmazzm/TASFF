@@ -110,6 +110,55 @@ local GlobalThemeColorFields = {
     {title="UI Element BG",     themeField="ElementBackground",         role="UIElement"},
     {title="UI Text",           themeField="TextColor",                 role="UIText"},
 }
+-- Builds a complete Rayfield theme table from a small set of base colours.
+-- Everything (tab/button/input/toggle/dropdown strokes, hovers, notifications)
+-- is derived from the palette so switching presets repaints the WHOLE window
+-- instead of leaving hardcoded dark greys behind.
+local function BuildRayfieldThemeTable(tc)
+    tc = tc or ThemeColorDefaults
+    local bg     = tc.Background or ThemeColorDefaults.Background
+    local top    = tc.Topbar or ThemeColorDefaults.Topbar
+    local accent = tc.TabBackgroundSelected or ThemeColorDefaults.TabBackgroundSelected
+    local elem   = tc.ElementBackground or ThemeColorDefaults.ElementBackground
+    local text   = tc.TextColor or ThemeColorDefaults.TextColor
+
+    local function lerp(a, b, t) return a:Lerp(b, t) end
+
+    return {
+        TextColor                     = text,
+        Background                    = bg,
+        Topbar                        = top,
+        Shadow                        = Color3.fromRGB(10, 10, 10),
+        NotificationBackground        = lerp(bg, elem, 0.35),
+        NotificationActionsBackground = lerp(elem, accent, 0.12),
+        TabBackground                 = bg,
+        TabStroke                     = lerp(elem, accent, 0.25),
+        TabBackgroundSelected         = accent,
+        TabTextColor                  = text,
+        SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
+        ElementBackground             = elem,
+        ElementBackgroundHover        = lerp(elem, text, 0.12),
+        SecondaryElementBackground    = lerp(bg, elem, 0.85),
+        ElementStroke                 = lerp(elem, accent, 0.30),
+        SecondaryElementStroke        = lerp(elem, accent, 0.18),
+        SliderBackground              = elem,
+        SliderProgress                = accent,
+        SliderStroke                  = accent,
+        ToggleBackground              = elem,
+        ToggleEnabled                 = accent,
+        ToggleDisabled                = lerp(elem, bg, 0.50),
+        ToggleEnabledStroke           = accent,
+        ToggleDisabledStroke          = lerp(elem, bg, 0.30),
+        ToggleEnabledOuterStroke      = accent,
+        ToggleDisabledOuterStroke     = lerp(elem, bg, 0.40),
+        DropdownSelected              = accent,
+        DropdownUnselected            = bg,
+        InputBackground               = lerp(bg, elem, 0.70),
+        InputStroke                   = accent,
+        PlaceholderColor              = lerp(text, bg, 0.45),
+    }
+end
+
 -- ── Tooltip / Glossary Definitions Map ───────────────────────────
 local ControlTooltips = {
     ["Master Switch"] = "Global killswitch for all combat systems. When off, no aimbot, triggerbot, or locks run.",
@@ -141,48 +190,15 @@ local ControlTooltips = {
 --- Returns Rayfield Window Config
 local function GetWindowConfig(themeColors, selectedThemeName)
     local tc = themeColors or ThemeColorDefaults
-    local toggleKey = (typeof(S.MenuToggleKey) == "EnumItem" and S.MenuToggleKey)
-        or (typeof(S.MenuToggleKey) == "string" and Enum.KeyCode[S.MenuToggleKey])
-        or Enum.KeyCode.K
+    -- NOTE: ToggleUIKeybind is deliberately omitted. Rayfield persists the
+    -- user's chosen "Rayfield Keybind" in Rayfield/settings.rfld; passing this
+    -- field on every launch overrode (and therefore reset) that saved choice.
     return {
         Name            = "TASFF " .. (S.CurrentVersion or "2.3.0") .. " - " .. (selectedThemeName or "Default"),
         Icon            = 0,
         LoadingTitle    = "The Aimbot Script Final Form",
         LoadingSubtitle = "by Plasmazzm",
-        ToggleUIKeybind = toggleKey,
-        Theme = {
-            TextColor                     = tc.TextColor,
-            Background                    = tc.Background,
-            Topbar                        = tc.Topbar,
-            Shadow                        = Color3.fromRGB(10,  10,  10),
-            NotificationBackground        = Color3.fromRGB(15,  15,  15),
-            NotificationActionsBackground = Color3.fromRGB(35,  35,  35),
-            TabBackground                 = Color3.fromRGB(25,  25,  25),
-            TabStroke                     = tc.ElementBackground,
-            TabBackgroundSelected         = tc.TabBackgroundSelected,
-            TabTextColor                  = tc.TextColor,
-            SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
-            ElementBackground             = tc.ElementBackground,
-            ElementBackgroundHover        = Color3.fromRGB(35,  35,  35),
-            SecondaryElementBackground    = Color3.fromRGB(20,  20,  20),
-            ElementStroke                 = Color3.fromRGB(40,  40,  40),
-            SecondaryElementStroke        = Color3.fromRGB(35,  35,  35),
-            SliderBackground              = tc.ElementBackground,
-            SliderProgress                = tc.TabBackgroundSelected,
-            SliderStroke                  = tc.TabBackgroundSelected,
-            ToggleBackground              = tc.ElementBackground,
-            ToggleEnabled                 = tc.TabBackgroundSelected,
-            ToggleDisabled                = Color3.fromRGB(60,  60,  60),
-            ToggleEnabledStroke           = tc.TabBackgroundSelected,
-            ToggleDisabledStroke          = Color3.fromRGB(80,  80,  80),
-            ToggleEnabledOuterStroke      = tc.TabBackgroundSelected,
-            ToggleDisabledOuterStroke     = Color3.fromRGB(45,  45,  45),
-            DropdownSelected              = tc.TabBackgroundSelected,
-            DropdownUnselected            = Color3.fromRGB(25,  25,  25),
-            InputBackground               = Color3.fromRGB(20,  20,  20),
-            InputStroke                   = tc.TabBackgroundSelected,
-            PlaceholderColor              = Color3.fromRGB(150, 150, 150),
-        },
+        Theme = BuildRayfieldThemeTable(tc),
         ConfigurationSaving = {
             Enabled    = true,
             FolderName = "TASFF V" .. (S.CurrentVersion or "2.3.0"),
@@ -198,6 +214,7 @@ end
 -- Export module functions & tables
 TASFFEnv.Theme = TASFFEnv.Theme or {}
 TASFFEnv.Theme.GetWindowConfig        = GetWindowConfig
+TASFFEnv.Theme.BuildRayfieldThemeTable = BuildRayfieldThemeTable
 TASFFEnv.Theme.GetDefaultThemeColors  = GetDefaultThemeColors
 TASFFEnv.Theme.ColorPresetMap         = ColorPresetMap
 TASFFEnv.Theme.ColorDropdownOptions   = ColorDropdownOptions
@@ -1563,7 +1580,12 @@ local function PatchRayfieldDOM()
         if not mainFrame or not mainFrame.Parent then return false end
 
         local parent = mainFrame.Parent
-        mainFrame.BackgroundColor3 = Color3.fromRGB(15, 20, 27)
+        local tc = TASFFEnv.Theme.ActiveThemeColors or {}
+        local bgColor   = tc.Background or Color3.fromRGB(15, 20, 27)
+        local elemColor = tc.ElementBackground or bgColor:Lerp(Color3.fromRGB(255, 255, 255), 0.06)
+        local textColor = tc.TextColor or Color3.fromRGB(235, 240, 250)
+        local accent    = GetThemeAccentColor()
+        mainFrame.BackgroundColor3 = bgColor
         mainFrame.BackgroundTransparency = 0.03
 
         local oldGrid = mainFrame:FindFirstChild("SafeCarbonGrid")
@@ -1575,33 +1597,38 @@ local function PatchRayfieldDOM()
         if not halo then
             halo = Instance.new("Frame")
             halo.Name = "TASFF_AmbientHalo"
-            halo.BackgroundColor3 = GetThemeAccentColor()
+            halo.BackgroundColor3 = accent
             halo.BackgroundTransparency = 0.88
             halo.BorderSizePixel = 0
             halo.ZIndex = math.max(0, mainFrame.ZIndex - 1)
             halo.Parent = parent
             local stroke = Instance.new("UIStroke")
             stroke.Name = "HaloStroke"
-            stroke.Color = GetThemeAccentColor()
+            stroke.Color = accent
             stroke.Thickness = 8
             stroke.Transparency = 0.75
             stroke.Parent = halo
             Instance.new("UICorner", halo).CornerRadius = UDim.new(0, 10)
+        else
+            halo.BackgroundColor3 = accent
+            local hs = halo:FindFirstChildOfClass("UIStroke")
+            if hs then hs.Color = accent end
         end
 
         local bottomBar = parent:FindFirstChild("TASFF_BottomBar")
         if not bottomBar then
             bottomBar = Instance.new("Frame")
             bottomBar.Name = "TASFF_BottomBar"
-            bottomBar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
-            bottomBar.BackgroundTransparency = 0.18
+            bottomBar.BackgroundColor3 = elemColor
+            bottomBar.BackgroundTransparency = 0.04
             bottomBar.BorderSizePixel = 0
             bottomBar.ZIndex = mainFrame.ZIndex + 10
             bottomBar.Parent = parent
             Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 6)
             local barStroke = Instance.new("UIStroke", bottomBar)
-            barStroke.Color = GetThemeAccentColor()
-            barStroke.Transparency = 0.45
+            barStroke.Color = accent
+            barStroke.Transparency = 0.10
+            barStroke.Thickness = 1
 
             local label = Instance.new("TextLabel")
             label.Name = "SafeStatus"
@@ -1609,8 +1636,10 @@ local function PatchRayfieldDOM()
             label.Size = UDim2.new(1, -220, 1, 0)
             label.Position = UDim2.fromOffset(32, 0)
             label.Font = Enum.Font.GothamBold
-            label.TextSize = 10
-            label.TextColor3 = Color3.fromRGB(220, 225, 235)
+            label.TextSize = 11
+            label.TextColor3 = textColor
+            label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            label.TextStrokeTransparency = 0.55
             label.TextXAlignment = Enum.TextXAlignment.Left
             label.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [TASFF]"
             label.Parent = bottomBar
@@ -1631,24 +1660,28 @@ local function PatchRayfieldDOM()
             stats.Size = UDim2.new(0, 170, 1, 0)
             stats.Position = UDim2.new(1, -178, 0, 0)
             stats.Font = Enum.Font.GothamBold
-            stats.TextSize = 9
-            stats.TextColor3 = Color3.fromRGB(180, 215, 220)
+            stats.TextSize = 10
+            stats.TextColor3 = textColor:Lerp(bgColor, 0.25)
+            stats.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            stats.TextStrokeTransparency = 0.60
             stats.TextXAlignment = Enum.TextXAlignment.Right
             stats.Text = "TASFF  |  READY"
             stats.Parent = bottomBar
         end
-        bottomBar.BackgroundColor3 = Color3.fromRGB(14, 18, 26)
-        bottomBar.BackgroundTransparency = 0.18
+        bottomBar.BackgroundColor3 = elemColor
+        bottomBar.BackgroundTransparency = 0.04
         bottomBar.ZIndex = math.max(bottomBar.ZIndex, mainFrame.ZIndex + 10)
         local bottomStroke = bottomBar:FindFirstChildOfClass("UIStroke")
         if bottomStroke then
-            bottomStroke.Color = GetThemeAccentColor()
-            bottomStroke.Transparency = 0
+            bottomStroke.Color = accent
+            bottomStroke.Transparency = 0.10
             bottomStroke.Thickness = 1
         end
         local statusLabel = bottomBar:FindFirstChild("SafeStatus")
         if statusLabel then
-            statusLabel.TextColor3 = Color3.fromRGB(235, 240, 250)
+            statusLabel.TextColor3 = textColor
+            statusLabel.TextSize = 11
+            statusLabel.TextStrokeTransparency = 0.55
             statusLabel.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [TASFF]"
         end
         local avatar = bottomBar:FindFirstChild("SafeAvatar")
@@ -1665,18 +1698,23 @@ local function PatchRayfieldDOM()
             avatar.Parent = bottomBar
             Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
         end
-        if not bottomBar:FindFirstChild("SafeStats") then
-            local stats = Instance.new("TextLabel")
+        local stats = bottomBar:FindFirstChild("SafeStats")
+        if not stats then
+            stats = Instance.new("TextLabel")
             stats.Name = "SafeStats"
             stats.BackgroundTransparency = 1
             stats.Size = UDim2.new(0, 170, 1, 0)
             stats.Position = UDim2.new(1, -178, 0, 0)
             stats.Font = Enum.Font.GothamBold
-            stats.TextSize = 9
-            stats.TextColor3 = Color3.fromRGB(180, 215, 220)
             stats.TextXAlignment = Enum.TextXAlignment.Right
             stats.Text = "TASFF  |  READY"
             stats.Parent = bottomBar
+        end
+        if stats then
+            stats.TextSize = 10
+            stats.TextColor3 = textColor:Lerp(bgColor, 0.25)
+            stats.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            stats.TextStrokeTransparency = 0.60
         end
 
         local topbar = mainFrame:FindFirstChild("Topbar", true)
@@ -1691,7 +1729,7 @@ local function PatchRayfieldDOM()
                 accentLine.ZIndex = topbar.ZIndex + 1
                 accentLine.Parent = topbar
             end
-            accentLine.BackgroundColor3 = GetThemeAccentColor()
+            accentLine.BackgroundColor3 = accent
 
             local safeBell = topbar:FindFirstChild("SafeNotificationBell")
             if not safeBell then
@@ -1700,18 +1738,18 @@ local function PatchRayfieldDOM()
                 safeBell.Size = UDim2.fromOffset(22, 22)
                 safeBell.AnchorPoint = Vector2.new(1, 0.5)
                 safeBell.Position = UDim2.new(1, -44, 0.5, 0)
-                safeBell.BackgroundColor3 = Color3.fromRGB(28, 32, 42)
-                safeBell.BackgroundTransparency = 0.2
+                safeBell.BackgroundColor3 = elemColor
+                safeBell.BackgroundTransparency = 0.1
                 safeBell.BorderSizePixel = 0
                 safeBell.Font = Enum.Font.GothamBold
                 safeBell.TextSize = 10
-                safeBell.TextColor3 = Color3.fromRGB(220, 230, 240)
+                safeBell.TextColor3 = textColor
                 safeBell.Text = "!"
                 safeBell.ZIndex = topbar.ZIndex + 2
                 safeBell.Parent = topbar
                 Instance.new("UICorner", safeBell).CornerRadius = UDim.new(0, 5)
                 local safeBellStroke = Instance.new("UIStroke", safeBell)
-                safeBellStroke.Color = GetThemeAccentColor()
+                safeBellStroke.Color = accent
                 safeBellStroke.Thickness = 1
                 safeBell.MouseButton1Click:Connect(function()
                     if TASFFEnv.Theme.ToggleNotificationDrawer then
@@ -1720,8 +1758,10 @@ local function PatchRayfieldDOM()
                 end)
             end
             safeBell.Position = UDim2.new(1, -44, 0.5, 0)
+            safeBell.BackgroundColor3 = elemColor
+            safeBell.TextColor3 = textColor
             local safeBellStroke = safeBell:FindFirstChildOfClass("UIStroke")
-            if safeBellStroke then safeBellStroke.Color = GetThemeAccentColor() end
+            if safeBellStroke then safeBellStroke.Color = accent end
         end
 
         -- Add decoration only to direct children of Rayfield's content list.
@@ -1738,7 +1778,7 @@ local function PatchRayfieldDOM()
                 marker.Parent = desc
                 local stroke = Instance.new("UIStroke")
                 stroke.Name = "SafeCardStroke"
-                stroke.Color = GetThemeAccentColor()
+                stroke.Color = accent
                 stroke.Thickness = 1
                 stroke.Transparency = 0.45
                 stroke.Parent = desc
@@ -1746,9 +1786,9 @@ local function PatchRayfieldDOM()
                 gradient.Name = "SafeCardGradient"
                 gradient.Rotation = 35
                 gradient.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.fromRGB(28, 34, 46)),
-                    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(15, 18, 26)),
-                    ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 34, 46)),
+                    ColorSequenceKeypoint.new(0, elemColor:Lerp(accent, 0.10)),
+                    ColorSequenceKeypoint.new(0.5, bgColor),
+                    ColorSequenceKeypoint.new(1, elemColor:Lerp(accent, 0.10)),
                 })
                 gradient.Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 0.35),
@@ -1758,6 +1798,22 @@ local function PatchRayfieldDOM()
                 gradient.Parent = desc
                 end
 
+            end
+        end
+
+        -- Recolour decorations that already existed from a previous theme.
+        if elements then
+            for _, desc in ipairs(elements:GetChildren()) do
+                local existingStroke = desc:FindFirstChild("SafeCardStroke")
+                local existingGradient = desc:FindFirstChild("SafeCardGradient")
+                if existingStroke then existingStroke.Color = accent end
+                if existingGradient then
+                    existingGradient.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0, elemColor:Lerp(accent, 0.10)),
+                        ColorSequenceKeypoint.new(0.5, bgColor),
+                        ColorSequenceKeypoint.new(1, elemColor:Lerp(accent, 0.10)),
+                    })
+                end
             end
         end
 
@@ -1771,7 +1827,9 @@ local function PatchRayfieldDOM()
                 local parentPosition = parent.AbsolutePosition
                 local absolutePosition = mainFrame.AbsolutePosition
                 local visible = mainFrame.Visible and rGui.Enabled ~= false
-                OverlayGui.Enabled = visible
+                -- Overlays (HUD strip, radar, notification drawer, toasts) are
+                -- intentionally independent of the Rayfield window's visibility.
+                OverlayGui.Enabled = true
                 HUDStrip.Visible = S.HUDStripEnabled ~= false
                 halo.Visible = visible
                 halo.Position = UDim2.fromOffset(
@@ -1780,7 +1838,7 @@ local function PatchRayfieldDOM()
                 )
                 halo.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X + 16, mainFrame.AbsoluteSize.Y + 16)
                 bottomBar.Visible = visible
-                bottomBar.BackgroundTransparency = 0.18
+                bottomBar.BackgroundTransparency = 0.04
                 bottomBar.Position = UDim2.fromOffset(
                     absolutePosition.X - parentPosition.X,
                     absolutePosition.Y - parentPosition.Y + mainFrame.AbsoluteSize.Y + 4
@@ -2398,9 +2456,9 @@ local function PatchRayfieldDOM()
             UpdateDrawerPosition()
         end
 
-        -- Drawer & Tooltip Auto-Hide on window hide/minimize
+        -- Only menu-bound tooltips hide with the window. The notification
+        -- history drawer is a detached overlay and must stay visible.
         if not isVis or not isExpanded then
-            if NotificationDrawer then NotificationDrawer.Visible = false end
             if TooltipFrame then TooltipFrame.Visible = false end
         end
     end
@@ -3106,8 +3164,10 @@ local function SyncRayfieldVisibility()
     if not rGui or not mainFrame then return end
     local isVisible = rGui.Enabled ~= false and mainFrame.Visible ~= false
 
+    -- Overlay HUD/notification history must stay on screen even when the menu
+    -- is closed. Only the menu-attached decorations below follow visibility.
     if OverlayGui then
-        OverlayGui.Enabled = isVisible
+        OverlayGui.Enabled = true
     end
 
     local parent = mainFrame.Parent

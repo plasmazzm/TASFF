@@ -278,9 +278,10 @@ end
 local _windowCfg = (TASFFTheme.GetWindowConfig and TASFFTheme.GetWindowConfig(ThemeColors, selectedGlobalTheme))
     or nil  -- nil = fallback to the inline config below
 local Window = Rayfield:CreateWindow(_windowCfg or {
-    Name            = "TASFF 2.3.0 " .. selectedGlobalTheme,
-    Icon            = 0,
-    LoadingTitle    = "The Aimbot Script Final Form",
+    Name               = "TASFF 2.3.0 " .. selectedGlobalTheme,
+    Icon               = 0,
+    ToggleUIKeybind    = Enum.KeyCode.K,
+    LoadingTitle       = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
     Theme = {
         TextColor                     = ThemeColors.TextColor,

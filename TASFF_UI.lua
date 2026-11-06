@@ -342,11 +342,76 @@ do
         _cov.Name        = "TASFF_LoadCover"
         _cov.Size        = UDim2.new(1, 0, 1, 0)
         _cov.Position    = UDim2.new(0, 0, 0, 0)
-        _cov.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
+        _cov.BackgroundColor3 = Color3.fromRGB(11, 12, 18)
         _cov.BackgroundTransparency = 0
         _cov.BorderSizePixel = 0
         _cov.ZIndex      = 500
+        _cov.ClipsDescendants = true
         Instance.new("UICorner", _cov).CornerRadius = UDim.new(0, 8)
+
+        local covAccent = (ThemeColors and ThemeColors.TabBackgroundSelected) or Color3.fromRGB(240, 175, 50)
+
+        local covStroke = Instance.new("UIStroke", _cov)
+        covStroke.Color = covAccent
+        covStroke.Thickness = 1.5
+        covStroke.Transparency = 0.25
+
+        -- Center Tactical Staging Card
+        local card = Instance.new("Frame", _cov)
+        card.Name = "CenterCard"
+        card.Size = UDim2.new(0, 270, 0, 82)
+        card.AnchorPoint = Vector2.new(0.5, 0.5)
+        card.Position = UDim2.new(0.5, 0, 0.5, 0)
+        card.BackgroundColor3 = Color3.fromRGB(17, 19, 28)
+        card.BackgroundTransparency = 0.15
+        card.BorderSizePixel = 0
+        card.ZIndex = 501
+        Instance.new("UICorner", card).CornerRadius = UDim.new(0, 7)
+
+        local cardStroke = Instance.new("UIStroke", card)
+        cardStroke.Color = covAccent
+        cardStroke.Thickness = 1
+        cardStroke.Transparency = 0.45
+
+        local title = Instance.new("TextLabel", card)
+        title.Size = UDim2.new(1, -20, 0, 22)
+        title.Position = UDim2.new(0, 10, 0, 10)
+        title.BackgroundTransparency = 1
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 14
+        title.TextColor3 = covAccent
+        title.Text = "TASFF " .. tostring(S.CurrentVersion or "2.3.0")
+        title.TextXAlignment = Enum.TextXAlignment.Center
+        title.ZIndex = 502
+
+        local sub = Instance.new("TextLabel", card)
+        sub.Size = UDim2.new(1, -20, 0, 16)
+        sub.Position = UDim2.new(0, 10, 0, 34)
+        sub.BackgroundTransparency = 1
+        sub.Font = Enum.Font.GothamMedium
+        sub.TextSize = 9
+        sub.TextColor3 = Color3.fromRGB(190, 195, 215)
+        sub.Text = "STAGING ENVIRONMENT & PALETTES"
+        sub.TextXAlignment = Enum.TextXAlignment.Center
+        sub.ZIndex = 502
+
+        -- Mini pulsing tactical status bar
+        local barBg = Instance.new("Frame", card)
+        barBg.Size = UDim2.new(1, -40, 0, 3)
+        barBg.Position = UDim2.new(0, 20, 0, 58)
+        barBg.BackgroundColor3 = Color3.fromRGB(28, 30, 44)
+        barBg.BorderSizePixel = 0
+        barBg.ZIndex = 502
+        Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
+
+        local barFill = Instance.new("Frame", barBg)
+        barFill.Size = UDim2.new(0.7, 0, 1, 0)
+        barFill.Position = UDim2.new(0, 0, 0, 0)
+        barFill.BackgroundColor3 = covAccent
+        barFill.BorderSizePixel = 0
+        barFill.ZIndex = 503
+        Instance.new("UICorner", barFill).CornerRadius = UDim.new(1, 0)
+
         _cov.Parent = _main
     end
 end
@@ -1340,14 +1405,70 @@ local IntelMonitorLabel = IntelTab:CreateParagraph({
 })
 S.IntelMonitorLabel = IntelMonitorLabel
 
+-- Helper: partial match resolve for Intel player selector
+local function ResolvePartialIntelName(input)
+    if not input or input == "" then return "" end
+    local lower = input:lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if lower == "" then return "" end
+
+    -- 1. Check currently tracked intel players
+    if S.IntelPlayers then
+        for name, _ in pairs(S.IntelPlayers) do
+            if name:lower():sub(1, #lower) == lower or name:lower():find(lower, 1, true) then
+                return name
+            end
+        end
+    end
+    -- 2. Check permanent labels / nemesis / blacklist
+    if S.NemesisMemory then
+        for name, _ in pairs(S.NemesisMemory) do
+            if name:lower():sub(1, #lower) == lower or name:lower():find(lower, 1, true) then
+                return name
+            end
+        end
+    end
+    if S.BlacklistedPlayers then
+        for _, name in ipairs(S.BlacklistedPlayers) do
+            if name:lower():sub(1, #lower) == lower or name:lower():find(lower, 1, true) then
+                return name
+            end
+        end
+    end
+    if S.ManualPlayerLabels then
+        for name, _ in pairs(S.ManualPlayerLabels) do
+            if name:lower():sub(1, #lower) == lower or name:lower():find(lower, 1, true) then
+                return name
+            end
+        end
+    end
+    -- 3. Check players in the server
+    local serverNames = (S.GetPlayerNames and S.GetPlayerNames()) or {}
+    for _, name in ipairs(serverNames) do
+        if name:lower():sub(1, #lower) == lower or name:lower():find(lower, 1, true) then
+            return name
+        end
+    end
+    for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+        if p.Name:lower():sub(1, #lower) == lower or p.Name:lower():find(lower, 1, true) or
+           p.DisplayName:lower():sub(1, #lower) == lower or p.DisplayName:lower():find(lower, 1, true) then
+            return p.Name
+        end
+    end
+    return input
+end
+
 IntelTab:CreateInput({
     Name                  = "Select Player by Name",
-    PlaceholderText       = "Enter exact username...",
+    PlaceholderText       = "Enter username or partial (e.g. 'lux')...",
     RemoveTextAfterFocusLost = false,
     Flag                  = "IntelSelectInput",
     Callback              = function(text)
         if text and text ~= "" then
-            S.IntelSelected = text
+            local resolved = ResolvePartialIntelName(text)
+            S.IntelSelected = resolved
+            if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
+        else
+            S.IntelSelected = ""
             if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
         end
     end
@@ -1356,7 +1477,7 @@ IntelTab:CreateInput({
 IntelTab:CreateButton({
     Name     = "Remove Selected",
     Callback = function()
-        if S.IntelSelected == "" then
+        if not S.IntelSelected or S.IntelSelected == "" then
             if S.Notify then S.Notify({Title="Intel",Content="No player selected.",Duration=2,Image="alert-circle"}) end
             return
         end
@@ -1367,7 +1488,7 @@ IntelTab:CreateButton({
 IntelTab:CreateButton({
     Name     = "Remove Selected (Nemesis)",
     Callback = function()
-        if S.IntelSelected == "" then
+        if not S.IntelSelected or S.IntelSelected == "" then
             if S.Notify then S.Notify({Title="Intel",Content="No player selected.",Duration=2,Image="alert-circle"}) end
             return
         end
@@ -1380,7 +1501,7 @@ IntelTab:CreateButton({
     Callback = function()
         -- Pass 1: collect names to remove (safe — avoids modifying table while iterating)
         local toRemove = {}
-        for name, data in pairs(S.IntelPlayers) do
+        for name, data in pairs(S.IntelPlayers or {}) do
             if not data.nemesis then
                 table.insert(toRemove, name)
             end
@@ -1388,27 +1509,84 @@ IntelTab:CreateButton({
         -- Pass 2: remove collected entries
         for _, name in ipairs(toRemove) do
             S.IntelPlayers[name] = nil
-            S.ThreatMemory[name] = nil
+            if S.ThreatMemory then S.ThreatMemory[name] = nil end
         end
         -- Pass 3: rebuild PriorityPlayers keeping only confirmed Nemeses
-        -- (also catches players added directly via dropdown without going through Intel)
         local nemesisSet = {}
-        for name, data in pairs(S.IntelPlayers) do
+        for name, data in pairs(S.IntelPlayers or {}) do
             if data.nemesis then nemesisSet[name] = true end
         end
+        for name, _ in pairs(S.NemesisMemory or {}) do
+            nemesisSet[name] = true
+        end
         local kept = {}
-        for _, name in ipairs(S.PriorityPlayers) do
+        for _, name in ipairs(S.PriorityPlayers or {}) do
             if nemesisSet[name] then table.insert(kept, name) end
         end
         S.PriorityPlayers = kept
         S.IntelSelected = ""
-        -- Force ESP highlights to recolor immediately (don't wait for next render frame)
+        -- Force ESP highlights to recolor immediately
         if S.ClearVisuals then S.ClearVisuals() end
         if S.SyncPriorityUI then S.SyncPriorityUI() end
         if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
         if S.Notify then S.Notify({Title="Intel", Content="Cleared all non-Nemesis entries.", Duration=2, Image="trash-2"}) end
     end
 })
+
+-- Top Threats Leaderboard moved inside Intel Monitor
+local LeaderboardParagraph = IntelTab:CreateParagraph({
+    Title   = "Top Threats This Session",
+    Content = "Scanning threat scores..."
+})
+S.LeaderboardParagraph = LeaderboardParagraph
+
+local function RefreshLeaderboard()
+    if not LeaderboardParagraph then return end
+    local list = {}
+    if S.NemesisMemory then
+        for n, count in pairs(S.NemesisMemory) do
+            table.insert(list, {Name = n, Tier = "NEMESIS", Score = 100 + (tonumber(count) or 1) * 10})
+        end
+    end
+    if S.ThreatPlayers then
+        for _, n in ipairs(S.ThreatPlayers) do
+            local found = false
+            for _, item in ipairs(list) do if item.Name == n then found = true break end end
+            if not found then
+                local k = (S.PlayerKillCounts and S.PlayerKillCounts[n]) or 0
+                table.insert(list, {Name = n, Tier = "THREAT", Score = 50 + k * 5})
+            end
+        end
+    end
+    if S.PriorityPlayers then
+        for _, n in ipairs(S.PriorityPlayers) do
+            local found = false
+            for _, item in ipairs(list) do if item.Name == n then found = true break end end
+            if not found then
+                table.insert(list, {Name = n, Tier = "PRIORITY", Score = 25})
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a.Score > b.Score end)
+    local lines = {}
+    for i = 1, math.min(#list, 5) do
+        local entry = list[i]
+        table.insert(lines, string.format("#%d  [%s] %s  (Score: %d)", i, entry.Tier, entry.Name, entry.Score))
+    end
+    local body = #lines > 0 and table.concat(lines, "\n") or "No active threats recorded."
+    pcall(function()
+        LeaderboardParagraph:Set({
+            Title   = "Top Threats This Session (" .. #list .. ")",
+            Content = body
+        })
+    end)
+end
+task.spawn(function()
+    while getgenv().TASFF and getgenv().TASFF.Running do
+        task.wait(6)
+        RefreshLeaderboard()
+    end
+end)
 
 local LockHistoryLabel = IntelTab:CreateParagraph({
     Title   = "Target Lock History",
@@ -1665,60 +1843,7 @@ IntelTab:CreateSlider({Name = "Strikes to Nemesis", Range = {1, 10}, Increment =
 end})
 -- (Nemesis Roster removed: use the unified Permanent Labels Roster in Player Labeling section)
 
-IntelTab:CreateSection("Threat Leaderboard")
-local LeaderboardParagraph = IntelTab:CreateParagraph({
-    Title   = "Top Threats This Session",
-    Content = "Scanning threat scores..."
-})
-S.LeaderboardParagraph = LeaderboardParagraph
-
-local function RefreshLeaderboard()
-    if not LeaderboardParagraph then return end
-    local list = {}
-    if S.NemesisMemory then
-        for n, count in pairs(S.NemesisMemory) do
-            table.insert(list, {Name = n, Tier = "NEMESIS", Score = 100 + (tonumber(count) or 1) * 10})
-        end
-    end
-    if S.ThreatPlayers then
-        for _, n in ipairs(S.ThreatPlayers) do
-            local found = false
-            for _, item in ipairs(list) do if item.Name == n then found = true break end end
-            if not found then
-                local k = (S.PlayerKillCounts and S.PlayerKillCounts[n]) or 0
-                table.insert(list, {Name = n, Tier = "THREAT", Score = 50 + k * 5})
-            end
-        end
-    end
-    if S.PriorityPlayers then
-        for _, n in ipairs(S.PriorityPlayers) do
-            local found = false
-            for _, item in ipairs(list) do if item.Name == n then found = true break end end
-            if not found then
-                table.insert(list, {Name = n, Tier = "PRIORITY", Score = 25})
-            end
-        end
-    end
-    table.sort(list, function(a, b) return a.Score > b.Score end)
-    local lines = {}
-    for i = 1, math.min(#list, 5) do
-        local entry = list[i]
-        table.insert(lines, string.format("#%d  [%s] %s  (Score: %d)", i, entry.Tier, entry.Name, entry.Score))
-    end
-    local body = #lines > 0 and table.concat(lines, "\n") or "No active threats recorded."
-    pcall(function()
-        LeaderboardParagraph:Set({
-            Title   = "Top Threats This Session (" .. #list .. ")",
-            Content = body
-        })
-    end)
-end
-task.spawn(function()
-    while getgenv().TASFF and getgenv().TASFF.Running do
-        task.wait(6)
-        RefreshLeaderboard()
-    end
-end)
+-- (Threat Leaderboard moved inside Intel Monitor section above)
 
 IntelTab:CreateSection("Spectator Mode")
 IntelTab:CreateParagraph({Title = "Spectator Mode", Content = "Lock your camera to follow a target player in third-person. Select the player, then toggle Spectate Player to activate."})
@@ -1941,60 +2066,80 @@ local function ApplyPlayerLabel(username)
         if S.Notify then S.Notify({Title="TASFF Label", Content="No player selected or matched.", Duration=2, Image="alert-circle"}) end
         return
     end
-    local mode = S.CurrentLabelMode or "Priority"
+    local mode = S.CurrentLabelMode or "Blacklist"
     -- Remove any conflicting existing label first
     local existing = S.ManualPlayerLabels and S.ManualPlayerLabels[username]
     if existing and existing ~= mode then
-        -- Remove from old list
-        if existing == "Priority" then
-            local idx = table.find(S.PriorityPlayers, username)
-            if idx then table.remove(S.PriorityPlayers, idx) end
-        elseif existing == "Blacklist" then
+        if existing == "Blacklist" then
             local idx = table.find(S.BlacklistedPlayers, username)
             if idx then table.remove(S.BlacklistedPlayers, idx) end
         elseif existing == "Nemesis" then
             if S.NemesisMemory then S.NemesisMemory[username] = nil end
         end
     end
-    -- Apply new label
-    if not S.ManualPlayerLabels then S.ManualPlayerLabels = {} end
-    S.ManualPlayerLabels[username] = mode
+
     if mode == "Priority" then
+        -- Priority is temporary for the active session (not a permanent label)
         if not table.find(S.PriorityPlayers, username) then
             table.insert(S.PriorityPlayers, username)
         end
+        if S.ManualPlayerLabels then S.ManualPlayerLabels[username] = nil end
+        if S.SyncPriorityUI then S.SyncPriorityUI() end
+        if S.Notify then
+            S.Notify({Title="TASFF Priority", Content="[PRIORITY] " .. username .. " (Active session)", Duration=3, Image="target"})
+        end
     elseif mode == "Blacklist" then
+        if not S.ManualPlayerLabels then S.ManualPlayerLabels = {} end
+        S.ManualPlayerLabels[username] = "Blacklist"
         if not table.find(S.BlacklistedPlayers, username) then
             table.insert(S.BlacklistedPlayers, username)
         end
+        if S.Notify then
+            S.Notify({Title="TASFF Label", Content="[BLACKLIST] " .. username .. " (Permanent)", Duration=3, Image="ban"})
+        end
     elseif mode == "Nemesis" then
+        if not S.ManualPlayerLabels then S.ManualPlayerLabels = {} end
+        S.ManualPlayerLabels[username] = "Nemesis"
         if not S.NemesisMemory then S.NemesisMemory = {} end
         S.NemesisMemory[username] = (S.NemesisMemory[username] or 0) + 1
+        if S.Notify then
+            S.Notify({Title="TASFF Label", Content="[NEMESIS] " .. username .. " (Permanent)", Duration=3, Image="skull"})
+        end
     end
-    if S.Notify then
-        local icons = {Priority="target", Blacklist="ban", Nemesis="skull"}
-        S.Notify({Title="TASFF Label", Content="[" .. mode:upper() .. "] " .. username, Duration=3, Image=icons[mode] or "flag"})
-    end
+
+    if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
 end
 
 -- Helper: remove label from a player
 local function RemovePlayerLabel(username)
     if not username or username == "" then return end
-    local mode = S.ManualPlayerLabels and S.ManualPlayerLabels[username]
-    if not mode then
-        if S.Notify then S.Notify({Title="TASFF Label", Content=username .. " has no permanent label.", Duration=2, Image="info"}) end
+    local isPerm = S.ManualPlayerLabels and S.ManualPlayerLabels[username]
+    local isPrio = table.find(S.PriorityPlayers or {}, username)
+    local isBlack = table.find(S.BlacklistedPlayers or {}, username)
+    local isNem = S.NemesisMemory and S.NemesisMemory[username]
+
+    if not (isPerm or isPrio or isBlack or isNem) then
+        if S.Notify then S.Notify({Title="TASFF Label", Content=username .. " has no active label.", Duration=2, Image="info"}) end
         return
     end
-    if mode == "Priority" then
+
+    if isPrio then
         local idx = table.find(S.PriorityPlayers, username)
         if idx then table.remove(S.PriorityPlayers, idx) end
-    elseif mode == "Blacklist" then
+    end
+    if isBlack then
         local idx = table.find(S.BlacklistedPlayers, username)
         if idx then table.remove(S.BlacklistedPlayers, idx) end
-    elseif mode == "Nemesis" then
-        if S.NemesisMemory then S.NemesisMemory[username] = nil end
     end
-    S.ManualPlayerLabels[username] = nil
+    if isNem then
+        S.NemesisMemory[username] = nil
+    end
+    if S.ManualPlayerLabels then
+        S.ManualPlayerLabels[username] = nil
+    end
+
+    if S.SyncPriorityUI then S.SyncPriorityUI() end
+    if S.RebuildIntelMonitor then S.RebuildIntelMonitor() end
     if S.Notify then S.Notify({Title="TASFF Label", Content="Removed label for " .. username, Duration=2, Image="check"}) end
 end
 
@@ -2005,7 +2150,6 @@ IntelTab:CreateButton({
             or (LabelSelectedPlayer ~= "" and LabelSelectedPlayer)
             or nil
         ApplyPlayerLabel(target)
-        RefreshUnifiedLabelList()
     end
 })
 
@@ -2016,7 +2160,6 @@ IntelTab:CreateButton({
             or (LabelSelectedPlayer ~= "" and LabelSelectedPlayer)
             or nil
         RemovePlayerLabel(target)
-        RefreshUnifiedLabelList()
     end
 })
 
@@ -2034,49 +2177,11 @@ IntelTab:CreateButton({
     end
 })
 
--- // ── Unified Permanent Labels List ─────────────────────────── // --
--- (Shows all ManualPlayerLabels: Priority + Blacklist + Nemesis together)
-IntelTab:CreateSection("Permanent Labels Roster")
-IntelTab:CreateParagraph({
-    Title   = "Permanent Labels Roster",
-    Content = "All permanently labeled players. Labels survive rounds unless manually removed above.\n\nIcons: [P] Priority  [B] Blacklist  [N] Nemesis"
-})
-
-local UnifiedLabelsParagraph = IntelTab:CreateParagraph({
-    Title   = "Labeled Players",
-    Content = "No permanent labels."
-})
-
+-- Unified Permanent Labels refresh helper: refreshes the Intel Monitor display
 function RefreshUnifiedLabelList()
-    local lines = {}
-    local counts = {P=0, B=0, N=0}
-    if S.ManualPlayerLabels then
-        local sorted = {}
-        for name, mode in pairs(S.ManualPlayerLabels) do
-            table.insert(sorted, {name=name, mode=mode})
-        end
-        table.sort(sorted, function(a,b) return a.mode < b.mode end)
-        for _, entry in ipairs(sorted) do
-            local tag = entry.mode == "Priority" and "[P]"
-                or entry.mode == "Blacklist" and "[B]"
-                or "[N]"
-            if entry.mode == "Priority"  then counts.P = counts.P + 1
-            elseif entry.mode == "Blacklist" then counts.B = counts.B + 1
-            else counts.N = counts.N + 1 end
-            table.insert(lines, tag .. " " .. entry.name)
-        end
-    end
-    local header = string.format("Priority: %d | Blacklist: %d | Nemesis: %d", counts.P, counts.B, counts.N)
-    local body = #lines > 0 and table.concat(lines, "\n") or "No permanent labels."
-    pcall(function()
-        UnifiedLabelsParagraph:Set({
-            Title   = "Labeled Players (" .. header .. ")",
-            Content = body
-        })
-    end)
+    if S.RebuildIntelMonitor then pcall(S.RebuildIntelMonitor) end
 end
 S.RefreshUnifiedLabelList = RefreshUnifiedLabelList
-task.spawn(RefreshUnifiedLabelList)
 
 
 -- [v2.3.0] Advanced tab removed; contents redistributed to Settings

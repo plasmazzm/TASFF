@@ -190,12 +190,12 @@ local ControlTooltips = {
 --- Returns Rayfield Window Config
 local function GetWindowConfig(themeColors, selectedThemeName)
     local tc = themeColors or ThemeColorDefaults
-    -- ToggleUIKeybind: pass the enum explicitly so Rayfield doesn't error when
-    -- its saved settings.rfld contains a plain-string "K" value (type mismatch).
+    -- NOTE: ToggleUIKeybind is deliberately omitted so Rayfield preserves whatever
+    -- the user last bound via the in-game keybind dialog (stored in settings.rfld).
+    -- Passing it here would reset their saved choice every launch.
     return {
-        Name               = "TASFF " .. (S.CurrentVersion or "2.3.0") .. " - " .. (selectedThemeName or "Default"),
-        Icon               = 0,
-        ToggleUIKeybind    = Enum.KeyCode.K,
+        Name            = "TASFF " .. (S.CurrentVersion or "2.3.0") .. " - " .. (selectedThemeName or "Default"),
+        Icon            = 0,
         LoadingTitle    = "The Aimbot Script Final Form",
         LoadingSubtitle = "by Plasmazzm",
         Theme = BuildRayfieldThemeTable(tc),
@@ -459,6 +459,22 @@ local function ApplyRayfieldTheme(themeColors)
             descendant.BackgroundColor3 = themeColors.ElementBackground
         elseif descendant.Name == "Slider" or descendant.Name == "SliderBar" or descendant.Name == "Progress" then
             descendant.BackgroundColor3 = themeColors.TabBackgroundSelected
+        end
+    end
+
+    -- Sync keybind map row keycap text + stroke colours to new accent.
+    -- KeybindMap is defined later in this file; guard with rawget-style check.
+    local kbm = TASFFEnv.Theme.KeybindMap
+    if kbm then
+        for _, row in ipairs(kbm:GetChildren()) do
+            if row:IsA("Frame") and row.Name:match("^KBMRow") then
+                local keycap = row:FindFirstChildOfClass("TextLabel")
+                if keycap then
+                    keycap.TextColor3 = themeColors.TabBackgroundSelected
+                    local kcStk = keycap:FindFirstChildOfClass("UIStroke")
+                    if kcStk then kcStk.Color = themeColors.TabBackgroundSelected end
+                end
+            end
         end
     end
 
@@ -751,10 +767,15 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
     local tgtName = S.CurrentTarget and S.CurrentTarget.Name or "None"
     local presetStr = S.ActivePresetName or "Default"
     local pingMs = GetCurrentPing()
+    local markMode = S.ActiveMarkingMode or "Priority"
+    local markColor = markMode == "Blacklist" and "#FF9933"
+        or markMode == "Nemesis" and "#FF3366"
+        or "#00F5FF"
+    local markStr = " | <font color='" .. markColor .. "'>MARK: " .. markMode:upper() .. "</font>"
 
     HUDLabel.RichText = true
-    HUDLabel.Text = string.format("[TASFF] %s%s%s | TGT: %s%s | P: %s | %d FPS | %dms",
-        aimbotStr, silentStr, humanStr, tgtName, threatStr, presetStr, _currFps, pingMs)
+    HUDLabel.Text = string.format("[TASFF] %s%s%s | TGT: %s%s%s | P: %s | %d FPS | %dms",
+        aimbotStr, silentStr, humanStr, tgtName, threatStr, markStr, presetStr, _currFps, pingMs)
 end))
 
 -- ── 2. Threat Radar Mini-Map ─────────────────────────────────────
@@ -1395,6 +1416,7 @@ local KEYBIND_MAP = {
     { key = "J",          action = "Quick Preset cycle"                },
     { key = "P",          action = "Rapid Mode cycle (Legit/Blatant)"  },
     { key = "T",          action = "Click-to-Mark target"              },
+    { key = "M",          action = "Cycle Marking Mode"                },
     { key = "RMB",        action = "Auto ADS (hold)"                   },
 }
 local KBM_ROW_H  = 24
@@ -3775,33 +3797,15 @@ TASFFEnv.Theme.BindRayfieldVisibility = BindRayfieldVisibility
 TASFFEnv.Theme.SyncRayfieldVisibility = SyncRayfieldVisibility
 TASFFEnv.Theme.Destroy = DestroyTheme
 
--- Defer full DOM patch until Rayfield's opening animation has completed.
--- Cover is placed immediately after UIInitialized fires (animation done, real
--- menu about to show), then guaranteed-removed after BOTH patch passes finish.
+-- Defer full DOM patch until TASFF_UI.lua has finished building all tabs.
+-- Cover is placed synchronously by TASFF_UI.lua right after CreateWindow returns
+-- (animation already done at that point). This spawn only runs patches and
+-- guarantees the cover fades regardless of any error inside PatchRayfieldDOM.
 task.spawn(function()
-    -- Wait for UIInitialized (set by TASFF_UI.lua right after Rayfield:CreateWindow)
     while not (S.UIInitialized or S.ScriptInitialized) do
         task.wait(0.2)
     end
-    -- Give Rayfield one frame to finish rendering after the flag flips
-    task.wait(0.08)
-
-    -- Place cover NOW, right as the real menu appears (animation already done)
-    local _rGui = FindRayfieldGui()
-    local _main = _rGui and (_rGui:FindFirstChild("Main", true) or _rGui:FindFirstChildOfClass("Frame"))
-    if _main and not _main:FindFirstChild("TASFF_LoadCover") then
-        local _cov = Instance.new("Frame")
-        _cov.Name = "TASFF_LoadCover"
-        _cov.Size = UDim2.new(1, 0, 1, 0)
-        _cov.Position = UDim2.new(0, 0, 0, 0)
-        _cov.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
-        _cov.BackgroundTransparency = 0
-        _cov.BorderSizePixel = 0
-        _cov.ZIndex = 500
-        Instance.new("UICorner", _cov).CornerRadius = UDim.new(0, 8)
-        _cov.Parent = _main
-    end
-    task.wait(0.05)
+    task.wait(0.1)
 
     -- Run both patch passes; cover stays up regardless of errors inside
     for i = 1, 2 do

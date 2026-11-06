@@ -253,6 +253,13 @@ local function PatchRayfieldSource(src)
     -- 4. Expose Object/Paragraph reference from CreateParagraph so modules can style preview cards
     src = src:gsub("return ParagraphValue", "ParagraphValue.Object = Paragraph; ParagraphValue.Paragraph = Paragraph; return ParagraphValue", 1)
 
+    -- 5. Guard notification Icon so missing or cleaned up notifications never throw (Line 1670)
+    local t5 = "newNotification.Icon.Visible = false"
+    local r5 = "if newNotification and newNotification.Parent and (newNotification:FindFirstChild('Icon') or newNotification:FindFirstChildOfClass('ImageLabel')) then (newNotification:FindFirstChild('Icon') or newNotification:FindFirstChildOfClass('ImageLabel')).Visible = false else return end"
+    if src:find(t5, 1, true) then
+        src = src:gsub(t5, r5, 1)
+    end
+
     return src
 end
 

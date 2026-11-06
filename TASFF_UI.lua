@@ -278,10 +278,9 @@ end
 local _windowCfg = (TASFFTheme.GetWindowConfig and TASFFTheme.GetWindowConfig(ThemeColors, selectedGlobalTheme))
     or nil  -- nil = fallback to the inline config below
 local Window = Rayfield:CreateWindow(_windowCfg or {
-    Name               = "TASFF 2.3.0 " .. selectedGlobalTheme,
-    Icon               = 0,
-    ToggleUIKeybind    = Enum.KeyCode.K,
-    LoadingTitle       = "The Aimbot Script Final Form",
+    Name            = "TASFF 2.3.0 " .. selectedGlobalTheme,
+    Icon            = 0,
+    LoadingTitle    = "The Aimbot Script Final Form",
     LoadingSubtitle = "by Plasmazzm",
     Theme = {
         TextColor                     = ThemeColors.TextColor,
@@ -325,6 +324,40 @@ local Window = Rayfield:CreateWindow(_windowCfg or {
 
 if TASFFTheme and TASFFTheme.SetRayfieldWindow then
     TASFFTheme.SetRayfieldWindow(Window)
+end
+
+-- Place loading cover immediately after CreateWindow returns.
+-- CreateWindow is synchronous and only returns once Rayfield's opening animation
+-- has fully completed, so placing the cover here means:
+--   • The title/spinner animation is ALREADY done (cover never obscures it)
+--   • The unstyled menu would appear RIGHT NOW without the cover
+--   • The cover hides the unstyled flash while PatchRayfieldDOM applies styling
+-- Removal is guaranteed by the deferred task.spawn in TASFF_Theme.lua.
+do
+    local _rGui = (typeof(getgenv) == "function" and getgenv().TASFF and getgenv().TASFF.Rayfield) or nil
+    -- Also try common Rayfield ScreenGui names
+    local function _findRGui()
+        for _, svc in ipairs({game:GetService("CoreGui"), game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
+            if svc then
+                local g = svc:FindFirstChild("RayfieldLocalUI") or svc:FindFirstChild("Rayfield")
+                if g then return g end
+            end
+        end
+    end
+    local _rGuiInst = _findRGui()
+    local _main = _rGuiInst and (_rGuiInst:FindFirstChild("Main", true) or _rGuiInst:FindFirstChildOfClass("Frame"))
+    if _main and not _main:FindFirstChild("TASFF_LoadCover") then
+        local _cov = Instance.new("Frame")
+        _cov.Name        = "TASFF_LoadCover"
+        _cov.Size        = UDim2.new(1, 0, 1, 0)
+        _cov.Position    = UDim2.new(0, 0, 0, 0)
+        _cov.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
+        _cov.BackgroundTransparency = 0
+        _cov.BorderSizePixel = 0
+        _cov.ZIndex      = 500
+        Instance.new("UICorner", _cov).CornerRadius = UDim.new(0, 8)
+        _cov.Parent = _main
+    end
 end
 
 
@@ -1632,28 +1665,14 @@ IntelTab:CreateToggle({Name = KeyName("Stat Correlator"), CurrentValue = S.StatC
 end})
 
 IntelTab:CreateSection("Nemesis System")
-IntelTab:CreateParagraph({Title = "Nemesis System", Content = "Tracks players who have killed you repeatedly. Once the strike threshold is reached, that player is permanently stored as a nemesis and boosted in priority targeting."})
+IntelTab:CreateParagraph({Title = "Nemesis System", Content = "Tracks players who have killed you repeatedly. Once the strike threshold is reached, that player is permanently stored as a nemesis and boosted in priority targeting. Nemesis entries appear in the Permanent Labels Roster below."})
 IntelTab:CreateToggle({Name = "Nemesis System", CurrentValue = S.NemesisEnabled, Flag = "NemesisEnabled", Callback = function(v)
     S.NemesisEnabled = v
 end})
 IntelTab:CreateSlider({Name = "Strikes to Nemesis", Range = {1, 10}, Increment = 1, CurrentValue = S.KillsBeforeNemesis, Flag = "KillsBeforeNemesis", Callback = function(v)
     S.KillsBeforeNemesis = v
 end})
-local NemesisViewer = IntelTab:CreateParagraph({
-    Title   = "Permanent Nemesis Roster",
-    Content = "No nemeses."
-})
-local function RefreshNemesisViewer()
-    local names = {}
-    for n, _ in pairs(S.NemesisMemory or {}) do table.insert(names, n) end
-    if #names == 0 then
-        pcall(function() NemesisViewer:Set({Title="Permanent Nemesis Roster", Content="No permanent nemeses."}) end)
-    else
-        pcall(function() NemesisViewer:Set({Title="Permanent Nemesis Roster", Content=table.concat(names, "\n")}) end)
-    end
-end
-IntelTab:CreateButton({Name="Refresh Nemesis Roster", Callback=RefreshNemesisViewer})
-task.spawn(RefreshNemesisViewer)
+-- (Nemesis Roster removed: use the unified Permanent Labels Roster in Player Labeling section)
 
 IntelTab:CreateSection("Threat Leaderboard")
 local LeaderboardParagraph = IntelTab:CreateParagraph({
@@ -1750,6 +1769,10 @@ IntelTab:CreateButton({Name="Refresh Player List", Callback=function()
         local names = S.GetPlayerNames()
         pcall(function() SpectateDropdown:Refresh(names, true) end)
         if S.PriorityDropdownRef and S.PriorityDropdownRef.Refresh then pcall(function() S.PriorityDropdownRef:Refresh(names, true) end) end
+        -- Also refresh the label player dropdown (defined later; closure captures it correctly)
+        if LabelPlayerDropdown and LabelPlayerDropdown.Refresh then
+            pcall(function() LabelPlayerDropdown:Refresh(#names > 0 and names or {"(no players)"}, true) end)
+        end
     end
 end})
 
@@ -1784,6 +1807,279 @@ IntelTab:CreateToggle({Name = "Focus Mode", CurrentValue = S.FocusMode, Flag = "
     S.FocusMode = v
 end})
 
+-- // ── Marking Modes ─────────────────────────────────────────── // --
+IntelTab:CreateSection("Marking Modes")
+IntelTab:CreateParagraph({
+    Title   = "Marking Modes",
+    Content = "Select which label types are available in the cycle. The cycle keybind rotates through the enabled modes and applies that label whenever Target Marking fires. Active mode is shown in the HUD strip."
+})
+
+-- Multi-select dropdown of which modes are in the cycle
+IntelTab:CreateDropdown({
+    Name            = "Enabled Marking Modes",
+    Options         = {"Priority", "Blacklist", "Nemesis"},
+    CurrentOption   = S.MarkingModes or {"Priority"},
+    MultipleOptions = true,
+    Flag            = "MarkingModes",
+    Callback        = function(v)
+        local modes = type(v) == "table" and v or {v}
+        if #modes == 0 then modes = {"Priority"} end   -- always keep at least one
+        S.MarkingModes = modes
+        -- If active mode was removed from the cycle, reset to first enabled
+        local found = false
+        for _, m in ipairs(modes) do
+            if m == S.ActiveMarkingMode then found = true break end
+        end
+        if not found then S.ActiveMarkingMode = modes[1] end
+    end
+})
+
+-- Cycle keybind: advances ActiveMarkingMode through MarkingModes list
+local function CycleMarkingMode()
+    local modes = S.MarkingModes
+    if not modes or #modes == 0 then modes = {"Priority"} end
+    local idx = 1
+    for i, m in ipairs(modes) do
+        if m == S.ActiveMarkingMode then idx = i break end
+    end
+    idx = (idx % #modes) + 1
+    S.ActiveMarkingMode = modes[idx]
+    if S.Notify then
+        local modeIcons = {Priority = "target", Blacklist = "ban", Nemesis = "skull"}
+        S.Notify({
+            Title    = "TASFF Marking",
+            Content  = "Mark mode → " .. S.ActiveMarkingMode,
+            Duration = 2,
+            Image    = modeIcons[S.ActiveMarkingMode] or "flag"
+        })
+    end
+end
+S.CycleMarkingMode = CycleMarkingMode
+
+IntelTab:CreateKeybind({
+    Name           = "Cycle Marking Mode",
+    CurrentKeybind = S.MarkModeCycleKey or "M",
+    HoldToInteract = false,
+    CallOnChange   = true,
+    Flag           = "MarkModeCycleKey",
+    Callback       = function(key)
+        local validKey = SanitizeKeyName(key)
+        if validKey then
+            S.MarkModeCycleKey = validKey
+            CycleMarkingMode()
+        end
+    end
+})
+
+-- // ── Player Labeling (unified: Priority / Blacklist / Nemesis) ─ // --
+IntelTab:CreateSection("Player Labeling")
+IntelTab:CreateParagraph({
+    Title   = "Player Labeling",
+    Content = "Permanently label players as Priority, Blacklist, or Nemesis. Use the label mode selector to choose the effect, then pick from the server player list or type a name. Partial usernames are matched against players currently in the server."
+})
+
+-- Single-select: what label mode the add controls below apply
+local LabelModeDropdown = IntelTab:CreateDropdown({
+    Name            = "Label Mode",
+    Options         = {"Priority", "Blacklist", "Nemesis"},
+    CurrentOption   = {"Priority"},
+    MultipleOptions = false,
+    Flag            = "PlayerLabelMode",
+    Callback        = function(v)
+        S.CurrentLabelMode = type(v) == "table" and v[1] or v
+    end
+})
+S.CurrentLabelMode = "Priority"
+
+-- Live server player list (single-select, picks the target)
+local LabelSelectedPlayer = ""
+local LabelPlayerDropdown = IntelTab:CreateDropdown({
+    Name            = "Label Player from Server",
+    Options         = S.GetPlayerNames and S.GetPlayerNames() or {"(no players)"},
+    CurrentOption   = {},
+    MultipleOptions = false,
+    Flag            = "LabelPlayerDropdown",
+    Callback        = function(v)
+        LabelSelectedPlayer = (type(v) == "table" and v[1] or v) or ""
+        if LabelSelectedPlayer == "(no players)" then LabelSelectedPlayer = "" end
+    end
+})
+
+-- Name input with partial-match fuzzy resolve
+local LabelNameInput   = ""
+local LabelMatchResult = nil   -- resolved full username, nil if no match yet
+local LabelMatchLabel  = IntelTab:CreateParagraph({
+    Title   = "Name Match",
+    Content = "Type below — a partial username will auto-resolve to a matching player in the server."
+})
+
+IntelTab:CreateInput({
+    Name        = "Label Player by Name (partial OK)",
+    PlaceholderText = "e.g. \"plasma\" → Plasmazzm",
+    Flag        = "LabelByNameInput",
+    Callback    = function(text)
+        LabelNameInput = text or ""
+        -- Fuzzy match: check every player whose username starts with or contains the typed string
+        local lower = LabelNameInput:lower()
+        LabelMatchResult = nil
+        if lower ~= "" and S.GetPlayerNames then
+            for _, name in ipairs(S.GetPlayerNames()) do
+                if name:lower():sub(1, #lower) == lower or name:lower():find(lower, 1, true) then
+                    LabelMatchResult = name
+                    break
+                end
+            end
+        end
+        local matchText = LabelMatchResult
+            and ("Matched: " .. LabelMatchResult)
+            or  (LabelNameInput ~= "" and "No match in server for \"" .. LabelNameInput .. "\"" or "No input.")
+        pcall(function() LabelMatchLabel:Set({Title = "Name Match", Content = matchText}) end)
+    end
+})
+
+-- Helper: apply label to resolved name
+local function ApplyPlayerLabel(username)
+    if not username or username == "" then
+        if S.Notify then S.Notify({Title="TASFF Label", Content="No player selected or matched.", Duration=2, Image="alert-circle"}) end
+        return
+    end
+    local mode = S.CurrentLabelMode or "Priority"
+    -- Remove any conflicting existing label first
+    local existing = S.ManualPlayerLabels and S.ManualPlayerLabels[username]
+    if existing and existing ~= mode then
+        -- Remove from old list
+        if existing == "Priority" then
+            local idx = table.find(S.PriorityPlayers, username)
+            if idx then table.remove(S.PriorityPlayers, idx) end
+        elseif existing == "Blacklist" then
+            local idx = table.find(S.BlacklistedPlayers, username)
+            if idx then table.remove(S.BlacklistedPlayers, idx) end
+        elseif existing == "Nemesis" then
+            if S.NemesisMemory then S.NemesisMemory[username] = nil end
+        end
+    end
+    -- Apply new label
+    if not S.ManualPlayerLabels then S.ManualPlayerLabels = {} end
+    S.ManualPlayerLabels[username] = mode
+    if mode == "Priority" then
+        if not table.find(S.PriorityPlayers, username) then
+            table.insert(S.PriorityPlayers, username)
+        end
+    elseif mode == "Blacklist" then
+        if not table.find(S.BlacklistedPlayers, username) then
+            table.insert(S.BlacklistedPlayers, username)
+        end
+    elseif mode == "Nemesis" then
+        if not S.NemesisMemory then S.NemesisMemory = {} end
+        S.NemesisMemory[username] = (S.NemesisMemory[username] or 0) + 1
+    end
+    if S.Notify then
+        local icons = {Priority="target", Blacklist="ban", Nemesis="skull"}
+        S.Notify({Title="TASFF Label", Content="[" .. mode:upper() .. "] " .. username, Duration=3, Image=icons[mode] or "flag"})
+    end
+end
+
+-- Helper: remove label from a player
+local function RemovePlayerLabel(username)
+    if not username or username == "" then return end
+    local mode = S.ManualPlayerLabels and S.ManualPlayerLabels[username]
+    if not mode then
+        if S.Notify then S.Notify({Title="TASFF Label", Content=username .. " has no permanent label.", Duration=2, Image="info"}) end
+        return
+    end
+    if mode == "Priority" then
+        local idx = table.find(S.PriorityPlayers, username)
+        if idx then table.remove(S.PriorityPlayers, idx) end
+    elseif mode == "Blacklist" then
+        local idx = table.find(S.BlacklistedPlayers, username)
+        if idx then table.remove(S.BlacklistedPlayers, idx) end
+    elseif mode == "Nemesis" then
+        if S.NemesisMemory then S.NemesisMemory[username] = nil end
+    end
+    S.ManualPlayerLabels[username] = nil
+    if S.Notify then S.Notify({Title="TASFF Label", Content="Removed label for " .. username, Duration=2, Image="check"}) end
+end
+
+IntelTab:CreateButton({
+    Name     = "Apply Label to Matched Name / Selected Player",
+    Callback = function()
+        local target = (LabelMatchResult ~= nil and LabelMatchResult)
+            or (LabelSelectedPlayer ~= "" and LabelSelectedPlayer)
+            or nil
+        ApplyPlayerLabel(target)
+        RefreshUnifiedLabelList()
+    end
+})
+
+IntelTab:CreateButton({
+    Name     = "Remove Label from Matched Name / Selected Player",
+    Callback = function()
+        local target = (LabelMatchResult ~= nil and LabelMatchResult)
+            or (LabelSelectedPlayer ~= "" and LabelSelectedPlayer)
+            or nil
+        RemovePlayerLabel(target)
+        RefreshUnifiedLabelList()
+    end
+})
+
+IntelTab:CreateButton({
+    Name     = "Refresh Server Player List",
+    Callback = function()
+        if S.GetPlayerNames then
+            local names = S.GetPlayerNames()
+            pcall(function() LabelPlayerDropdown:Refresh(#names > 0 and names or {"(no players)"}, true) end)
+            pcall(function() SpectateDropdown:Refresh(names, true) end)
+            if S.PriorityDropdownRef and S.PriorityDropdownRef.Refresh then
+                pcall(function() S.PriorityDropdownRef:Refresh(names, true) end)
+            end
+        end
+    end
+})
+
+-- // ── Unified Permanent Labels List ─────────────────────────── // --
+-- (Shows all ManualPlayerLabels: Priority + Blacklist + Nemesis together)
+IntelTab:CreateSection("Permanent Labels Roster")
+IntelTab:CreateParagraph({
+    Title   = "Permanent Labels Roster",
+    Content = "All permanently labeled players. Labels survive rounds unless manually removed above.\n\nIcons: [P] Priority  [B] Blacklist  [N] Nemesis"
+})
+
+local UnifiedLabelsParagraph = IntelTab:CreateParagraph({
+    Title   = "Labeled Players",
+    Content = "No permanent labels."
+})
+
+function RefreshUnifiedLabelList()
+    local lines = {}
+    local counts = {P=0, B=0, N=0}
+    if S.ManualPlayerLabels then
+        local sorted = {}
+        for name, mode in pairs(S.ManualPlayerLabels) do
+            table.insert(sorted, {name=name, mode=mode})
+        end
+        table.sort(sorted, function(a,b) return a.mode < b.mode end)
+        for _, entry in ipairs(sorted) do
+            local tag = entry.mode == "Priority" and "[P]"
+                or entry.mode == "Blacklist" and "[B]"
+                or "[N]"
+            if entry.mode == "Priority"  then counts.P = counts.P + 1
+            elseif entry.mode == "Blacklist" then counts.B = counts.B + 1
+            else counts.N = counts.N + 1 end
+            table.insert(lines, tag .. " " .. entry.name)
+        end
+    end
+    local header = string.format("Priority: %d | Blacklist: %d | Nemesis: %d", counts.P, counts.B, counts.N)
+    local body = #lines > 0 and table.concat(lines, "\n") or "No permanent labels."
+    pcall(function()
+        UnifiedLabelsParagraph:Set({
+            Title   = "Labeled Players (" .. header .. ")",
+            Content = body
+        })
+    end)
+end
+S.RefreshUnifiedLabelList = RefreshUnifiedLabelList
+task.spawn(RefreshUnifiedLabelList)
+
 
 -- [v2.3.0] Advanced tab removed; contents redistributed to Settings
 
@@ -1805,27 +2101,8 @@ SettingsTab:CreateToggle({Name = "Team Check", CurrentValue = S.TeamCheck, Flag 
 
 SettingsTab:CreateSection("Player Registry")
 SettingsTab:CreateParagraph({
-    Title   = "Blacklist & Priority",
-    Content = "Blacklisted players are ignored by all targeting. Priority targets and Intel system controls have moved to the Intel tab."
-})
-SettingsTab:CreateDropdown({
-    Name            = "Blacklist",
-    Options         = S.GetPlayerNames and S.GetPlayerNames() or {},
-    CurrentOption   = {},
-    MultipleOptions = true,
-    Flag            = "BlacklistPlayers",
-    Callback        = function(v)
-        -- Bug Fix #17: resolve display-name labels to real usernames
-        local resolved = {}
-        for _, label in ipairs(v) do
-            local name = (S.ResolvePlayerName and S.ResolvePlayerName(label)) or label
-            if name then table.insert(resolved, name) end
-        end
-        S.BlacklistedPlayers = resolved
-        if S.CurrentTarget and S.CurrentTarget.Name and table.find(resolved, S.CurrentTarget.Name) then
-            S.CurrentTarget = nil
-        end
-    end
+    Title   = "ESP Whitelist",
+    Content = "Blacklisting and permanent player labels (Priority / Blacklist / Nemesis) have moved to the Intel tab → Player Labeling section. ESP Whitelist below restricts ESP rendering to only listed players."
 })
 SettingsTab:CreateToggle({
     Name         = "Hide Blacklisted Player ESP (off = show [BLACKLISTED] tag)",

@@ -509,7 +509,7 @@ local function PlayUISound(soundType)
             end
             local snd = Instance.new("Sound")
             snd.SoundId = soundId
-            snd.Volume = math.clamp((S.AudioFeedbackVolume or 0.5) * 0.45, 0, 1)
+            snd.Volume = math.clamp((S.AudioFeedbackVolume or 0.5) * 1.0, 0, 1)
             snd.Pitch = pitch
             snd.Parent = SoundService
             snd:Play()
@@ -1288,29 +1288,68 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- ── 3. Notification Sidebar Strip ────────────────────────────────
-local SidebarFrame = Instance.new("Frame")
-SidebarFrame.Name = "SidebarFrame"
-SidebarFrame.Size = UDim2.new(0, 220, 0, 300)
-SidebarFrame.Position = UDim2.new(1, -230, 0.5, -150)
-SidebarFrame.BackgroundTransparency = 1
-SidebarFrame.Visible = (S.SidebarEnabled ~= false)
-SidebarFrame.Parent = OverlayGui
+-- ── 3. Notification Zones (4 screen quadrants — each category gets its own side) ──
+-- top-left  : system / initialisation toasts
+-- top-right : combat / event toasts
+-- bot-left  : fps / performance toasts
+-- bot-right : intel / detection toasts
+local function MakeNotifZone(name, anchorX, anchorY, posX, posY, listAlign)
+    local f = Instance.new("Frame")
+    f.Name = name
+    f.Size = UDim2.new(0, 220, 0, 400)
+    f.AnchorPoint = Vector2.new(anchorX, anchorY)
+    f.Position = UDim2.new(posX, 0, posY, 0)
+    f.BackgroundTransparency = 1
+    f.Visible = (S.SidebarEnabled ~= false)
+    f.Parent = OverlayGui
+    local layout = Instance.new("UIListLayout", f)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 5)
+    layout.VerticalAlignment = listAlign
+    return f
+end
 
-local SidebarList = Instance.new("UIListLayout", SidebarFrame)
-SidebarList.SortOrder = Enum.SortOrder.LayoutOrder
-SidebarList.Padding = UDim.new(0, 6)
-SidebarList.VerticalAlignment = Enum.VerticalAlignment.Bottom
+-- top-left  : system / init
+local ZoneTopLeft    = MakeNotifZone("NZ_TopLeft",    0, 0, 0, 0,    Enum.VerticalAlignment.Top)
+-- top-right : combat / event
+local ZoneTopRight   = MakeNotifZone("NZ_TopRight",   1, 0, 1, 0,    Enum.VerticalAlignment.Top)
+-- bot-left  : fps / performance
+local ZoneBotLeft    = MakeNotifZone("NZ_BotLeft",    0, 1, 0, 1,    Enum.VerticalAlignment.Bottom)
+-- bot-right : intel / detection
+local ZoneBotRight   = MakeNotifZone("NZ_BotRight",   1, 1, 1, 1,    Enum.VerticalAlignment.Bottom)
 
-local function PushSidebarNotification(title, msg, color)
+-- SidebarFrame kept as alias to ZoneTopRight so legacy calls still work
+local SidebarFrame = ZoneTopRight
+
+local function ResolveNotifZone(title, msg)
+    local t = (title or ""):lower()
+    local m = (msg  or ""):lower()
+    -- bot-left : fps / performance
+    if t:find("fps") or t:find("perf") or t:find("frame") or m:find("fps") or m:find("ms") then
+        return ZoneBotLeft
+    end
+    -- bot-right : intel / detection / targeting
+    if t:find("intel") or t:find("detect") or t:find("target") or t:find("threat") or t:find("enemy") then
+        return ZoneBotRight
+    end
+    -- top-left : system / init / loader
+    if t:find("tasff") or t:find("init") or t:find("load") or t:find("system") or t:find("theme") or t:find("state") or t:find("module") then
+        return ZoneTopLeft
+    end
+    -- top-right : everything else (combat, event, misc)
+    return ZoneTopRight
+end
+
+local function PushSidebarNotification(title, msg, color, zone)
     if not (S.SidebarEnabled ~= false) then return end
     local accent = color or GetThemeAccentColor()
+    local targetZone = zone or ResolveNotifZone(title, msg)
     local pill = Instance.new("Frame")
     pill.Size = UDim2.new(1, 0, 0, 36)
     pill.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
     pill.BackgroundTransparency = 0.2
     pill.BorderSizePixel = 0
-    pill.Parent = SidebarFrame
+    pill.Parent = targetZone   -- route to the correct screen quadrant
 
     Instance.new("UICorner", pill).CornerRadius = UDim.new(0, 6)
     local stroke = Instance.new("UIStroke", pill)
@@ -1348,6 +1387,136 @@ local function PushSidebarNotification(title, msg, color)
     end)
 end
 TASFFEnv.Theme.PushSidebarNotification = PushSidebarNotification
+
+-- ── 3b. Keybind Map Widget (bottom-right corner, expandable) ─────
+local KEYBIND_MAP = {
+    { key = "K",          action = "Toggle Menu open / close"          },
+    { key = "RightShift", action = "Master Switch — enable all systems" },
+    { key = "J",          action = "Quick Preset cycle"                },
+    { key = "P",          action = "Rapid Mode cycle (Legit/Blatant)"  },
+    { key = "T",          action = "Click-to-Mark target"              },
+    { key = "RMB",        action = "Auto ADS (hold)"                   },
+}
+local KBM_ROW_H  = 24
+local KBM_PAD    = 6
+local KBM_W      = 230
+local KBM_HEADER = 28
+local KBM_FULL_H = KBM_HEADER + #KEYBIND_MAP * (KBM_ROW_H + 2) + KBM_PAD
+
+local KeybindMap = Instance.new("Frame")
+KeybindMap.Name = "TASFF_KeybindMap"
+KeybindMap.Size = UDim2.new(0, KBM_W, 0, KBM_HEADER)   -- collapsed by default
+KeybindMap.AnchorPoint = Vector2.new(1, 1)
+KeybindMap.Position = UDim2.new(1, -10, 1, -40)         -- above the bottom-right corner
+KeybindMap.BackgroundColor3 = Color3.fromRGB(10, 11, 18)
+KeybindMap.BackgroundTransparency = 0.08
+KeybindMap.BorderSizePixel = 0
+KeybindMap.ZIndex = 90
+KeybindMap.Visible = true
+KeybindMap.ClipsDescendants = true
+KeybindMap.Parent = OverlayGui
+Instance.new("UICorner", KeybindMap).CornerRadius = UDim.new(0, 7)
+local kbmStroke = Instance.new("UIStroke", KeybindMap)
+kbmStroke.Color = GetThemeAccentColor()
+kbmStroke.Thickness = 1
+kbmStroke.Transparency = 0.35
+MakeDraggable(KeybindMap, KeybindMap, "KBMPosX", "KBMPosY")
+
+-- Header bar
+local kbmHeader = Instance.new("Frame", KeybindMap)
+kbmHeader.Name = "KBMHeader"
+kbmHeader.Size = UDim2.new(1, 0, 0, KBM_HEADER)
+kbmHeader.BackgroundColor3 = Color3.fromRGB(18, 20, 30)
+kbmHeader.BackgroundTransparency = 0
+kbmHeader.BorderSizePixel = 0
+kbmHeader.ZIndex = 91
+Instance.new("UICorner", kbmHeader).CornerRadius = UDim.new(0, 7)
+
+local kbmTitle = Instance.new("TextLabel", kbmHeader)
+kbmTitle.Size = UDim2.new(1, -34, 1, 0)
+kbmTitle.Position = UDim2.new(0, 8, 0, 0)
+kbmTitle.BackgroundTransparency = 1
+kbmTitle.Font = Enum.Font.GothamBold
+kbmTitle.TextSize = 11
+kbmTitle.TextColor3 = GetThemeAccentColor()
+kbmTitle.TextXAlignment = Enum.TextXAlignment.Left
+kbmTitle.Text = "⌨  Keybind Map"
+kbmTitle.ZIndex = 92
+
+local kbmToggle = Instance.new("TextButton", kbmHeader)
+kbmToggle.Name = "KBMToggle"
+kbmToggle.Size = UDim2.new(0, 22, 0, 22)
+kbmToggle.AnchorPoint = Vector2.new(1, 0.5)
+kbmToggle.Position = UDim2.new(1, -4, 0.5, 0)
+kbmToggle.BackgroundColor3 = Color3.fromRGB(28, 30, 42)
+kbmToggle.BackgroundTransparency = 0.2
+kbmToggle.BorderSizePixel = 0
+kbmToggle.Font = Enum.Font.GothamBold
+kbmToggle.TextSize = 12
+kbmToggle.TextColor3 = GetThemeAccentColor()
+kbmToggle.Text = "+"
+kbmToggle.ZIndex = 92
+Instance.new("UICorner", kbmToggle).CornerRadius = UDim.new(0, 4)
+
+-- Rows
+for i, entry in ipairs(KEYBIND_MAP) do
+    local row = Instance.new("Frame", KeybindMap)
+    row.Name = "KBMRow" .. i
+    row.Size = UDim2.new(1, -8, 0, KBM_ROW_H)
+    row.Position = UDim2.new(0, 4, 0, KBM_HEADER + (i - 1) * (KBM_ROW_H + 2) + KBM_PAD)
+    row.BackgroundColor3 = Color3.fromRGB(16, 18, 26)
+    row.BackgroundTransparency = 0.3
+    row.BorderSizePixel = 0
+    row.ZIndex = 91
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+
+    local keycap = Instance.new("TextLabel", row)
+    keycap.Size = UDim2.new(0, 72, 1, -4)
+    keycap.Position = UDim2.new(0, 4, 0, 2)
+    keycap.BackgroundColor3 = Color3.fromRGB(28, 30, 44)
+    keycap.BackgroundTransparency = 0
+    keycap.BorderSizePixel = 0
+    keycap.Font = Enum.Font.GothamBold
+    keycap.TextSize = 10
+    keycap.TextColor3 = GetThemeAccentColor()
+    keycap.Text = entry.key
+    keycap.ZIndex = 92
+    Instance.new("UICorner", keycap).CornerRadius = UDim.new(0, 3)
+    local kcStroke = Instance.new("UIStroke", keycap)
+    kcStroke.Color = GetThemeAccentColor()
+    kcStroke.Thickness = 1
+    kcStroke.Transparency = 0.5
+
+    local actionLabel = Instance.new("TextLabel", row)
+    actionLabel.Size = UDim2.new(1, -86, 1, 0)
+    actionLabel.Position = UDim2.new(0, 82, 0, 0)
+    actionLabel.BackgroundTransparency = 1
+    actionLabel.Font = Enum.Font.Gotham
+    actionLabel.TextSize = 10
+    actionLabel.TextColor3 = Color3.fromRGB(205, 210, 225)
+    actionLabel.TextXAlignment = Enum.TextXAlignment.Left
+    actionLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    actionLabel.Text = entry.action
+    actionLabel.ZIndex = 92
+end
+
+-- Expand / collapse logic
+local kbmExpanded = false
+local function SetKBMExpanded(expand)
+    kbmExpanded = expand
+    kbmToggle.Text = expand and "-" or "+"
+    local targetH = expand and KBM_FULL_H or KBM_HEADER
+    TweenService:Create(KeybindMap, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, KBM_W, 0, targetH)
+    }):Play()
+end
+kbmToggle.MouseButton1Click:Connect(function()
+    SetKBMExpanded(not kbmExpanded)
+    PlayUISound("click")
+end)
+
+TASFFEnv.Theme.SetKBMExpanded = SetKBMExpanded
+TASFFEnv.Theme.KeybindMap = KeybindMap
 
 -- ── 4. Floating Hover Tooltips for Controls ──────────────────────
 local TooltipFrame = Instance.new("Frame")
@@ -1583,6 +1752,19 @@ local function AttachHoverGlow(card)
                     math.clamp(math.floor(origColor.B * 255 * 0.4 + acc.B * 255 * 0.6), 0, 255)
                 )
             }):Play()
+            -- Soft hover tick (quiet, different pitch from click so it doesn't feel intrusive)
+            task.spawn(function()
+                pcall(function()
+                    local snd = Instance.new("Sound")
+                    snd.SoundId = "rbxassetid://6895079853"
+                    snd.Volume = math.clamp((S.AudioFeedbackVolume or 0.5) * 0.35, 0, 1)
+                    snd.Pitch = 1.6   -- high pitch = light tap
+                    snd.Parent = SoundService
+                    snd:Play()
+                    snd.Ended:Connect(function() snd:Destroy() end)
+                    task.delay(1, function() if snd and snd.Parent then snd:Destroy() end end)
+                end)
+            end)
         end)
         card.MouseLeave:Connect(function()
             TweenService:Create(stroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
@@ -2059,6 +2241,10 @@ local function PatchRayfieldDOM()
 
         -- Sync notification drawer stroke to current theme accent
         if ndStroke then ndStroke.Color = GetThemeAccentColor() end
+        -- Sync keybind map widget accent colours
+        if kbmStroke then kbmStroke.Color = GetThemeAccentColor() end
+        if kbmTitle  then kbmTitle.TextColor3  = GetThemeAccentColor() end
+        if kbmToggle then kbmToggle.TextColor3 = GetThemeAccentColor() end
 
         local bellBtn = topbar:FindFirstChild("NotifBellBtn")
         if not bellBtn then
@@ -2119,6 +2305,154 @@ local function PatchRayfieldDOM()
             bellBtn.AnchorPoint = Vector2.new(1, 0.5)
             bellBtn.Position = UDim2.new(1, -58, 0.5, 0)
         end
+    end
+
+    -- 0e. Global Search Overlay — intercepts Rayfield's topbar TextBox and
+    --     shows results from EVERY tab, not just the currently active one.
+    if topbar and not mainFrame:FindFirstChild("GlobalSearchHooked") then
+        Instance.new("BoolValue", mainFrame).Name = "GlobalSearchHooked"
+        -- Find the first TextBox inside the topbar (Rayfield's search input)
+        local function FindSearchBox()
+            for _, c in ipairs(topbar:GetDescendants()) do
+                if c:IsA("TextBox") then return c end
+            end
+            return nil
+        end
+
+        -- Build the results overlay (hidden by default)
+        local searchOverlay = mainFrame:FindFirstChild("TASFF_SearchOverlay")
+        if not searchOverlay then
+            searchOverlay = Instance.new("Frame", mainFrame)
+            searchOverlay.Name = "TASFF_SearchOverlay"
+            searchOverlay.Size = UDim2.new(1, -20, 0, 300)
+            searchOverlay.Position = UDim2.new(0, 10, 0, 50)
+            searchOverlay.BackgroundColor3 = Color3.fromRGB(12, 13, 20)
+            searchOverlay.BackgroundTransparency = 0.05
+            searchOverlay.BorderSizePixel = 0
+            searchOverlay.ZIndex = 200
+            searchOverlay.Visible = false
+            Instance.new("UICorner", searchOverlay).CornerRadius = UDim.new(0, 8)
+            local soStroke = Instance.new("UIStroke", searchOverlay)
+            soStroke.Color = GetThemeAccentColor()
+            soStroke.Thickness = 1
+            soStroke.Transparency = 0.3
+
+            local soList = Instance.new("ScrollingFrame", searchOverlay)
+            soList.Name = "ResultsList"
+            soList.Size = UDim2.new(1, -8, 1, -8)
+            soList.Position = UDim2.new(0, 4, 0, 4)
+            soList.BackgroundTransparency = 1
+            soList.BorderSizePixel = 0
+            soList.ScrollBarThickness = 3
+            soList.ZIndex = 201
+            Instance.new("UIListLayout", soList).Padding = UDim.new(0, 3)
+        end
+
+        -- Collect all element title labels across the entire main frame (all tabs)
+        local function CollectAllElements()
+            local results = {}
+            for _, desc in ipairs(mainFrame:GetDescendants()) do
+                if desc:IsA("TextLabel") and desc.Name == "Title" and desc.Text ~= "" then
+                    local card = desc.Parent
+                    -- Identify which tab this card belongs to by walking up to find the tab container
+                    if card and card:IsA("GuiObject") then
+                        table.insert(results, {label = desc, card = card})
+                    end
+                end
+            end
+            return results
+        end
+
+        local function RunGlobalSearch(query)
+            local soList = searchOverlay:FindFirstChild("ResultsList")
+            if not soList then return end
+            -- Clear previous results
+            for _, c in ipairs(soList:GetChildren()) do
+                if not c:IsA("UIListLayout") then c:Destroy() end
+            end
+            if query == "" then
+                searchOverlay.Visible = false
+                return
+            end
+            query = query:lower()
+            local allElems = CollectAllElements()
+            local matchCount = 0
+            for _, entry in ipairs(allElems) do
+                if entry.label.Text:lower():find(query, 1, true) then
+                    local row = Instance.new("TextButton", soList)
+                    row.Size = UDim2.new(1, 0, 0, 28)
+                    row.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
+                    row.BackgroundTransparency = 0.3
+                    row.BorderSizePixel = 0
+                    row.Font = Enum.Font.GothamBold
+                    row.TextSize = 11
+                    row.TextColor3 = GetThemeAccentColor()
+                    row.Text = "  " .. entry.label.Text
+                    row.TextXAlignment = Enum.TextXAlignment.Left
+                    row.ZIndex = 202
+                    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+                    -- Click: scroll the card into view by setting its ScrollingFrame's CanvasPosition
+                    local capturedCard = entry.card
+                    row.MouseButton1Click:Connect(function()
+                        searchOverlay.Visible = false
+                        -- Scroll to the card
+                        pcall(function()
+                            local sf = mainFrame:FindFirstChildOfClass("ScrollingFrame", true)
+                            if sf then
+                                sf.CanvasPosition = Vector2.new(0, math.max(0, capturedCard.AbsolutePosition.Y - sf.AbsolutePosition.Y - 20))
+                            end
+                        end)
+                        -- Brief highlight flash on the card stroke
+                        local cs = capturedCard:FindFirstChildOfClass("UIStroke")
+                        if cs then
+                            local oc = cs.Color
+                            cs.Color = Color3.fromRGB(255, 255, 100)
+                            task.delay(1, function() cs.Color = oc end)
+                        end
+                    end)
+                    matchCount = matchCount + 1
+                    if matchCount >= 20 then break end  -- cap at 20 results
+                end
+            end
+            if matchCount == 0 then
+                local noRes = Instance.new("TextLabel", soList)
+                noRes.Size = UDim2.new(1, 0, 0, 28)
+                noRes.BackgroundTransparency = 1
+                noRes.Font = Enum.Font.Gotham
+                noRes.TextSize = 11
+                noRes.TextColor3 = Color3.fromRGB(140, 145, 160)
+                noRes.Text = "  No results found."
+                noRes.TextXAlignment = Enum.TextXAlignment.Left
+                noRes.ZIndex = 202
+            end
+            -- Resize overlay to fit results (capped at 300 px)
+            local listLayout = soList:FindFirstChildOfClass("UIListLayout")
+            local contentH = listLayout and listLayout.AbsoluteContentSize.Y or (matchCount * 31)
+            soList.CanvasSize = UDim2.new(0, 0, 0, contentH)
+            searchOverlay.Size = UDim2.new(1, -20, 0, math.clamp(contentH + 16, 40, 300))
+            searchOverlay.Visible = true
+        end
+
+        -- Hook into the TextBox when it appears
+        task.spawn(function()
+            local searchBox = nil
+            for _ = 1, 60 do   -- wait up to 3 s for Rayfield to build the topbar
+                searchBox = FindSearchBox()
+                if searchBox then break end
+                task.wait(0.05)
+            end
+            if searchBox and not searchBox:FindFirstChild("GlobalSearchHook") then
+                Instance.new("BoolValue", searchBox).Name = "GlobalSearchHook"
+                searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                    RunGlobalSearch(searchBox.Text or "")
+                end)
+                searchBox.FocusLost:Connect(function()
+                    task.delay(0.15, function()
+                        searchOverlay.Visible = false
+                    end)
+                end)
+            end
+        end)
     end
 
     -- Operator Profile & Live System Monitor: Attached Bottom Bar (parented to mainFrame.Parent in Rayfield ScreenGui)
@@ -2209,8 +2543,8 @@ local function PatchRayfieldDOM()
         -- Right: FPS / Ping monitor
         local statContainer = Instance.new("Frame", bottomBar)
         statContainer.Name = "StatContainer"
-        statContainer.Size = UDim2.new(0, 170, 1, 0)
-        statContainer.Position = UDim2.new(1, -195, 0, 0)
+        statContainer.Size = UDim2.new(0, 130, 1, 0)
+        statContainer.Position = UDim2.new(1, -225, 0, 0)
         statContainer.BackgroundTransparency = 1
         statContainer.ZIndex = 103
 
@@ -2234,6 +2568,41 @@ local function PatchRayfieldDOM()
         sText.TextXAlignment = Enum.TextXAlignment.Left
         sText.Text = "60 FPS  |  0ms"
         sText.ZIndex = 104
+
+        -- Keybind Map toggle button (bottom bar, right of stats)
+        local kbmBarBtn = Instance.new("TextButton", bottomBar)
+        kbmBarBtn.Name = "KBMBarBtn"
+        kbmBarBtn.Size = UDim2.new(0, 68, 0, 18)
+        kbmBarBtn.AnchorPoint = Vector2.new(1, 0.5)
+        kbmBarBtn.Position = UDim2.new(1, -28, 0.5, 0)
+        kbmBarBtn.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
+        kbmBarBtn.BackgroundTransparency = 0.1
+        kbmBarBtn.BorderSizePixel = 0
+        kbmBarBtn.Font = Enum.Font.GothamBold
+        kbmBarBtn.TextSize = 10
+        kbmBarBtn.TextColor3 = GetThemeAccentColor()
+        kbmBarBtn.Text = "⌨ Binds"
+        kbmBarBtn.ZIndex = 105
+        Instance.new("UICorner", kbmBarBtn).CornerRadius = UDim.new(0, 4)
+        local kbmBtnStroke = Instance.new("UIStroke", kbmBarBtn)
+        kbmBtnStroke.Color = GetThemeAccentColor()
+        kbmBtnStroke.Thickness = 1
+        kbmBtnStroke.Transparency = 0.5
+        kbmBarBtn.MouseButton1Click:Connect(function()
+            if TASFFEnv.Theme.SetKBMExpanded and TASFFEnv.Theme.KeybindMap then
+                local kbm = TASFFEnv.Theme.KeybindMap
+                local isExpanded = kbm.Size.Y.Offset > 30
+                TASFFEnv.Theme.SetKBMExpanded(not isExpanded)
+                PlayUISound("click")
+            end
+        end)
+        -- Hover tooltip describing the keybind map
+        kbmBarBtn.MouseEnter:Connect(function()
+            ShowTooltip("Keybind Map",
+                "Toggle the on-screen keybind reference panel.\nLists every TASFF hotkey and its function.",
+                UserInputService:GetMouseLocation())
+        end)
+        kbmBarBtn.MouseLeave:Connect(function() HideTooltip() end)
 
         -- Resize grip at bottom-right corner of the bottom bar
         local resizeHandle = Instance.new("Frame", bottomBar)
@@ -3420,7 +3789,33 @@ TASFFEnv.Theme.BindRayfieldVisibility = BindRayfieldVisibility
 TASFFEnv.Theme.SyncRayfieldVisibility = SyncRayfieldVisibility
 TASFFEnv.Theme.Destroy = DestroyTheme
 
--- Defer initial DOM patch until UI is completely built by TASFF_UI.lua
+-- Early loading cover: runs at module load time, well before UIInitialized.
+-- Polls for the Rayfield Main frame every 30 ms and places the cover the instant it
+-- appears — so the user NEVER sees the unstyled interface.
+task.spawn(function()
+    local placed = false
+    local deadline = tick() + 20
+    while not placed and tick() < deadline do
+        local rGui = FindRayfieldGui()
+        local main = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
+        if main and not main:FindFirstChild("TASFF_LoadCover") then
+            local earlyCover = Instance.new("Frame")
+            earlyCover.Name = "TASFF_LoadCover"
+            earlyCover.Size = UDim2.new(1, 0, 1, 0)
+            earlyCover.Position = UDim2.new(0, 0, 0, 0)
+            earlyCover.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
+            earlyCover.BackgroundTransparency = 0
+            earlyCover.BorderSizePixel = 0
+            earlyCover.ZIndex = 500
+            Instance.new("UICorner", earlyCover).CornerRadius = UDim.new(0, 8)
+            earlyCover.Parent = main
+            placed = true
+        end
+        if not placed then task.wait(0.03) end
+    end
+end)
+
+-- Defer full DOM patch until UI is completely built by TASFF_UI.lua
 task.spawn(function()
     while not (S.UIInitialized or S.ScriptInitialized) do
         task.wait(0.2)

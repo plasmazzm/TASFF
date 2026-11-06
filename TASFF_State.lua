@@ -106,6 +106,7 @@ _G.TASFF_State = {
     MarkKeybind                 = "T",
     MarkMethod                  = "Both",
     FocusMode                   = false,
+    MarkModeCycleKey            = "M",    -- cycles ActiveMarkingMode through MarkingModes
 
     -- // ── Mouse Triggerbot ───────────────────────────────────── // --
     AutoClickEnabled            = false,
@@ -139,6 +140,12 @@ _G.TASFF_State = {
     -- // ── Target Lists & Active State ────────────────────────── // --
     BlacklistedPlayers          = {},
     PriorityPlayers             = {},
+    -- ManualPlayerLabels: permanent per-player labels set via Intel > Player Labeling.
+    -- Key = exact username (string), Value = "Priority"|"Blacklist"|"Nemesis"
+    ManualPlayerLabels          = {},
+    -- Marking mode cycle (Click-to-Mark section): which modes are enabled in the cycle
+    MarkingModes                = {"Priority"},   -- subset of {"Priority","Blacklist","Nemesis"}
+    ActiveMarkingMode           = "Priority",     -- current mode in the cycle
     CurrentTarget               = nil,
     ActivePartName              = "Head",
 

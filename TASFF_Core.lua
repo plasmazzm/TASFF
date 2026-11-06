@@ -2361,26 +2361,71 @@ local function HandleClickToMark()
         end
     end
     if targetName then
-        local isPriority = table.find(S.PriorityPlayers or {}, targetName) ~= nil
-        local hasIntel = (S.IntelPlayers and S.IntelPlayers[targetName] ~= nil)
-        if isPriority or hasIntel then
-            if S.RemoveFromIntel then
-                S.RemoveFromIntel(targetName, false)
+        local mode = S.ActiveMarkingMode or "Priority"
+        -- Check current label state across all modes
+        local isPriority  = table.find(S.PriorityPlayers  or {}, targetName) ~= nil
+        local isBlacklist = table.find(S.BlacklistedPlayers or {}, targetName) ~= nil
+        local isNemesis   = S.NemesisMemory and S.NemesisMemory[targetName] ~= nil
+        local hasIntel    = S.IntelPlayers and S.IntelPlayers[targetName] ~= nil
+        local function _refreshLabel()
+            if S.RefreshUnifiedLabelList then pcall(S.RefreshUnifiedLabelList) end
+        end
+
+        if mode == "Blacklist" then
+            if isBlacklist then
+                local idx = table.find(S.BlacklistedPlayers, targetName)
+                if idx then table.remove(S.BlacklistedPlayers, idx) end
+                if S.ManualPlayerLabels then S.ManualPlayerLabels[targetName] = nil end
+                _refreshLabel()
+                Notify({Title="TASFF Mark", Content="Unblacklisted "..targetName, Duration=2, Image="minus-circle"})
             else
-                local idx = table.find(S.PriorityPlayers or {}, targetName)
-                if idx then table.remove(S.PriorityPlayers, idx) end
-                if S.IntelPlayers then S.IntelPlayers[targetName] = nil end
-                SyncPriorityUI()
+                if not table.find(S.BlacklistedPlayers, targetName) then
+                    table.insert(S.BlacklistedPlayers, targetName)
+                end
+                if not S.ManualPlayerLabels then S.ManualPlayerLabels = {} end
+                S.ManualPlayerLabels[targetName] = "Blacklist"
+                _refreshLabel()
+                Notify({Title="TASFF Mark", Content="Blacklisted "..targetName, Duration=2, Image="ban"})
             end
-            Notify({Title="TASFF Mark",Content="Unmarked "..targetName.." from Intel.",Duration=2,Image="minus-circle"})
-        else
-            if S.AddToIntel then
-                S.AddToIntel(targetName, "Marked", 0)
+        elseif mode == "Nemesis" then
+            if isNemesis then
+                if S.NemesisMemory then S.NemesisMemory[targetName] = nil end
+                if S.ManualPlayerLabels then S.ManualPlayerLabels[targetName] = nil end
+                _refreshLabel()
+                Notify({Title="TASFF Mark", Content="Cleared nemesis: "..targetName, Duration=2, Image="minus-circle"})
             else
-                table.insert(S.PriorityPlayers, targetName)
-                SyncPriorityUI()
+                if not S.NemesisMemory then S.NemesisMemory = {} end
+                S.NemesisMemory[targetName] = (S.NemesisMemory[targetName] or 0) + 1
+                if not S.ManualPlayerLabels then S.ManualPlayerLabels = {} end
+                S.ManualPlayerLabels[targetName] = "Nemesis"
+                _refreshLabel()
+                Notify({Title="TASFF Mark", Content="Marked "..targetName.." as Nemesis", Duration=2, Image="skull"})
             end
-            Notify({Title="TASFF Mark",Content="Marked "..targetName.." as Priority!",Duration=2,Image="crosshair"})
+        else -- Priority (default)
+            if isPriority or hasIntel then
+                if S.RemoveFromIntel then
+                    S.RemoveFromIntel(targetName, false)
+                else
+                    local idx = table.find(S.PriorityPlayers or {}, targetName)
+                    if idx then table.remove(S.PriorityPlayers, idx) end
+                    if S.IntelPlayers then S.IntelPlayers[targetName] = nil end
+                    SyncPriorityUI()
+                end
+                if S.ManualPlayerLabels then S.ManualPlayerLabels[targetName] = nil end
+                _refreshLabel()
+                Notify({Title="TASFF Mark", Content="Unmarked "..targetName.." from Intel.", Duration=2, Image="minus-circle"})
+            else
+                if S.AddToIntel then
+                    S.AddToIntel(targetName, "Marked", 0)
+                else
+                    table.insert(S.PriorityPlayers, targetName)
+                    SyncPriorityUI()
+                end
+                if not S.ManualPlayerLabels then S.ManualPlayerLabels = {} end
+                S.ManualPlayerLabels[targetName] = "Priority"
+                _refreshLabel()
+                Notify({Title="TASFF Mark", Content="Marked "..targetName.." as "..mode.."!", Duration=2, Image="crosshair"})
+            end
         end
     else
         Notify({Title="TASFF Mark",Content="No target detected near cursor.",Duration=1.5,Image="locate-off"})
@@ -2483,6 +2528,16 @@ table.insert(getgenv().TASFF.Connections, UserInputService.InputBegan:Connect(fu
                     if not toolEquipped then
                         HandleClickToMark()
                     end
+                end
+            end
+        end
+
+        -- Marking Mode Cycle Keybind (fires on key press, not on rebind)
+        if not gpe then
+            local cycleModeKey = GetKeyCode(S.MarkModeCycleKey or "M")
+            if cycleModeKey and input.KeyCode == cycleModeKey then
+                if S.CycleMarkingMode then
+                    task.spawn(S.CycleMarkingMode)
                 end
             end
         end

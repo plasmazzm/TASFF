@@ -2092,7 +2092,7 @@ local function PatchRayfieldDOM()
         end
 
         mainFrame.ClipsDescendants = false
-        local bottomBar = parent:FindFirstChild("TASFF_BottomBar")
+        local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar")
         if not bottomBar then
             bottomBar = Instance.new("Frame")
             bottomBar.Name = "TASFF_BottomBar"
@@ -2100,11 +2100,10 @@ local function PatchRayfieldDOM()
             bottomBar.BackgroundTransparency = 0
             bottomBar.BorderSizePixel = 0
             bottomBar.ZIndex = math.max(10, mainFrame.ZIndex + 5)
-            bottomBar.Parent = parent
+            bottomBar.Parent = mainFrame
             bottomBar.AnchorPoint = Vector2.new(0, 0)
-            local pPos = (parent:IsA("GuiObject") and parent.AbsolutePosition) or Vector2.zero
-            bottomBar.Position = UDim2.fromOffset(mainFrame.AbsolutePosition.X - pPos.X, mainFrame.AbsolutePosition.Y - pPos.Y + mainFrame.AbsoluteSize.Y + 4)
-            bottomBar.Size = UDim2.fromOffset(math.max(300, mainFrame.AbsoluteSize.X), 26)
+            bottomBar.Position = UDim2.new(0, 0, 1, 4)
+            bottomBar.Size = UDim2.new(1, 0, 0, 26)
             Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 6)
             local barStroke = Instance.new("UIStroke", bottomBar)
             barStroke.Color = accent
@@ -2321,11 +2320,8 @@ local function PatchRayfieldDOM()
                 bottomBar.Visible = visible
                 bottomBar.BackgroundTransparency = 0
                 bottomBar.AnchorPoint = Vector2.new(0, 0)
-                bottomBar.Position = UDim2.fromOffset(
-                    absolutePosition.X - parentPosition.X,
-                    absolutePosition.Y - parentPosition.Y + mainFrame.AbsoluteSize.Y + 4
-                )
-                bottomBar.Size = UDim2.fromOffset(math.max(300, mainFrame.AbsoluteSize.X), 26)
+                bottomBar.Position = UDim2.new(0, 0, 1, 4)
+                bottomBar.Size = UDim2.new(1, 0, 0, 26)
 
             end))
         end
@@ -2694,28 +2690,37 @@ local function PatchRayfieldDOM()
         end)
     end
 
-    -- Operator Profile & Live System Monitor: Attached Bottom Bar (parented to mainFrame.Parent for 100% immunity to clipping)
-    for _, child in ipairs(mainFrame:GetChildren()) do
-        if child.Name == "BottomDock" or child.Name == "TASFF_BottomBar" then child:Destroy() end
+    -- Operator Profile & Live System Monitor: Attached Bottom Bar (parented directly to mainFrame with zero drag lag)
+    mainFrame.ClipsDescendants = false
+    if not mainFrame:FindFirstChild("NoClipEnforcer") then
+        local nc = Instance.new("BoolValue", mainFrame)
+        nc.Name = "NoClipEnforcer"
+        mainFrame:GetPropertyChangedSignal("ClipsDescendants"):Connect(function()
+            if mainFrame.ClipsDescendants then
+                mainFrame.ClipsDescendants = false
+            end
+        end)
+    end
+
+    local parentGui = mainFrame.Parent or (FindRayfieldGui and FindRayfieldGui())
+    if parentGui then
+        local oldParentBB = parentGui:FindFirstChild("TASFF_BottomBar")
+        if oldParentBB then oldParentBB:Destroy() end
     end
     if OverlayGui then
         local oldOverlayBB = OverlayGui:FindFirstChild("TASFF_BottomBar")
         if oldOverlayBB then oldOverlayBB:Destroy() end
     end
+    local oldDock = mainFrame:FindFirstChild("BottomDock")
+    if oldDock then oldDock:Destroy() end
 
-    local parentGui = mainFrame.Parent or (FindRayfieldGui and FindRayfieldGui())
-    if not parentGui then return false end
-
-    local bottomBar = parentGui:FindFirstChild("TASFF_BottomBar")
+    local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar")
     if not bottomBar then
-        bottomBar = Instance.new("Frame", parentGui)
+        bottomBar = Instance.new("Frame", mainFrame)
         bottomBar.Name = "TASFF_BottomBar"
         bottomBar.AnchorPoint = Vector2.new(0, 0)
-        local pPos = (parentGui:IsA("GuiObject") and parentGui.AbsolutePosition) or Vector2.zero
-        local mPos = mainFrame.AbsolutePosition
-        local mSize = mainFrame.AbsoluteSize
-        bottomBar.Position = UDim2.fromOffset(mPos.X - pPos.X, mPos.Y - pPos.Y + mSize.Y + 4)
-        bottomBar.Size = UDim2.fromOffset(math.max(300, mSize.X), 26)
+        bottomBar.Position = UDim2.new(0, 0, 1, 4)
+        bottomBar.Size = UDim2.new(1, 0, 0, 26)
         bottomBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)   -- fully opaque dark so text is readable
         bottomBar.BackgroundTransparency = 0
         bottomBar.BorderSizePixel = 0
@@ -2949,15 +2954,12 @@ local function PatchRayfieldDOM()
     end
 
     if bottomBar then
-        if bottomBar.Parent ~= parentGui then
-            bottomBar.Parent = parentGui
+        if bottomBar.Parent ~= mainFrame then
+            bottomBar.Parent = mainFrame
         end
-        local pPos = (parentGui:IsA("GuiObject") and parentGui.AbsolutePosition) or Vector2.zero
-        local mPos = mainFrame.AbsolutePosition
-        local mSize = mainFrame.AbsoluteSize
         bottomBar.AnchorPoint = Vector2.new(0, 0)
-        bottomBar.Position = UDim2.fromOffset(mPos.X - pPos.X, mPos.Y - pPos.Y + mSize.Y + 4)
-        bottomBar.Size = UDim2.fromOffset(math.max(300, mSize.X), 26)
+        bottomBar.Position = UDim2.new(0, 0, 1, 4)
+        bottomBar.Size = UDim2.new(1, 0, 0, 26)
         bottomBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)
         bottomBar.BackgroundTransparency = 0
         bottomBar.Visible = true
@@ -3101,22 +3103,18 @@ local function PatchRayfieldDOM()
         local mMesh = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
         if mMesh then mMesh:Destroy() end
 
-        -- Attached TASFF_BottomBar sync (parented to mainFrame.Parent with zero drag lag and immune to clipping)
-        local pGui = mainFrame.Parent or (FindRayfieldGui and FindRayfieldGui())
-        local bBar = (pGui and pGui:FindFirstChild("TASFF_BottomBar")) or mainFrame:FindFirstChild("TASFF_BottomBar")
+        -- Attached TASFF_BottomBar sync (parented directly to mainFrame with zero drag lag)
+        local bBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
         if bBar then
             local shouldBeVis = (isVis and isExpanded and not isClosing)
             bBar.Visible = shouldBeVis
             if shouldBeVis then
-                if pGui and bBar.Parent ~= pGui then
-                    bBar.Parent = pGui
+                if bBar.Parent ~= mainFrame then
+                    bBar.Parent = mainFrame
                 end
-                local pPos = (bBar.Parent:IsA("GuiObject") and bBar.Parent.AbsolutePosition) or Vector2.zero
-                local mPos = mainFrame.AbsolutePosition
-                local mSize = mainFrame.AbsoluteSize
                 bBar.AnchorPoint = Vector2.new(0, 0)
-                bBar.Position = UDim2.fromOffset(mPos.X - pPos.X, mPos.Y - pPos.Y + mSize.Y + 4)
-                bBar.Size = UDim2.fromOffset(math.max(300, mSize.X), 26)
+                bBar.Position = UDim2.new(0, 0, 1, 4)
+                bBar.Size = UDim2.new(1, 0, 0, 26)
                 bBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)
                 bBar.BackgroundTransparency = 0
                 bBar.ZIndex = math.max(10, (mainFrame.ZIndex or 1) + 5)
@@ -3201,30 +3199,19 @@ local function PatchRayfieldDOM()
         local fHook = Instance.new("BoolValue", mainFrame)
         fHook.Name = "MasterFadeSyncHooked"
         mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
-        mainFrame:GetPropertyChangedSignal("Position"):Connect(SyncRayfieldFade)
+        mainFrame:GetPropertyChangedSignal("Position"):Connect(function()
+            local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
+            if ambientHalo then ambientHalo.Position = mainFrame.Position end
+            if NotificationDrawer and NotificationDrawer.Visible then UpdateDrawerPosition() end
+        end)
         mainFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
         mainFrame:GetPropertyChangedSignal("Size"):Connect(SyncRayfieldFade)
         if rGui then
             rGui:GetPropertyChangedSignal("Enabled"):Connect(SyncRayfieldFade)
         end
     end
-    if not mainFrame:FindFirstChild("BottomBarSteppedHook") then
-        local bHook = Instance.new("BoolValue", mainFrame)
-        bHook.Name = "BottomBarSteppedHook"
-        table.insert(Connections, RunService.RenderStepped:Connect(function()
-            local pGui2 = mainFrame.Parent or (FindRayfieldGui and FindRayfieldGui())
-            local bBar2 = pGui2 and pGui2:FindFirstChild("TASFF_BottomBar")
-            if bBar2 and bBar2.Visible and mainFrame.Parent then
-                local pPos = (pGui2:IsA("GuiObject") and pGui2.AbsolutePosition) or Vector2.zero
-                local mPos = mainFrame.AbsolutePosition
-                local mSize = mainFrame.AbsoluteSize
-                if mSize.X >= 100 and mSize.Y >= 50 then
-                    bBar2.Position = UDim2.fromOffset(mPos.X - pPos.X, mPos.Y - pPos.Y + mSize.Y + 4)
-                    bBar2.Size = UDim2.fromOffset(mSize.X, 26)
-                end
-            end
-        end))
-    end
+    local oldBBSync = mainFrame:FindFirstChild("BottomBarSteppedHook")
+    if oldBBSync then oldBBSync:Destroy() end
     SyncRayfieldFade()
 
     -- 3. Walk Elements and inject Section collapse, Stepper Buttons, Keycaps, Definition Badges, and Live Dots

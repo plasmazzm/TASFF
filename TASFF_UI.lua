@@ -334,17 +334,8 @@ end
 --   • The cover hides the unstyled flash while PatchRayfieldDOM applies styling
 -- Removal is guaranteed by the deferred task.spawn in TASFF_Theme.lua.
 do
-    local _rGui = (typeof(getgenv) == "function" and getgenv().TASFF and getgenv().TASFF.Rayfield) or nil
-    -- Also try common Rayfield ScreenGui names
-    local function _findRGui()
-        for _, svc in ipairs({game:GetService("CoreGui"), game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
-            if svc then
-                local g = svc:FindFirstChild("RayfieldLocalUI") or svc:FindFirstChild("Rayfield")
-                if g then return g end
-            end
-        end
-    end
-    local _rGuiInst = _findRGui()
+    -- Use Theme's FindRayfieldGui — it handles gethui(), CoreGui, PlayerGui, all forks
+    local _rGuiInst = TASFFTheme and TASFFTheme.FindRayfieldGui and TASFFTheme.FindRayfieldGui()
     local _main = _rGuiInst and (_rGuiInst:FindFirstChild("Main", true) or _rGuiInst:FindFirstChildOfClass("Frame"))
     if _main and not _main:FindFirstChild("TASFF_LoadCover") then
         local _cov = Instance.new("Frame")
@@ -1866,7 +1857,14 @@ IntelTab:CreateKeybind({
         local validKey = SanitizeKeyName(key)
         if validKey then
             S.MarkModeCycleKey = validKey
-            CycleMarkingMode()
+            if S.Notify then
+                S.Notify({
+                    Title    = "TASFF Keybind",
+                    Content  = "Mark Mode Cycle key set to [" .. tostring(validKey) .. "]",
+                    Duration = 2,
+                    Image    = "keyboard"
+                })
+            end
         end
     end
 })

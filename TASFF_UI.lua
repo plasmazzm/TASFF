@@ -222,6 +222,17 @@ end
 
 LoadColorSettings()
 
+local function ColorFromHex(hex)
+    if not hex or type(hex) ~= "string" then return Color3.fromRGB(240, 240, 240) end
+    local value = tonumber(string.gsub(hex, "^#", ""), 16)
+    if not value then return Color3.fromRGB(240, 240, 240) end
+    return Color3.fromRGB(
+        bit32.band(bit32.rshift(value, 16), 255),
+        bit32.band(bit32.rshift(value, 8), 255),
+        bit32.band(value, 255)
+    )
+end
+
 local function ApplyGlobalThemePalette(themeName)
     local palette = GlobalThemePalettes[themeName]
     if not palette then return false end
@@ -3187,11 +3198,6 @@ local function UpdateWindowTitle(themeName)
     if title and title:IsA("TextLabel") then
         title.Text = "TASFF " .. (S.CurrentVersion or "2.3.0") .. " - " .. themeName
     end
-end
-local function ColorFromHex(hex)
-    local value = tonumber(string.gsub(hex, "^#", ""), 16)
-    if not value then error("Invalid preset color: " .. tostring(hex)) end
-    return Color3.fromRGB(bit32.band(bit32.rshift(value, 16), 255), bit32.band(bit32.rshift(value, 8), 255), bit32.band(value, 255))
 end
 local function GetGlobalThemeColorName(color)
     local bestName, bestDistance, r, g, b = nil, math.huge, color.R, color.G, color.B

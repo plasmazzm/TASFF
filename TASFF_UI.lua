@@ -338,10 +338,7 @@ end
 local HomeTab = Window:CreateTab("Home", "home")
 
 HomeTab:CreateSection("Welcome")
-HomeTab:CreateParagraph({
-    Title   = "Operator: " .. (Player and Player.DisplayName or "Operator") .. " (@" .. (Player and Player.Name or "User") .. ")",
-    Content = "Pipeline active: " .. tostring(S.FeatureCount > 0 and S.FeatureCount or 123) .. " features  |  Tier: " .. (S.KeyVerified and "Full Access (Key Active)" or "Free Tier") .. "  |  Engine: 4-Slot Pipeline"
-})
+-- Operator identity is displayed in the persistent bottom bar; no duplicate paragraph needed.
 
 HomeTab:CreateSection("Server Info")
 local serverInfoLabel = HomeTab:CreateParagraph({

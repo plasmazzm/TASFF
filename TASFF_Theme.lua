@@ -275,6 +275,8 @@ local function RenderThemePreviewCard(container, themeName)
     local uiText = HexToColor3(palette.UIText)
 
     -- Make sure container does not clip the preview card and expands its height
+    -- Specifically disable AutomaticSize on the Preset Preview container so setting explicit height works cleanly
+    container.AutomaticSize = Enum.AutomaticSize.None
     container.ClipsDescendants = false
     local cTitle = container:FindFirstChild("Title")
     local cContent = container:FindFirstChild("Content")
@@ -472,7 +474,9 @@ local function ApplyRayfieldTheme(themeColors)
 
     for _, descendant in ipairs(mainFrame:GetDescendants()) do
         if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
-            descendant.TextColor3 = themeColors.TextColor
+            if descendant.Name ~= "ArrowIcon" and descendant.Name ~= "StepMinus" and descendant.Name ~= "StepPlus" then
+                descendant.TextColor3 = themeColors.TextColor
+            end
         elseif descendant:IsA("ScrollingFrame") then
             descendant.ScrollBarImageColor3 = themeColors.TabBackgroundSelected
         end
@@ -483,6 +487,54 @@ local function ApplyRayfieldTheme(themeColors)
             descendant.BackgroundColor3 = themeColors.ElementBackground
         elseif descendant.Name == "Slider" or descendant.Name == "SliderBar" or descendant.Name == "Progress" then
             descendant.BackgroundColor3 = themeColors.TabBackgroundSelected
+        elseif descendant:IsA("Frame") and (descendant:FindFirstChild("Interact") or descendant:FindFirstChild("Switch") or descendant:FindFirstChild("Slider") or descendant:FindFirstChild("Dropdown")) then
+            descendant.BackgroundColor3 = themeColors.ElementBackground
+            local st = descendant:FindFirstChildOfClass("UIStroke")
+            if st then st.Color = themeColors.ElementStroke end
+        elseif descendant:IsA("Frame") and descendant:FindFirstChild("Content") and descendant:FindFirstChild("Title") and not descendant:FindFirstChild("Switch") then
+            descendant.BackgroundColor3 = themeColors.SecondaryElementBackground
+            local st = descendant:FindFirstChild("ParaBoxStroke") or descendant:FindFirstChildOfClass("UIStroke")
+            if st then st.Color = themeColors.SecondaryElementStroke or themeColors.ElementStroke end
+        end
+    end
+
+    -- Update cyberStroke, scanBg, ambientHalo to theme colors
+    local cStroke = mainFrame:FindFirstChild("CyberStroke")
+    if cStroke then cStroke.Color = accentColor end
+    local scanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
+    if scanBg then
+        scanBg.BackgroundColor3 = themeColors.Background
+        local sGrad = scanBg:FindFirstChild("ScanGrad")
+        if sGrad then
+            local darkKey = themeColors.Background
+            local lightKey = themeColors.Background:Lerp(accentColor, 0.08)
+            sGrad.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0,      darkKey),
+                ColorSequenceKeypoint.new(0.06,   lightKey),
+                ColorSequenceKeypoint.new(0.12,   darkKey),
+                ColorSequenceKeypoint.new(0.19,   lightKey),
+                ColorSequenceKeypoint.new(0.25,   darkKey),
+                ColorSequenceKeypoint.new(0.31,   lightKey),
+                ColorSequenceKeypoint.new(0.38,   darkKey),
+                ColorSequenceKeypoint.new(0.44,   lightKey),
+                ColorSequenceKeypoint.new(0.50,   darkKey),
+                ColorSequenceKeypoint.new(0.56,   lightKey),
+                ColorSequenceKeypoint.new(0.63,   darkKey),
+                ColorSequenceKeypoint.new(0.69,   lightKey),
+                ColorSequenceKeypoint.new(0.75,   darkKey),
+                ColorSequenceKeypoint.new(0.81,   lightKey),
+                ColorSequenceKeypoint.new(0.88,   darkKey),
+                ColorSequenceKeypoint.new(0.94,   lightKey),
+                ColorSequenceKeypoint.new(1,      darkKey),
+            })
+        end
+    end
+
+    for _, desc in ipairs(mainFrame:GetDescendants()) do
+        if desc.Name == "SectionLeftBar" then
+            desc.BackgroundColor3 = accentColor
+        elseif desc.Name == "StepMinus" or desc.Name == "StepPlus" then
+            desc.TextColor3 = accentColor
         end
     end
 
@@ -1603,6 +1655,18 @@ TASFFEnv.Theme.KbmOuterStroke = kbmStroke
 TASFFEnv.Theme.KbmTitle       = kbmTitle
 TASFFEnv.Theme.KbmToggle      = kbmToggle
 
+-- Apply active accent color immediately upon creation so it never starts in cyan
+pcall(function()
+    local acc = GetThemeAccentColor()
+    kbmStroke.Color = acc
+    kbmTitle.TextColor3 = acc
+    kbmToggle.TextColor3 = acc
+    for _, r in ipairs(KbmKeycapRefs) do
+        r.cap.TextColor3 = acc
+        r.stroke.Color = acc
+    end
+end)
+
 -- ── 4. Floating Hover Tooltips for Controls ──────────────────────
 local TooltipFrame = Instance.new("Frame")
 TooltipFrame.Name = "TooltipFrame"
@@ -1783,17 +1847,28 @@ TASFFEnv.Theme.SetTabBadge = SetTabBadge
 -- of what Rayfield writes to the parent frame's BackgroundColor3.
 local function AttachCarbonOverlay(targetFrame, _unused)
     if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
+    -- NEVER attach to frames with AutomaticSize or Paragraphs (prevents Roblox cyclic expansion feedback loops)
+    if targetFrame:IsA("GuiObject") and targetFrame.AutomaticSize ~= Enum.AutomaticSize.None then
+        return
+    end
+    if targetFrame:FindFirstChild("Content") and targetFrame:FindFirstChild("Title") then
+        return
+    end
+
     local marker = Instance.new("BoolValue")
     marker.Name = "CarbonOverlay"
     marker.Parent = targetFrame
 
-    -- Overlay frame inside the card — independent of Rayfield's color writes
+    -- Overlay frame wrapped in a Folder so UIListLayout ignores it completely
+    local folder = Instance.new("Folder")
+    folder.Name = "CarbonFolder"
+    folder.Parent = targetFrame
+
     local overlay = Instance.new("Frame")
     overlay.Name = "CarbonOverlayFrame"
     overlay.Size = UDim2.new(1, 0, 1, 0)
     overlay.Position = UDim2.new(0, 0, 0, 0)
-    overlay.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
-    overlay.BackgroundTransparency = 0.52  -- semi-transparent so card text/controls still show
+    overlay.BackgroundTransparency = 0.85  -- subtle weave, lets theme card color shine through
     overlay.BorderSizePixel = 0
     overlay.ZIndex = (targetFrame.ZIndex or 1) + 1
     -- Match parent corner radius so overlay doesn't overflow rounded cards
@@ -1802,25 +1877,21 @@ local function AttachCarbonOverlay(targetFrame, _unused)
         Instance.new("UICorner", overlay).CornerRadius = parentCorner.CornerRadius
     end
 
-    -- Diagonal carbon weave gradient — high contrast (dark/medium-blue stripes)
+    local acc = GetThemeAccentColor()
     local grad = Instance.new("UIGradient")
     grad.Name = "CarbonGradient"
     grad.Rotation = 45
     grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,    Color3.fromRGB(6,   8,  16)),
-        ColorSequenceKeypoint.new(0.12, Color3.fromRGB(85,  92, 128)),
-        ColorSequenceKeypoint.new(0.25, Color3.fromRGB(6,   8,  16)),
-        ColorSequenceKeypoint.new(0.37, Color3.fromRGB(85,  92, 128)),
-        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(6,   8,  16)),
-        ColorSequenceKeypoint.new(0.62, Color3.fromRGB(85,  92, 128)),
-        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(6,   8,  16)),
-        ColorSequenceKeypoint.new(0.87, Color3.fromRGB(85,  92, 128)),
-        ColorSequenceKeypoint.new(1,    Color3.fromRGB(6,   8,  16)),
+        ColorSequenceKeypoint.new(0,    Color3.fromRGB(15, 15, 20)),
+        ColorSequenceKeypoint.new(0.25, acc:Lerp(Color3.fromRGB(100, 100, 120), 0.5)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(15, 15, 20)),
+        ColorSequenceKeypoint.new(0.75, acc:Lerp(Color3.fromRGB(100, 100, 120), 0.5)),
+        ColorSequenceKeypoint.new(1,    Color3.fromRGB(15, 15, 20)),
     })
     grad.Transparency = NumberSequence.new(0)
     grad.Parent = overlay
 
-    overlay.Parent = targetFrame
+    overlay.Parent = folder
 end
 
 local function AttachHoverGlow(card)
@@ -2148,10 +2219,20 @@ local function PatchRayfieldDOM()
     -- Loading cover is created by the outer task.spawn (after UIInitialized),
     -- and removed with a guaranteed fade after both patch passes complete.
 
+    local pal = GlobalThemePalettes[S.ActivePresetName or "Solaris Gold"] or GlobalThemePalettes.Default
+    local curTheme = TASFFEnv.Theme.ActiveThemeColors or {}
+    local menuBg = curTheme.Background or HexToColor3(pal.UIBackground)
+    local menuAccent = GetThemeAccentColor()
+    local menuElem = curTheme.ElementBackground or HexToColor3(pal.UIElement)
+    local menuElemStroke = curTheme.ElementStroke or HexToColor3(pal.Overlay)
+
     if S.UIOpacity and S.UIOpacity < 1.0 then
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
+    else
+        mainFrame.BackgroundTransparency = 0
     end
-    mainFrame.ClipsDescendants = false
+    mainFrame.ClipsDescendants = true
+    mainFrame.BackgroundColor3 = menuBg
 
     -- 0a. Atmospheric Scanline Grid on Window Background
     -- Use a child Frame (NOT UIGradient on mainFrame) so Rayfield's BackgroundColor3
@@ -2161,16 +2242,13 @@ local function PatchRayfieldDOM()
     local existingScanGrad = mainFrame:FindFirstChild("MainScanlinesGrad")
     if existingScanGrad then existingScanGrad:Destroy() end
 
-    mainFrame.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
-    mainFrame.BackgroundTransparency = 0
-
     local scanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
     if not scanBg then
         scanBg = Instance.new("Frame")
         scanBg.Name = "TASFF_ScanlinesBg"
         scanBg.Size = UDim2.new(1, 0, 1, 0)
         scanBg.Position = UDim2.new(0, 0, 0, 0)
-        scanBg.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
+        scanBg.BackgroundColor3 = menuBg
         scanBg.BackgroundTransparency = 0
         scanBg.BorderSizePixel = 0
         scanBg.ZIndex = 1   -- strictly behind all Rayfield content (cards default to ZIndex 2+)
@@ -2179,28 +2257,30 @@ local function PatchRayfieldDOM()
         if menuCorner then
             Instance.new("UICorner", scanBg).CornerRadius = menuCorner.CornerRadius
         end
-        -- Horizontal scanlines gradient (repeating dark/mid-blue stripes; <= 20 keypoints)
+        -- Horizontal scanlines gradient (alternating theme background and subtle accent tint; <= 20 keypoints)
+        local darkKey = menuBg
+        local lightKey = menuBg:Lerp(menuAccent, 0.08)
         local scanGrad = Instance.new("UIGradient")
         scanGrad.Name = "ScanGrad"
         scanGrad.Rotation = 90
         scanGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,      Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.06,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.12,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.19,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.31,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.38,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.44,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.50,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.56,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.63,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.69,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.81,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.88,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.94,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(1,      Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0,      darkKey),
+            ColorSequenceKeypoint.new(0.06,   lightKey),
+            ColorSequenceKeypoint.new(0.12,   darkKey),
+            ColorSequenceKeypoint.new(0.19,   lightKey),
+            ColorSequenceKeypoint.new(0.25,   darkKey),
+            ColorSequenceKeypoint.new(0.31,   lightKey),
+            ColorSequenceKeypoint.new(0.38,   darkKey),
+            ColorSequenceKeypoint.new(0.44,   lightKey),
+            ColorSequenceKeypoint.new(0.50,   darkKey),
+            ColorSequenceKeypoint.new(0.56,   lightKey),
+            ColorSequenceKeypoint.new(0.63,   darkKey),
+            ColorSequenceKeypoint.new(0.69,   lightKey),
+            ColorSequenceKeypoint.new(0.75,   darkKey),
+            ColorSequenceKeypoint.new(0.81,   lightKey),
+            ColorSequenceKeypoint.new(0.88,   darkKey),
+            ColorSequenceKeypoint.new(0.94,   lightKey),
+            ColorSequenceKeypoint.new(1,      darkKey),
         })
         scanGrad.Transparency = NumberSequence.new(0)
         scanGrad.Parent = scanBg
@@ -2864,26 +2944,27 @@ local function PatchRayfieldDOM()
         local topTrans = (topbar and topbar.BackgroundTransparency) or mainFrame.BackgroundTransparency
         local mainTrans = mainFrame.BackgroundTransparency
         local isVis = ((not rGui or rGui.Enabled) and mainFrame.Visible)
-        local isExpanded = (mainFrame.AbsoluteSize.Y > 60)
+        local isExpanded = (mainFrame.AbsoluteSize.Y > 60 and mainTrans < 0.8)
+        local isClosing = (not isVis) or (mainTrans > 0.08) or (mainFrame.AbsoluteSize.Y < 120)
 
         -- CyberStroke
         local cStroke = mainFrame:FindFirstChild("CyberStroke")
         if cStroke then
             cStroke.Transparency = math.clamp(mainTrans, 0, 1)
-            cStroke.Enabled = (isVis and isExpanded)
+            cStroke.Enabled = (isVis and isExpanded and not isClosing)
         end
 
         -- Topbar Accent Line sync (no orphan lines when minimized or closed)
         local topbarLine = topbar and topbar:FindFirstChild("TopbarAccentLine")
         if topbarLine then
-            topbarLine.Visible = (isVis and isExpanded)
+            topbarLine.Visible = (isVis and isExpanded and not isClosing)
             topbarLine.BackgroundTransparency = mainTrans
         end
 
         -- Ambient Halo Sync in mainFrame.Parent (100% strictly BEHIND mainFrame, perfectly centered)
         local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
         if ambientHalo then
-            ambientHalo.Visible = (isVis and isExpanded)
+            ambientHalo.Visible = (isVis and isExpanded and not isClosing)
             if ambientHalo.Visible then
                 ambientHalo.ImageColor3 = GetThemeAccentColor()
                 ambientHalo.ImageTransparency = math.clamp(0.08 + mainTrans * 0.92, 0, 1)
@@ -2902,14 +2983,14 @@ local function PatchRayfieldDOM()
         -- Main Window Scanlines Background (child Frame — stays behind elements at ZIndex 1)
         local mMesh = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
         if mMesh then
-            mMesh.Visible = (isVis and isExpanded)
+            mMesh.Visible = (isVis and isExpanded and not isClosing)
             mMesh.BackgroundTransparency = mainTrans
         end
 
         -- Attached TASFF_BottomBar sync (rigidly parented directly to mainFrame with zero drag lag)
         local bBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
         if bBar then
-            bBar.Visible = (isVis and isExpanded)
+            bBar.Visible = (isVis and isExpanded and not isClosing)
             if bBar.Visible then
                 if bBar.Parent ~= mainFrame then
                     bBar.Parent = mainFrame
@@ -2933,7 +3014,7 @@ local function PatchRayfieldDOM()
                 end
                 local rh = bBar:FindFirstChild("ResizeHandle")
                 if rh then
-                    rh.Visible = (isVis and isExpanded)
+                    rh.Visible = (isVis and isExpanded and not isClosing)
                     local g1 = rh:FindFirstChild("Grip1")
                     local g2 = rh:FindFirstChild("Grip2")
                     if g1 then g1.BackgroundTransparency = mainTrans end
@@ -2942,10 +3023,23 @@ local function PatchRayfieldDOM()
             end
         end
 
+        -- Hide injected section decors during close so no orphaned lines/buttons remain visible
+        for _, desc in ipairs(mainFrame:GetDescendants()) do
+            if desc.Name == "SectionLeftBar" or desc.Name == "CollapseToggle" or desc.Name == "CollapsedBar" then
+                if desc:IsA("GuiObject") then
+                    if isClosing then
+                        desc.Visible = false
+                    elseif desc.Name == "SectionLeftBar" or desc.Name == "CollapseToggle" then
+                        desc.Visible = true
+                    end
+                end
+            end
+        end
+
         -- Topbar Bell Button
         local bBtn = topbar and topbar:FindFirstChild("NotifBellBtn")
         if bBtn then
-            bBtn.Visible = isVis
+            bBtn.Visible = (isVis and not isClosing)
             bBtn.BackgroundTransparency = math.clamp(0.3 + topTrans * 0.7, 0, 1)
             local bStroke = bBtn:FindFirstChildOfClass("UIStroke")
             if bStroke then bStroke.Transparency = topTrans end
@@ -2956,13 +3050,13 @@ local function PatchRayfieldDOM()
         end
 
         -- Keep NotificationDrawer attached to the right of the menu when visible
-        if isVis and isExpanded and NotificationDrawer and NotificationDrawer.Visible then
+        if isVis and isExpanded and not isClosing and NotificationDrawer and NotificationDrawer.Visible then
             UpdateDrawerPosition()
         end
 
         -- Only menu-bound tooltips hide with the window. The notification
         -- history drawer is a detached overlay and must stay visible.
-        if not isVis or not isExpanded then
+        if not isVis or not isExpanded or isClosing then
             if TooltipFrame then TooltipFrame.Visible = false end
         end
     end
@@ -2972,6 +3066,8 @@ local function PatchRayfieldDOM()
         fHook.Name = "MasterFadeSyncHooked"
         mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
         mainFrame:GetPropertyChangedSignal("Position"):Connect(SyncRayfieldFade)
+        mainFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
+        mainFrame:GetPropertyChangedSignal("Size"):Connect(SyncRayfieldFade)
         if rGui then
             rGui:GetPropertyChangedSignal("Enabled"):Connect(SyncRayfieldFade)
         end
@@ -3243,7 +3339,7 @@ local function PatchRayfieldDOM()
                         Instance.new("UICorner", leftBar).CornerRadius = UDim.new(0, 2)
                     end
 
-                    -- Apply black outline box + dark filling background to configuration elements in section
+                    -- Apply theme palette colors to configuration elements in section
                     local pastSec2 = false
                     for _, child in ipairs(boxContainer:GetChildren()) do
                         if child == secFrame then
@@ -3253,13 +3349,25 @@ local function PatchRayfieldDOM()
                             if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
                                 local isCard = child:FindFirstChild("Title") or child:FindFirstChild("Content") or child:FindFirstChild("Interact") or child:FindFirstChild("Switch") or child:FindFirstChild("Slider") or child:FindFirstChild("SliderBar")
                                 if isCard then
-                                    child.BackgroundColor3 = Color3.fromRGB(16, 17, 24)
-                                    if not child:FindFirstChild("SectionBoxStroke") then
-                                        local sboxStroke = Instance.new("UIStroke", child)
-                                        sboxStroke.Name = "SectionBoxStroke"
-                                        sboxStroke.Color = Color3.fromRGB(0, 0, 0)
-                                        sboxStroke.Thickness = 1.5
-                                        sboxStroke.Transparency = 0.1
+                                    -- Remove any hardcoded pitch-black overlay stroke that erases the theme palette
+                                    local oldBlackStroke = child:FindFirstChild("SectionBoxStroke")
+                                    if oldBlackStroke then oldBlackStroke:Destroy() end
+
+                                    -- Retain the theme's element colors from ActiveThemeColors or GlobalThemePalettes
+                                    local curPal = GlobalThemePalettes[S.ActivePresetName or "Solaris Gold"] or GlobalThemePalettes.Default
+                                    local curTc = TASFFEnv.Theme.ActiveThemeColors or {}
+                                    local cardBg = curTc.ElementBackground or HexToColor3(curPal.UIElement)
+                                    local cardStroke = curTc.ElementStroke or HexToColor3(curPal.Overlay)
+
+                                    if not child:FindFirstChild("Content") or child:FindFirstChild("Switch") or child:FindFirstChild("Interact") then
+                                        child.BackgroundColor3 = cardBg
+                                    else
+                                        child.BackgroundColor3 = curTc.SecondaryElementBackground or cardBg
+                                    end
+
+                                    local existingSt = child:FindFirstChildOfClass("UIStroke")
+                                    if existingSt then
+                                        existingSt.Color = cardStroke
                                     end
                                 end
                             end
@@ -3528,32 +3636,44 @@ local function PatchRayfieldDOM()
             if IsParagraphFrame(desc) then
                 local oldBar = desc:FindFirstChild("ParaAccentBar")
                 if oldBar then oldBar:Destroy() end
-                -- Apply universal carbon texture to paragraph card (wrapped in Folder so UIListLayout ignores it!)
-                AttachCarbonOverlay(desc, 0.38)
+                -- Remove any residual CarbonOverlay frames that cause AutomaticSize height explosion
+                local oldCarbon = desc:FindFirstChild("CarbonOverlayFrame", true)
+                if oldCarbon then oldCarbon:Destroy() end
+                local oldFolder = desc:FindFirstChild("CarbonFolder")
+                if oldFolder then oldFolder:Destroy() end
+                local oldMarker = desc:FindFirstChild("CarbonOverlay")
+                if oldMarker then oldMarker:Destroy() end
 
-                if not desc:FindFirstChild("ParaBoxStroke") then
-                    local pStroke = Instance.new("UIStroke", desc)
+                local curPal = GlobalThemePalettes[S.ActivePresetName or "Solaris Gold"] or GlobalThemePalettes.Default
+                local curTc = TASFFEnv.Theme.ActiveThemeColors or {}
+                desc.BackgroundColor3 = curTc.SecondaryElementBackground or HexToColor3(curPal.UIElement)
+
+                local pStroke = desc:FindFirstChild("ParaBoxStroke")
+                if not pStroke then
+                    pStroke = Instance.new("UIStroke", desc)
                     pStroke.Name = "ParaBoxStroke"
-                    pStroke.Color = GetThemeAccentColor()
                     pStroke.Thickness = 1
                     pStroke.Transparency = 0.55
                 end
+                pStroke.Color = curTc.SecondaryElementStroke or GetThemeAccentColor()
 
                 local title = desc:FindFirstChild("Title")
                 local content = desc:FindFirstChild("Content")
                 if title and content and title:IsA("TextLabel") and content:IsA("TextLabel") then
                     title.TextColor3 = GetThemeAccentColor()
                     title.Font = Enum.Font.GothamBold
-                    content.TextColor3 = Color3.fromRGB(195, 200, 210)
+                    content.TextColor3 = curTc.TextColor or HexToColor3(curPal.UIText)
                     content.Font = Enum.Font.GothamMedium
                 end
 
                 -- Integrated palette preview card: injected into "Preset Preview" paragraph frames
                 if title and title:IsA("TextLabel") and title.Text:find("Preset Preview", 1, true) then
-                    if not desc:FindFirstChild("ThemePreviewCard") then
-                        local rawThemeName = title.Text:match("Preset Preview[%s%-—]+(.+)$")
-                            or (S.ActivePresetName)
-                            or "Solaris Gold"
+                    local rawThemeName = title.Text:match("Preset Preview[%s%-—]+(.+)$")
+                        or (S.ActivePresetName)
+                        or "Solaris Gold"
+                    local existingPreview = desc:FindFirstChild("ThemePreviewCard")
+                    if not existingPreview or desc:GetAttribute("RenderedTheme") ~= rawThemeName then
+                        desc:SetAttribute("RenderedTheme", rawThemeName)
                         task.spawn(function()
                             pcall(function()
                                 RenderThemePreviewCard(desc, rawThemeName)

@@ -362,8 +362,8 @@ _G.TASFF_State = {
     CompactModeEnabled          = false,     -- compact UI mode
     MobileModeEnabled           = false,     -- mobile touch mode
     UIOpacity                   = 1.0,       -- window opacity (0.3 to 1.0)
-    AdvancedThemePatchEnabled   = false,     -- native Rayfield content must remain untouched until safe enhancements are opt-in
-    AdvancedThemeLayoutPatchEnabled = false, -- keep native Rayfield layout and visibility authoritative
+    AdvancedThemePatchEnabled   = true,      -- full DOM enhancement patch (carbon textures, section boxes, hover glow, etc.)
+    AdvancedThemeLayoutPatchEnabled = true,  -- section collapse buttons, slider steppers, card section boxes
     EventLog                    = {},        -- session event log entries
     LastTouchedDef              = "Master Switch",
     LastTouchedDefText          = "Global killswitch for all combat systems.",
@@ -476,5 +476,4 @@ _G.TASFF_State = {
     FeatureCount                = 0,     -- populated by TASFF_Lists.lua on load
     StatusDisplayCount          = 6,     -- populated by TASFF_Lists.lua on load
 }
-
 

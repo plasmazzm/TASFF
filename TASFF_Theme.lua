@@ -110,17 +110,34 @@ local GlobalThemeColorFields = {
     {title="UI Element BG",     themeField="ElementBackground",         role="UIElement"},
     {title="UI Text",           themeField="TextColor",                 role="UIText"},
 }
+local function HexToColor3(hex)
+    if typeof(hex) == "Color3" then return hex end
+    if type(hex) ~= "string" then return Color3.fromRGB(255, 255, 255) end
+    hex = hex:gsub("#", "")
+    if #hex < 6 then return Color3.fromRGB(255, 255, 255) end
+    local r = tonumber(hex:sub(1, 2), 16) or 255
+    local g = tonumber(hex:sub(3, 4), 16) or 255
+    local b = tonumber(hex:sub(5, 6), 16) or 255
+    return Color3.fromRGB(r, g, b)
+end
+TASFFEnv.Theme = TASFFEnv.Theme or {}
+TASFFEnv.Theme.HexToColor3 = HexToColor3
+
 -- Builds a complete Rayfield theme table from a small set of base colours.
 -- Everything (tab/button/input/toggle/dropdown strokes, hovers, notifications)
 -- is derived from the palette so switching presets repaints the WHOLE window
 -- instead of leaving hardcoded dark greys behind.
 local function BuildRayfieldThemeTable(tc)
+    if type(tc) == "string" and GlobalThemePalettes[tc] then
+        tc = GlobalThemePalettes[tc]
+    end
     tc = tc or ThemeColorDefaults
-    local bg     = tc.Background or ThemeColorDefaults.Background
-    local top    = tc.Topbar or ThemeColorDefaults.Topbar
-    local accent = tc.TabBackgroundSelected or ThemeColorDefaults.TabBackgroundSelected
-    local elem   = tc.ElementBackground or ThemeColorDefaults.ElementBackground
-    local text   = tc.TextColor or ThemeColorDefaults.TextColor
+
+    local bg     = tc.Background or (tc.UIBackground and HexToColor3(tc.UIBackground)) or ThemeColorDefaults.Background
+    local top    = tc.Topbar or (tc.UITopbar and HexToColor3(tc.UITopbar)) or ThemeColorDefaults.Topbar
+    local accent = tc.TabBackgroundSelected or (tc.UIAccent and HexToColor3(tc.UIAccent)) or (tc.Overlay and HexToColor3(tc.Overlay)) or ThemeColorDefaults.TabBackgroundSelected
+    local elem   = tc.ElementBackground or (tc.UIElement and HexToColor3(tc.UIElement)) or ThemeColorDefaults.ElementBackground
+    local text   = tc.TextColor or (tc.UIText and HexToColor3(tc.UIText)) or ThemeColorDefaults.TextColor
 
     local function lerp(a, b, t) return a:Lerp(b, t) end
 
@@ -652,10 +669,24 @@ local function ApplyRayfieldTheme(themeColors)
         end)
     end
 
-    local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
+    local bottomBar = (mainFrame and mainFrame:FindFirstChild("TASFF_BottomBar"))
+        or (mainFrame and mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
+        or (OverlayGui and OverlayGui:FindFirstChild("TASFF_BottomBar"))
     if bottomBar then
         local bStroke = bottomBar:FindFirstChildOfClass("UIStroke")
         setStrokeColor(bStroke, accentColor)
+        local barLine = bottomBar:FindFirstChild("BarAccentLine")
+        if barLine then
+            setColor(barLine, "BackgroundColor3", accentColor)
+            local bg = barLine:FindFirstChildOfClass("UIGradient")
+            if bg then
+                bg.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0,   Color3.fromRGB(10, 10, 15)),
+                    ColorSequenceKeypoint.new(0.5, accentColor),
+                    ColorSequenceKeypoint.new(1,   Color3.fromRGB(10, 10, 15)),
+                })
+            end
+        end
         local kbmBtn = bottomBar:FindFirstChild("KBMBarBtn")
         if kbmBtn then
             setColor(kbmBtn, "TextColor3", accentColor)
@@ -765,15 +796,15 @@ TASFFEnv.Theme.MakeDraggable = MakeDraggable
 
 -- Theme Color dynamic query helpers (syncs with user-selected UI theme)
 local function GetThemeAccentColor()
-    if TASFFEnv.Theme and TASFFEnv.Theme.ActiveThemeColors and TASFFEnv.Theme.ActiveThemeColors.TabBackgroundSelected then
-        return TASFFEnv.Theme.ActiveThemeColors.TabBackgroundSelected
-    end
     if S.CustomAccentColor then return S.CustomAccentColor end
-    local curPreset = S.ActivePresetName or S.GlobalTheme or (TASFFEnv.Theme and TASFFEnv.Theme.SelectedThemeName)
+    local curPreset = S.GlobalTheme or (TASFFEnv.Theme and TASFFEnv.Theme.SelectedThemeName) or (S.ActivePresetName ~= "" and S.ActivePresetName)
     if curPreset and GlobalThemePalettes[curPreset] then
         local p = GlobalThemePalettes[curPreset]
         local hex = p.UIAccent or p.Overlay
         if hex then return HexToColor3(hex) end
+    end
+    if TASFFEnv.Theme and TASFFEnv.Theme.ActiveThemeColors and TASFFEnv.Theme.ActiveThemeColors.TabBackgroundSelected then
+        return TASFFEnv.Theme.ActiveThemeColors.TabBackgroundSelected
     end
     return Color3.fromRGB(245, 166, 35)
 end
@@ -2060,15 +2091,20 @@ local function PatchRayfieldDOM()
             if hs then hs.Color = accent end
         end
 
+        mainFrame.ClipsDescendants = false
         local bottomBar = parent:FindFirstChild("TASFF_BottomBar")
         if not bottomBar then
             bottomBar = Instance.new("Frame")
             bottomBar.Name = "TASFF_BottomBar"
             bottomBar.BackgroundColor3 = elemColor
-            bottomBar.BackgroundTransparency = 0.04
+            bottomBar.BackgroundTransparency = 0
             bottomBar.BorderSizePixel = 0
-            bottomBar.ZIndex = mainFrame.ZIndex + 10
+            bottomBar.ZIndex = math.max(10, mainFrame.ZIndex + 5)
             bottomBar.Parent = parent
+            bottomBar.AnchorPoint = Vector2.new(0, 0)
+            local pPos = (parent:IsA("GuiObject") and parent.AbsolutePosition) or Vector2.zero
+            bottomBar.Position = UDim2.fromOffset(mainFrame.AbsolutePosition.X - pPos.X, mainFrame.AbsolutePosition.Y - pPos.Y + mainFrame.AbsoluteSize.Y + 4)
+            bottomBar.Size = UDim2.fromOffset(math.max(300, mainFrame.AbsoluteSize.X), 26)
             Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 6)
             local barStroke = Instance.new("UIStroke", bottomBar)
             barStroke.Color = accent
@@ -2283,12 +2319,13 @@ local function PatchRayfieldDOM()
                 )
                 halo.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X + 16, mainFrame.AbsoluteSize.Y + 16)
                 bottomBar.Visible = visible
-                bottomBar.BackgroundTransparency = 0.04
+                bottomBar.BackgroundTransparency = 0
+                bottomBar.AnchorPoint = Vector2.new(0, 0)
                 bottomBar.Position = UDim2.fromOffset(
                     absolutePosition.X - parentPosition.X,
                     absolutePosition.Y - parentPosition.Y + mainFrame.AbsoluteSize.Y + 4
                 )
-                bottomBar.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X, 26)
+                bottomBar.Size = UDim2.fromOffset(math.max(300, mainFrame.AbsoluteSize.X), 26)
 
             end))
         end
@@ -2316,7 +2353,7 @@ local function PatchRayfieldDOM()
     else
         mainFrame.BackgroundTransparency = 0
     end
-    mainFrame.ClipsDescendants = true
+    mainFrame.ClipsDescendants = false
     mainFrame.BackgroundColor3 = menuBg
 
     -- 0a. Clean up any residual overlays that would obstruct Rayfield's Elements
@@ -2657,30 +2694,32 @@ local function PatchRayfieldDOM()
         end)
     end
 
-    -- Operator Profile & Live System Monitor: Attached Bottom Bar (parented directly to mainFrame for 100% rigid attachment)
+    -- Operator Profile & Live System Monitor: Attached Bottom Bar (parented to mainFrame.Parent for 100% immunity to clipping)
     for _, child in ipairs(mainFrame:GetChildren()) do
-        if child.Name == "BottomDock" then child:Destroy() end
-    end
-    if mainFrame.Parent then
-        local oldParentBB = mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
-        if oldParentBB then oldParentBB:Destroy() end
+        if child.Name == "BottomDock" or child.Name == "TASFF_BottomBar" then child:Destroy() end
     end
     if OverlayGui then
         local oldOverlayBB = OverlayGui:FindFirstChild("TASFF_BottomBar")
         if oldOverlayBB then oldOverlayBB:Destroy() end
     end
 
-    local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar")
+    local parentGui = mainFrame.Parent or (FindRayfieldGui and FindRayfieldGui())
+    if not parentGui then return false end
+
+    local bottomBar = parentGui:FindFirstChild("TASFF_BottomBar")
     if not bottomBar then
-        bottomBar = Instance.new("Frame", mainFrame)
+        bottomBar = Instance.new("Frame", parentGui)
         bottomBar.Name = "TASFF_BottomBar"
         bottomBar.AnchorPoint = Vector2.new(0, 0)
-        bottomBar.Position = UDim2.new(0, 0, 1, 4)
-        bottomBar.Size = UDim2.new(1, 0, 0, 26)
+        local pPos = (parentGui:IsA("GuiObject") and parentGui.AbsolutePosition) or Vector2.zero
+        local mPos = mainFrame.AbsolutePosition
+        local mSize = mainFrame.AbsoluteSize
+        bottomBar.Position = UDim2.fromOffset(mPos.X - pPos.X, mPos.Y - pPos.Y + mSize.Y + 4)
+        bottomBar.Size = UDim2.fromOffset(math.max(300, mSize.X), 26)
         bottomBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)   -- fully opaque dark so text is readable
         bottomBar.BackgroundTransparency = 0
         bottomBar.BorderSizePixel = 0
-        bottomBar.ZIndex = 100
+        bottomBar.ZIndex = math.max(10, (mainFrame.ZIndex or 1) + 5)
         Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 6)
         local barStroke = Instance.new("UIStroke", bottomBar)
         barStroke.Color = GetThemeAccentColor()
@@ -2694,7 +2733,7 @@ local function PatchRayfieldDOM()
         barCarbon.BackgroundColor3 = Color3.fromRGB(28, 30, 42)
         barCarbon.BackgroundTransparency = 0.82
         barCarbon.BorderSizePixel = 0
-        barCarbon.ZIndex = 101
+        barCarbon.ZIndex = bottomBar.ZIndex + 1
         Instance.new("UICorner", barCarbon).CornerRadius = UDim.new(0, 6)
         local barCarbGrad = Instance.new("UIGradient", barCarbon)
         barCarbGrad.Rotation = 45
@@ -2714,7 +2753,7 @@ local function PatchRayfieldDOM()
         barLine.Position = UDim2.new(0, 0, 0, 0)
         barLine.BorderSizePixel = 0
         barLine.BackgroundColor3 = GetThemeAccentColor()
-        barLine.ZIndex = 102
+        barLine.ZIndex = bottomBar.ZIndex + 2
         local barLineGrad = Instance.new("UIGradient", barLine)
         barLineGrad.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0,   Color3.fromRGB(10, 10, 15)),
@@ -2723,28 +2762,32 @@ local function PatchRayfieldDOM()
         })
 
         -- Left: Avatar + Player Name + Executor
+        local lp = LocalPlayer or Players.LocalPlayer or (game:GetService("Players").LocalPlayer)
         local opAvatar = Instance.new("ImageLabel", bottomBar)
         opAvatar.Name = "OpAvatar"
         opAvatar.Size = UDim2.new(0, 20, 0, 20)
         opAvatar.Position = UDim2.new(0, 6, 0.5, -10)
         opAvatar.BackgroundTransparency = 1
-        opAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
-        opAvatar.ZIndex = 103
+        local uId = lp and lp.UserId or 0
+        opAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(uId) .. "&w=48&h=48"
+        opAvatar.ZIndex = bottomBar.ZIndex + 3
         Instance.new("UICorner", opAvatar).CornerRadius = UDim.new(1, 0)
 
         local opName = Instance.new("TextLabel", bottomBar)
         opName.Name = "OpName"
-        opName.Size = UDim2.new(0, 260, 1, 0)
-        opName.Position = UDim2.new(0, 30, 0, 0)
+        opName.Size = UDim2.new(0, 240, 1, 0)
+        opName.Position = UDim2.new(0, 32, 0, 0)
         opName.BackgroundTransparency = 1
         opName.Font = Enum.Font.GothamBold
         opName.TextSize = 10
         opName.TextColor3 = Color3.fromRGB(235, 240, 255)  -- bright white-blue for readability
+        opName.TextTransparency = 0
         opName.TextXAlignment = Enum.TextXAlignment.Left
         opName.TextTruncate = Enum.TextTruncate.AtEnd
-        opName.ZIndex = 103
+        opName.ZIndex = bottomBar.ZIndex + 3
         local exec = (identifyexecutor and identifyexecutor()) or "Client"
-        opName.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [" .. exec .. "]"
+        local pName = lp and (lp.DisplayName or lp.Name) or "Operator"
+        opName.Text = pName .. "  [" .. tostring(exec) .. "]"
 
         -- Right: FPS / Ping monitor
         local statContainer = Instance.new("Frame", bottomBar)
@@ -2752,7 +2795,7 @@ local function PatchRayfieldDOM()
         statContainer.Size = UDim2.new(0, 130, 1, 0)
         statContainer.Position = UDim2.new(1, -225, 0, 0)
         statContainer.BackgroundTransparency = 1
-        statContainer.ZIndex = 103
+        statContainer.ZIndex = bottomBar.ZIndex + 3
 
         local led = Instance.new("Frame", statContainer)
         led.Name = "LED"
@@ -2760,7 +2803,7 @@ local function PatchRayfieldDOM()
         led.Position = UDim2.new(0, 4, 0.5, -3)
         led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
         led.BorderSizePixel = 0
-        led.ZIndex = 104
+        led.ZIndex = bottomBar.ZIndex + 4
         Instance.new("UICorner", led).CornerRadius = UDim.new(1, 0)
 
         local sText = Instance.new("TextLabel", statContainer)
@@ -2773,7 +2816,7 @@ local function PatchRayfieldDOM()
         sText.TextColor3 = Color3.fromRGB(220, 240, 230)   -- bright readable green-tinted white
         sText.TextXAlignment = Enum.TextXAlignment.Left
         sText.Text = "60 FPS  |  0ms"
-        sText.ZIndex = 104
+        sText.ZIndex = bottomBar.ZIndex + 4
 
         -- Keybind Map toggle button (bottom bar, right of stats)
         local kbmBarBtn = Instance.new("TextButton", bottomBar)
@@ -2788,7 +2831,7 @@ local function PatchRayfieldDOM()
         kbmBarBtn.TextSize = 10
         kbmBarBtn.TextColor3 = GetThemeAccentColor()
         kbmBarBtn.Text = "⌨ Binds"
-        kbmBarBtn.ZIndex = 105
+        kbmBarBtn.ZIndex = bottomBar.ZIndex + 5
         Instance.new("UICorner", kbmBarBtn).CornerRadius = UDim.new(0, 4)
         local kbmBtnStroke = Instance.new("UIStroke", kbmBarBtn)
         kbmBtnStroke.Color = GetThemeAccentColor()
@@ -2817,7 +2860,7 @@ local function PatchRayfieldDOM()
         resizeHandle.Position = UDim2.new(1, -22, 0, 0)
         resizeHandle.BackgroundTransparency = 1
         resizeHandle.BorderSizePixel = 0
-        resizeHandle.ZIndex = 110
+        resizeHandle.ZIndex = bottomBar.ZIndex + 5
 
         local grip1 = Instance.new("Frame", resizeHandle)
         grip1.Name = "Grip1"
@@ -2826,7 +2869,7 @@ local function PatchRayfieldDOM()
         grip1.Rotation = -45
         grip1.BackgroundColor3 = Color3.fromRGB(160, 160, 175)
         grip1.BorderSizePixel = 0
-        grip1.ZIndex = 111
+        grip1.ZIndex = bottomBar.ZIndex + 6
 
         local grip2 = Instance.new("Frame", resizeHandle)
         grip2.Name = "Grip2"
@@ -2835,14 +2878,14 @@ local function PatchRayfieldDOM()
         grip2.Rotation = -45
         grip2.BackgroundColor3 = Color3.fromRGB(160, 160, 175)
         grip2.BorderSizePixel = 0
-        grip2.ZIndex = 111
+        grip2.ZIndex = bottomBar.ZIndex + 6
 
         local hitArea = Instance.new("TextButton", resizeHandle)
         hitArea.Name = "HitArea"
         hitArea.Size = UDim2.new(1, 0, 1, 0)
         hitArea.BackgroundTransparency = 1
         hitArea.Text = ""
-        hitArea.ZIndex = 112
+        hitArea.ZIndex = bottomBar.ZIndex + 7
 
         hitArea.MouseEnter:Connect(function()
             local accent = GetThemeAccentColor()
@@ -2864,6 +2907,11 @@ local function PatchRayfieldDOM()
             end
         end)
         hitArea.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                _resizing = false
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 _resizing = false
             end
@@ -2900,27 +2948,41 @@ local function PatchRayfieldDOM()
         end)
     end
 
-    if S.AdvancedThemeLayoutPatchEnabled ~= true then
-        if not mainFrame:FindFirstChild("SafeBottomBarTracker") then
-            local tracker = Instance.new("BoolValue")
-            tracker.Name = "SafeBottomBarTracker"
-            tracker.Parent = mainFrame
-            table.insert(Connections, RunService.RenderStepped:Connect(function()
-                if not bottomBar or not bottomBar.Parent or not mainFrame.Parent then return end
-                local visible = mainFrame.Visible and (not rGui or rGui.Enabled ~= false)
-                bottomBar.Visible = visible and mainFrame.AbsoluteSize.Y > 60
-                if bottomBar.Visible then
-                    local parentPosition = mainFrame.Parent.AbsolutePosition
-                    local absolutePosition = mainFrame.AbsolutePosition
-                    bottomBar.AnchorPoint = Vector2.new(0, 0)
-                    bottomBar.Position = UDim2.fromOffset(
-                        absolutePosition.X - parentPosition.X,
-                        absolutePosition.Y - parentPosition.Y + mainFrame.AbsoluteSize.Y + 4
-                    )
-                    bottomBar.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X, 26)
-                end
-            end))
+    if bottomBar then
+        if bottomBar.Parent ~= parentGui then
+            bottomBar.Parent = parentGui
         end
+        local pPos = (parentGui:IsA("GuiObject") and parentGui.AbsolutePosition) or Vector2.zero
+        local mPos = mainFrame.AbsolutePosition
+        local mSize = mainFrame.AbsoluteSize
+        bottomBar.AnchorPoint = Vector2.new(0, 0)
+        bottomBar.Position = UDim2.fromOffset(mPos.X - pPos.X, mPos.Y - pPos.Y + mSize.Y + 4)
+        bottomBar.Size = UDim2.fromOffset(math.max(300, mSize.X), 26)
+        bottomBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)
+        bottomBar.BackgroundTransparency = 0
+        bottomBar.Visible = true
+        bottomBar.ZIndex = math.max(10, (mainFrame.ZIndex or 1) + 5)
+        local barStroke = bottomBar:FindFirstChildOfClass("UIStroke")
+        if barStroke then
+            barStroke.Color = GetThemeAccentColor()
+            barStroke.Thickness = 1.5
+            barStroke.Transparency = 0.25
+            barStroke.Enabled = true
+        end
+        local barLine = bottomBar:FindFirstChild("BarAccentLine")
+        if barLine then
+            barLine.BackgroundColor3 = GetThemeAccentColor()
+            barLine.BackgroundTransparency = 0
+        end
+        local kbmBtn = bottomBar:FindFirstChild("KBMBarBtn")
+        if kbmBtn then
+            kbmBtn.TextColor3 = GetThemeAccentColor()
+            local ks = kbmBtn:FindFirstChildOfClass("UIStroke")
+            if ks then ks.Color = GetThemeAccentColor() end
+        end
+    end
+
+    if S.AdvancedThemeLayoutPatchEnabled ~= true then
         return true
     end
 
@@ -2999,8 +3061,8 @@ local function PatchRayfieldDOM()
         local topTrans = (topbar and topbar.BackgroundTransparency) or mainFrame.BackgroundTransparency
         local mainTrans = mainFrame.BackgroundTransparency
         local isVis = ((not rGui or rGui.Enabled) and mainFrame.Visible)
-        local isExpanded = isVis and (mainFrame.AbsoluteSize.Y >= 100)
-        local isClosing = (not isVis) or (mainFrame.AbsoluteSize.Y < 80)
+        local isExpanded = isVis and (mainFrame.AbsoluteSize.Y >= 100 or mainFrame.Size.Y.Offset >= 100)
+        local isClosing = (not isVis) or (mainFrame.AbsoluteSize.Y > 0 and mainFrame.AbsoluteSize.Y < 80 and mainFrame.Size.Y.Offset < 80)
 
         -- CyberStroke
         local cStroke = mainFrame:FindFirstChild("CyberStroke")
@@ -3039,38 +3101,60 @@ local function PatchRayfieldDOM()
         local mMesh = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
         if mMesh then mMesh:Destroy() end
 
-        -- Attached TASFF_BottomBar sync (rigidly parented directly to mainFrame with zero drag lag)
-        local bBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
+        -- Attached TASFF_BottomBar sync (parented to mainFrame.Parent with zero drag lag and immune to clipping)
+        local pGui = mainFrame.Parent or (FindRayfieldGui and FindRayfieldGui())
+        local bBar = (pGui and pGui:FindFirstChild("TASFF_BottomBar")) or mainFrame:FindFirstChild("TASFF_BottomBar")
         if bBar then
-            bBar.Visible = (isVis and isExpanded and not isClosing)
-            if bBar.Visible then
-                if bBar.Parent ~= mainFrame then
-                    bBar.Parent = mainFrame
+            local shouldBeVis = (isVis and isExpanded and not isClosing)
+            bBar.Visible = shouldBeVis
+            if shouldBeVis then
+                if pGui and bBar.Parent ~= pGui then
+                    bBar.Parent = pGui
                 end
+                local pPos = (bBar.Parent:IsA("GuiObject") and bBar.Parent.AbsolutePosition) or Vector2.zero
+                local mPos = mainFrame.AbsolutePosition
+                local mSize = mainFrame.AbsoluteSize
                 bBar.AnchorPoint = Vector2.new(0, 0)
-                bBar.Position = UDim2.new(0, 0, 1, 4)
-                bBar.Size = UDim2.new(1, 0, 0, 26)
-                bBar.BackgroundTransparency = mainTrans
+                bBar.Position = UDim2.fromOffset(mPos.X - pPos.X, mPos.Y - pPos.Y + mSize.Y + 4)
+                bBar.Size = UDim2.fromOffset(math.max(300, mSize.X), 26)
+                bBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)
+                bBar.BackgroundTransparency = 0
+                bBar.ZIndex = math.max(10, (mainFrame.ZIndex or 1) + 5)
                 local bStroke2 = bBar:FindFirstChildOfClass("UIStroke")
-                if bStroke2 then bStroke2.Transparency = math.clamp(0.25 + mainTrans * 0.75, 0, 1) end
+                if bStroke2 then
+                    bStroke2.Color = GetThemeAccentColor()
+                    bStroke2.Transparency = 0.25
+                    bStroke2.Enabled = true
+                end
+                local barLine2 = bBar:FindFirstChild("BarAccentLine")
+                if barLine2 then
+                    barLine2.BackgroundColor3 = GetThemeAccentColor()
+                    barLine2.BackgroundTransparency = 0
+                end
+                local kbmBtn2 = bBar:FindFirstChild("KBMBarBtn")
+                if kbmBtn2 then
+                    kbmBtn2.TextColor3 = GetThemeAccentColor()
+                    local ks2 = kbmBtn2:FindFirstChildOfClass("UIStroke")
+                    if ks2 then ks2.Color = GetThemeAccentColor() end
+                end
                 local opA = bBar:FindFirstChild("OpAvatar")
-                if opA then opA.ImageTransparency = mainTrans end
+                if opA then opA.ImageTransparency = 0 end
                 local opN = bBar:FindFirstChild("OpName")
-                if opN then opN.TextTransparency = mainTrans end
+                if opN then opN.TextTransparency = 0 end
                 local sCont = bBar:FindFirstChild("StatContainer")
                 if sCont then
                     local led = sCont:FindFirstChild("LED")
-                    if led then led.BackgroundTransparency = mainTrans end
+                    if led then led.BackgroundTransparency = 0 end
                     local st = sCont:FindFirstChild("StatusText")
-                    if st then st.TextTransparency = mainTrans end
+                    if st then st.TextTransparency = 0 end
                 end
                 local rh = bBar:FindFirstChild("ResizeHandle")
                 if rh then
-                    rh.Visible = (isVis and isExpanded and not isClosing)
+                    rh.Visible = true
                     local g1 = rh:FindFirstChild("Grip1")
                     local g2 = rh:FindFirstChild("Grip2")
-                    if g1 then g1.BackgroundTransparency = mainTrans end
-                    if g2 then g2.BackgroundTransparency = mainTrans end
+                    if g1 then g1.BackgroundTransparency = 0 end
+                    if g2 then g2.BackgroundTransparency = 0 end
                 end
             end
         end
@@ -3123,6 +3207,23 @@ local function PatchRayfieldDOM()
         if rGui then
             rGui:GetPropertyChangedSignal("Enabled"):Connect(SyncRayfieldFade)
         end
+    end
+    if not mainFrame:FindFirstChild("BottomBarSteppedHook") then
+        local bHook = Instance.new("BoolValue", mainFrame)
+        bHook.Name = "BottomBarSteppedHook"
+        table.insert(Connections, RunService.RenderStepped:Connect(function()
+            local pGui2 = mainFrame.Parent or (FindRayfieldGui and FindRayfieldGui())
+            local bBar2 = pGui2 and pGui2:FindFirstChild("TASFF_BottomBar")
+            if bBar2 and bBar2.Visible and mainFrame.Parent then
+                local pPos = (pGui2:IsA("GuiObject") and pGui2.AbsolutePosition) or Vector2.zero
+                local mPos = mainFrame.AbsolutePosition
+                local mSize = mainFrame.AbsoluteSize
+                if mSize.X >= 100 and mSize.Y >= 50 then
+                    bBar2.Position = UDim2.fromOffset(mPos.X - pPos.X, mPos.Y - pPos.Y + mSize.Y + 4)
+                    bBar2.Size = UDim2.fromOffset(mSize.X, 26)
+                end
+            end
+        end))
     end
     SyncRayfieldFade()
 

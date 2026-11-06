@@ -274,12 +274,23 @@ local function RenderThemePreviewCard(container, themeName)
     local uiElem = HexToColor3(palette.UIElement)
     local uiText = HexToColor3(palette.UIText)
 
+    -- Make sure container does not clip the preview card and expands its height
+    container.ClipsDescendants = false
+    local cTitle = container:FindFirstChild("Title")
+    local cContent = container:FindFirstChild("Content")
+    local titleH = (cTitle and cTitle:IsA("TextLabel") and cTitle.TextBounds.Y) or 20
+    local contentH = (cContent and cContent:IsA("TextLabel") and cContent.TextBounds.Y) or 36
+    local offsetTop = math.max(48, titleH + contentH + 18)
+    container.Size = UDim2.new(1, -10, 0, offsetTop + 155)
+
     local card = Instance.new("Frame")
     card.Name = "ThemePreviewCard"
     card.Size = UDim2.new(1, 0, 0, 145)
+    card.Position = UDim2.new(0, 0, 0, offsetTop)
     card.BackgroundColor3 = uiBg
     card.BorderSizePixel = 0
     card.ClipsDescendants = true
+    card.ZIndex = math.max(5, container.ZIndex + 5)
     Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
     local cardStroke = Instance.new("UIStroke", card)
     cardStroke.Color = uiAccent
@@ -290,6 +301,7 @@ local function RenderThemePreviewCard(container, themeName)
     topbar.Size = UDim2.new(1, 0, 0, 24)
     topbar.BackgroundColor3 = uiTopbar
     topbar.BorderSizePixel = 0
+    topbar.ZIndex = card.ZIndex + 1
     Instance.new("UICorner", topbar).CornerRadius = UDim.new(0, 8)
 
     local topbarTitle = Instance.new("TextLabel", topbar)
@@ -301,6 +313,7 @@ local function RenderThemePreviewCard(container, themeName)
     topbarTitle.TextColor3 = uiText
     topbarTitle.TextXAlignment = Enum.TextXAlignment.Left
     topbarTitle.Text = "TASFF 2.3.0  |  Theme: " .. tostring(themeName)
+    topbarTitle.ZIndex = topbar.ZIndex + 1
 
     -- Window Action Dots
     local dots = {"#FF5555", "#FFBD2E", "#27C93F"}
@@ -310,6 +323,7 @@ local function RenderThemePreviewCard(container, themeName)
         dot.Position = UDim2.new(1, -12 - (3 - i) * 11, 0.5, -3)
         dot.BackgroundColor3 = HexToColor3(hex)
         dot.BorderSizePixel = 0
+        dot.ZIndex = topbar.ZIndex + 1
         Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
     end
 
@@ -319,6 +333,7 @@ local function RenderThemePreviewCard(container, themeName)
     tabPill.Position = UDim2.new(0, 8, 0, 30)
     tabPill.BackgroundColor3 = uiAccent
     tabPill.BorderSizePixel = 0
+    tabPill.ZIndex = card.ZIndex + 1
     Instance.new("UICorner", tabPill).CornerRadius = UDim.new(0, 4)
     local tabLabel = Instance.new("TextLabel", tabPill)
     tabLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -327,6 +342,7 @@ local function RenderThemePreviewCard(container, themeName)
     tabLabel.TextSize = 9
     tabLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     tabLabel.Text = "[*] Active Tab"
+    tabLabel.ZIndex = tabPill.ZIndex + 1
 
     -- Mini Element Card
     local elemCard = Instance.new("Frame", card)
@@ -334,6 +350,7 @@ local function RenderThemePreviewCard(container, themeName)
     elemCard.Position = UDim2.new(0, 8, 0, 52)
     elemCard.BackgroundColor3 = uiElem
     elemCard.BorderSizePixel = 0
+    elemCard.ZIndex = card.ZIndex + 1
     Instance.new("UICorner", elemCard).CornerRadius = UDim.new(0, 6)
     local elemStroke = Instance.new("UIStroke", elemCard)
     elemStroke.Color = Color3.fromRGB(45, 45, 55)
@@ -347,6 +364,7 @@ local function RenderThemePreviewCard(container, themeName)
     elemText.TextColor3 = uiText
     elemText.TextXAlignment = Enum.TextXAlignment.Left
     elemText.Text = "Sample Feature Setting"
+    elemText.ZIndex = elemCard.ZIndex + 1
 
     -- Mini Toggle on the right
     local miniToggle = Instance.new("Frame", elemCard)
@@ -354,12 +372,14 @@ local function RenderThemePreviewCard(container, themeName)
     miniToggle.Position = UDim2.new(1, -38, 0.5, -8)
     miniToggle.BackgroundColor3 = uiAccent
     miniToggle.BorderSizePixel = 0
+    miniToggle.ZIndex = elemCard.ZIndex + 1
     Instance.new("UICorner", miniToggle).CornerRadius = UDim.new(1, 0)
     local toggleKnob = Instance.new("Frame", miniToggle)
     toggleKnob.Size = UDim2.new(0, 12, 0, 12)
     toggleKnob.Position = UDim2.new(1, -14, 0.5, -6)
     toggleKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     toggleKnob.BorderSizePixel = 0
+    toggleKnob.ZIndex = miniToggle.ZIndex + 1
     Instance.new("UICorner", toggleKnob).CornerRadius = UDim.new(1, 0)
 
     -- Combat Color Swatches Bar
@@ -368,6 +388,7 @@ local function RenderThemePreviewCard(container, themeName)
     swatchBar.Position = UDim2.new(0, 8, 0, 88)
     swatchBar.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
     swatchBar.BackgroundTransparency = 0.4
+    swatchBar.ZIndex = card.ZIndex + 1
     Instance.new("UICorner", swatchBar).CornerRadius = UDim.new(0, 6)
 
     local swatchTitle = Instance.new("TextLabel", swatchBar)
@@ -379,6 +400,7 @@ local function RenderThemePreviewCard(container, themeName)
     swatchTitle.TextColor3 = Color3.fromRGB(170, 170, 180)
     swatchTitle.TextXAlignment = Enum.TextXAlignment.Left
     swatchTitle.Text = "COMBAT & ESP PALETTE SWATCHES:"
+    swatchTitle.ZIndex = swatchBar.ZIndex + 1
 
     local combatItems = {
         {"VIS", palette.Visible, "Visible"},
@@ -394,6 +416,7 @@ local function RenderThemePreviewCard(container, themeName)
         swPill.Position = UDim2.new(0, 6 + (i - 1) * 42, 0, 20)
         swPill.BackgroundColor3 = HexToColor3(item[2])
         swPill.BorderSizePixel = 0
+        swPill.ZIndex = swatchBar.ZIndex + 1
         Instance.new("UICorner", swPill).CornerRadius = UDim.new(0, 4)
 
         local swLabel = Instance.new("TextLabel", swPill)
@@ -403,6 +426,7 @@ local function RenderThemePreviewCard(container, themeName)
         swLabel.TextSize = 8
         swLabel.TextColor3 = Color3.fromRGB(15, 15, 15)
         swLabel.Text = item[1]
+        swLabel.ZIndex = swPill.ZIndex + 1
     end
 
     card.Parent = container
@@ -464,27 +488,39 @@ local function ApplyRayfieldTheme(themeColors)
 
     -- Sync keybind map row keycap text + stroke colours via stored direct refs.
     -- This avoids fragile DOM traversal and updates ALL rows reliably.
+    local accentColor = themeColors.TabBackgroundSelected or GetThemeAccentColor()
     local refs = TASFFEnv.Theme.KbmKeycapRefs
     if refs then
         for _, r in ipairs(refs) do
             pcall(function()
-                r.cap.TextColor3 = themeColors.TabBackgroundSelected
-                r.stroke.Color   = themeColors.TabBackgroundSelected
+                r.cap.TextColor3 = accentColor
+                r.stroke.Color   = accentColor
             end)
         end
     end
 
-    -- Sync Keybind Map frame stroke, title text, and toggle button text
+    -- Direct reference updates for Keybind Map frame stroke, title text, and toggle button
+    if TASFFEnv.Theme.KbmOuterStroke then
+        pcall(function() TASFFEnv.Theme.KbmOuterStroke.Color = accentColor end)
+    end
+    if TASFFEnv.Theme.KbmTitle then
+        pcall(function() TASFFEnv.Theme.KbmTitle.TextColor3 = accentColor end)
+    end
+    if TASFFEnv.Theme.KbmToggle then
+        pcall(function() TASFFEnv.Theme.KbmToggle.TextColor3 = accentColor end)
+    end
+
+    -- Sync Keybind Map frame stroke, title text, and toggle button text via DOM fallback
     local kbm = TASFFEnv.Theme.KeybindMap
     if kbm then
         pcall(function()
-            local stroke = kbm:FindFirstChildOfClass("UIStroke")
-            if stroke then stroke.Color = themeColors.TabBackgroundSelected end
+            local stroke = kbm:FindFirstChildOfClass("UIStroke") or kbm:FindFirstChild("KBMStroke")
+            if stroke then stroke.Color = accentColor end
             local header = kbm:FindFirstChild("KBMHeader")
             if header then
                 for _, child in ipairs(header:GetChildren()) do
                     if child:IsA("TextLabel") or child:IsA("TextButton") then
-                        child.TextColor3 = themeColors.TabBackgroundSelected
+                        child.TextColor3 = accentColor
                     end
                 end
             end
@@ -596,7 +632,13 @@ local function GetThemeAccentColor()
         return TASFFEnv.Theme.ActiveThemeColors.TabBackgroundSelected
     end
     if S.CustomAccentColor then return S.CustomAccentColor end
-    return Color3.fromRGB(0, 200, 255)
+    local curPreset = S.ActivePresetName or S.GlobalTheme or (TASFFEnv.Theme and TASFFEnv.Theme.SelectedThemeName)
+    if curPreset and GlobalThemePalettes[curPreset] then
+        local p = GlobalThemePalettes[curPreset]
+        local hex = p.UIAccent or p.Overlay
+        if hex then return HexToColor3(hex) end
+    end
+    return Color3.fromRGB(245, 166, 35)
 end
 
 local function GetThemeTextColor()
@@ -1557,6 +1599,9 @@ end)
 TASFFEnv.Theme.SetKBMExpanded = SetKBMExpanded
 TASFFEnv.Theme.KeybindMap     = KeybindMap
 TASFFEnv.Theme.KbmKeycapRefs  = KbmKeycapRefs
+TASFFEnv.Theme.KbmOuterStroke = kbmStroke
+TASFFEnv.Theme.KbmTitle       = kbmTitle
+TASFFEnv.Theme.KbmToggle      = kbmToggle
 
 -- ── 4. Floating Hover Tooltips for Controls ──────────────────────
 local TooltipFrame = Instance.new("Frame")
@@ -2477,22 +2522,26 @@ local function PatchRayfieldDOM()
         end)
     end
 
-    -- Operator Profile & Live System Monitor: Attached Bottom Bar (parented to mainFrame.Parent in Rayfield ScreenGui)
-    for _, child in ipairs(mainFrame:GetDescendants()) do
-        if child.Name == "BottomDock" or child.Name == "TASFF_BottomBar" then child:Destroy() end
+    -- Operator Profile & Live System Monitor: Attached Bottom Bar (parented directly to mainFrame for 100% rigid attachment)
+    for _, child in ipairs(mainFrame:GetChildren()) do
+        if child.Name == "BottomDock" then child:Destroy() end
+    end
+    if mainFrame.Parent then
+        local oldParentBB = mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
+        if oldParentBB then oldParentBB:Destroy() end
     end
     if OverlayGui then
         local oldOverlayBB = OverlayGui:FindFirstChild("TASFF_BottomBar")
         if oldOverlayBB then oldOverlayBB:Destroy() end
     end
 
-    local bottomBar = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
-    if not bottomBar and mainFrame.Parent then
-        bottomBar = Instance.new("Frame", mainFrame.Parent)
+    local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar")
+    if not bottomBar then
+        bottomBar = Instance.new("Frame", mainFrame)
         bottomBar.Name = "TASFF_BottomBar"
         bottomBar.AnchorPoint = Vector2.new(0, 0)
-        bottomBar.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y + 4)
-        bottomBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 26)
+        bottomBar.Position = UDim2.new(0, 0, 1, 4)
+        bottomBar.Size = UDim2.new(1, 0, 0, 26)
         bottomBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)   -- fully opaque dark so text is readable
         bottomBar.BackgroundTransparency = 0
         bottomBar.BorderSizePixel = 0
@@ -2857,21 +2906,17 @@ local function PatchRayfieldDOM()
             mMesh.BackgroundTransparency = mainTrans
         end
 
-        -- Attached TASFF_BottomBar sync (physically glued directly below menu using exact anchor coordinates)
-        local bBar = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar")
+        -- Attached TASFF_BottomBar sync (rigidly parented directly to mainFrame with zero drag lag)
+        local bBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
         if bBar then
             bBar.Visible = (isVis and isExpanded)
             if bBar.Visible then
-                bBar.AnchorPoint = Vector2.new(0.5, 0)
-                bBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 26)
-                bBar.Position = UDim2.new(
-                    mainFrame.Position.X.Scale,
-                    mainFrame.Position.X.Offset,
-                    mainFrame.Position.Y.Scale,
-                    mainFrame.Position.Y.Offset + (mainFrame.AbsoluteSize.Y * (1 - mainFrame.AnchorPoint.Y)) + 4
-                )
-                -- Keep bottom bar fully opaque (BackgroundTransparency = 0) for readability;
-                -- only fade text/avatar alpha so it still animates smoothly
+                if bBar.Parent ~= mainFrame then
+                    bBar.Parent = mainFrame
+                end
+                bBar.AnchorPoint = Vector2.new(0, 0)
+                bBar.Position = UDim2.new(0, 0, 1, 4)
+                bBar.Size = UDim2.new(1, 0, 0, 26)
                 bBar.BackgroundTransparency = mainTrans
                 local bStroke2 = bBar:FindFirstChildOfClass("UIStroke")
                 if bStroke2 then bStroke2.Transparency = math.clamp(0.25 + mainTrans * 0.75, 0, 1) end
@@ -3170,13 +3215,19 @@ local function PatchRayfieldDOM()
                     local boxContainer = secFrame.Parent
                     if not boxContainer then return end
 
-                    -- Clean up any residual CollapsedBar and hide any dividers to eliminate weird gray lines
+                    -- Clean up any residual CollapsedBar and hide native dividers cleanly without touching strokes on elements
                     for _, child in ipairs(boxContainer:GetChildren()) do
-                        if child.Name:lower():find("divider") or child.Name:lower():find("line") or (child:IsA("Frame") and #child:GetChildren() == 0 and child.AbsoluteSize.Y <= 8) then
+                        if child.Name == "Divider" or child.Name == "SectionSpacing" then
                             child.BackgroundTransparency = 1
                             child.Visible = false
-                            local oldSt = child:FindFirstChildOfClass("UIStroke")
-                            if oldSt then oldSt:Destroy() end
+                        end
+                        -- Ensure every element in the container has a valid UIStroke so Rayfield dot-indexing never errors
+                        if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" and not child:FindFirstChild("UIStroke") then
+                            local stFix = Instance.new("UIStroke", child)
+                            stFix.Name = "UIStroke"
+                            stFix.Color = Color3.fromRGB(40, 42, 55)
+                            stFix.Thickness = 1
+                            stFix.Transparency = 0.5
                         end
                     end
 
@@ -3759,6 +3810,11 @@ local function SyncRayfieldVisibility()
     if OverlayGui then
         OverlayGui.Enabled = true
     end
+
+    local bb = mainFrame:FindFirstChild("TASFF_BottomBar")
+    if bb then bb.Visible = isVisible end
+    local cs = mainFrame:FindFirstChild("CyberStroke")
+    if cs then cs.Enabled = isVisible end
 
     local parent = mainFrame.Parent
     if parent then

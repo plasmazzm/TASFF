@@ -190,12 +190,12 @@ local ControlTooltips = {
 --- Returns Rayfield Window Config
 local function GetWindowConfig(themeColors, selectedThemeName)
     local tc = themeColors or ThemeColorDefaults
-    -- NOTE: ToggleUIKeybind is deliberately omitted. Rayfield persists the
-    -- user's chosen "Rayfield Keybind" in Rayfield/settings.rfld; passing this
-    -- field on every launch overrode (and therefore reset) that saved choice.
+    -- ToggleUIKeybind: pass the enum explicitly so Rayfield doesn't error when
+    -- its saved settings.rfld contains a plain-string "K" value (type mismatch).
     return {
-        Name            = "TASFF " .. (S.CurrentVersion or "2.3.0") .. " - " .. (selectedThemeName or "Default"),
-        Icon            = 0,
+        Name               = "TASFF " .. (S.CurrentVersion or "2.3.0") .. " - " .. (selectedThemeName or "Default"),
+        Icon               = 0,
+        ToggleUIKeybind    = Enum.KeyCode.K,
         LoadingTitle    = "The Aimbot Script Final Form",
         LoadingSubtitle = "by Plasmazzm",
         Theme = BuildRayfieldThemeTable(tc),
@@ -2058,22 +2058,8 @@ local function PatchRayfieldDOM()
     local mainFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
     if not mainFrame then return false end
 
-    -- Loading Cover: hides the unstyled flash right after Rayfield's open animation
-    -- Created immediately — fades out at end of patch when all styling is applied
-    local loadCover = mainFrame:FindFirstChild("TASFF_LoadCover")
-    if not loadCover then
-        loadCover = Instance.new("Frame")
-        loadCover.Name = "TASFF_LoadCover"
-        loadCover.Size = UDim2.new(1, 0, 1, 0)
-        loadCover.Position = UDim2.new(0, 0, 0, 0)
-        loadCover.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
-        loadCover.BackgroundTransparency = 0
-        loadCover.BorderSizePixel = 0
-        loadCover.ZIndex = 500   -- above everything — will be destroyed after fade
-        local lcc = Instance.new("UICorner", loadCover)
-        lcc.CornerRadius = UDim.new(0, 8)
-        loadCover.Parent = mainFrame
-    end
+    -- Loading cover is created by the outer task.spawn (after UIInitialized),
+    -- and removed with a guaranteed fade after both patch passes complete.
 
     if S.UIOpacity and S.UIOpacity < 1.0 then
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
@@ -3789,38 +3775,35 @@ TASFFEnv.Theme.BindRayfieldVisibility = BindRayfieldVisibility
 TASFFEnv.Theme.SyncRayfieldVisibility = SyncRayfieldVisibility
 TASFFEnv.Theme.Destroy = DestroyTheme
 
--- Early loading cover: runs at module load time, well before UIInitialized.
--- Polls for the Rayfield Main frame every 30 ms and places the cover the instant it
--- appears — so the user NEVER sees the unstyled interface.
+-- Defer full DOM patch until Rayfield's opening animation has completed.
+-- Cover is placed immediately after UIInitialized fires (animation done, real
+-- menu about to show), then guaranteed-removed after BOTH patch passes finish.
 task.spawn(function()
-    local placed = false
-    local deadline = tick() + 20
-    while not placed and tick() < deadline do
-        local rGui = FindRayfieldGui()
-        local main = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
-        if main and not main:FindFirstChild("TASFF_LoadCover") then
-            local earlyCover = Instance.new("Frame")
-            earlyCover.Name = "TASFF_LoadCover"
-            earlyCover.Size = UDim2.new(1, 0, 1, 0)
-            earlyCover.Position = UDim2.new(0, 0, 0, 0)
-            earlyCover.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
-            earlyCover.BackgroundTransparency = 0
-            earlyCover.BorderSizePixel = 0
-            earlyCover.ZIndex = 500
-            Instance.new("UICorner", earlyCover).CornerRadius = UDim.new(0, 8)
-            earlyCover.Parent = main
-            placed = true
-        end
-        if not placed then task.wait(0.03) end
-    end
-end)
-
--- Defer full DOM patch until UI is completely built by TASFF_UI.lua
-task.spawn(function()
+    -- Wait for UIInitialized (set by TASFF_UI.lua right after Rayfield:CreateWindow)
     while not (S.UIInitialized or S.ScriptInitialized) do
         task.wait(0.2)
     end
-    task.wait(0.2)
+    -- Give Rayfield one frame to finish rendering after the flag flips
+    task.wait(0.08)
+
+    -- Place cover NOW, right as the real menu appears (animation already done)
+    local _rGui = FindRayfieldGui()
+    local _main = _rGui and (_rGui:FindFirstChild("Main", true) or _rGui:FindFirstChildOfClass("Frame"))
+    if _main and not _main:FindFirstChild("TASFF_LoadCover") then
+        local _cov = Instance.new("Frame")
+        _cov.Name = "TASFF_LoadCover"
+        _cov.Size = UDim2.new(1, 0, 1, 0)
+        _cov.Position = UDim2.new(0, 0, 0, 0)
+        _cov.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
+        _cov.BackgroundTransparency = 0
+        _cov.BorderSizePixel = 0
+        _cov.ZIndex = 500
+        Instance.new("UICorner", _cov).CornerRadius = UDim.new(0, 8)
+        _cov.Parent = _main
+    end
+    task.wait(0.05)
+
+    -- Run both patch passes; cover stays up regardless of errors inside
     for i = 1, 2 do
         task.wait(0.4)
         local ok, res = pcall(PatchRayfieldDOM)
@@ -3829,6 +3812,18 @@ task.spawn(function()
         elseif not ok then
             warn("[TASFF Theme] PatchRayfieldDOM error on pass " .. i .. ": " .. tostring(res))
         end
+    end
+
+    -- Guaranteed fade — runs even if PatchRayfieldDOM errored mid-way
+    task.wait(0.05)
+    local _rGui2 = FindRayfieldGui()
+    local _main2 = _rGui2 and (_rGui2:FindFirstChild("Main", true) or _rGui2:FindFirstChildOfClass("Frame"))
+    local _cov2 = _main2 and _main2:FindFirstChild("TASFF_LoadCover")
+    if _cov2 then
+        TweenService:Create(_cov2, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
+        task.delay(0.6, function()
+            if _cov2 and _cov2.Parent then _cov2:Destroy() end
+        end)
     end
 end)
 

@@ -438,7 +438,20 @@ TASFFEnv.Theme.RenderThemePreviewCard = RenderThemePreviewCard
 
 local function ApplyRayfieldTheme(themeColors)
     if type(themeColors) ~= "table" then return false end
+    local fullTheme = BuildRayfieldThemeTable(themeColors)
+    for k, v in pairs(themeColors) do
+        if fullTheme[k] == nil then
+            fullTheme[k] = v
+        end
+    end
+    themeColors = fullTheme
     TASFFEnv.Theme.ActiveThemeColors = themeColors
+
+    local accentColor = themeColors.TabBackgroundSelected or Color3.fromRGB(240, 175, 50)
+    local elemBg = themeColors.ElementBackground or Color3.fromRGB(28, 28, 28)
+    local elemStroke = themeColors.ElementStroke or accentColor
+    local secBg = themeColors.SecondaryElementBackground or elemBg
+    local secStroke = themeColors.SecondaryElementStroke or elemStroke
 
     local rGui = RayfieldWindow
     local mainFrame
@@ -457,8 +470,14 @@ local function ApplyRayfieldTheme(themeColors)
     if not rGui or not mainFrame or typeof(mainFrame) ~= "Instance" then return false end
 
     local function setColor(instance, property, color)
-        if color and instance and instance:IsA("GuiObject") then
-            instance[property] = color
+        if color and typeof(color) == "Color3" and instance and typeof(instance) == "Instance" and instance:IsA("GuiObject") then
+            pcall(function() instance[property] = color end)
+        end
+    end
+
+    local function setStrokeColor(stroke, color)
+        if stroke and typeof(stroke) == "Instance" and stroke:IsA("UIStroke") and color and typeof(color) == "Color3" then
+            pcall(function() stroke.Color = color end)
         end
     end
 
@@ -467,80 +486,137 @@ local function ApplyRayfieldTheme(themeColors)
     local topbar = mainFrame:FindFirstChild("Topbar", true)
     setColor(topbar, "BackgroundColor3", themeColors.Topbar)
 
-    local elements = mainFrame:FindFirstChild("Elements", true)
-    if elements and elements:IsA("ScrollingFrame") then
-        elements.BackgroundColor3 = themeColors.Background
+    -- Recolor TabList tabs
+    local tabList = mainFrame:FindFirstChild("TabList", true)
+    if tabList then
+        for _, tabBtn in ipairs(tabList:GetChildren()) do
+            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" then
+                setColor(tabBtn, "BackgroundColor3", elemBg)
+                local st = tabBtn:FindFirstChildOfClass("UIStroke")
+                setStrokeColor(st, themeColors.TabStroke or accentColor)
+                local title = tabBtn:FindFirstChild("Title")
+                if title and title:IsA("TextLabel") then
+                    setColor(title, "TextColor3", themeColors.TextColor)
+                end
+            end
+        end
+    end
+
+    -- Recolor Elements container and all tab pages
+    local elementsFrame = mainFrame:FindFirstChild("Elements", true)
+    if elementsFrame and elementsFrame:IsA("GuiObject") then
+        setColor(elementsFrame, "BackgroundColor3", themeColors.Background)
+        for _, tabPage in ipairs(elementsFrame:GetChildren()) do
+            if tabPage:IsA("ScrollingFrame") then
+                setColor(tabPage, "BackgroundColor3", themeColors.Background)
+                pcall(function() tabPage.ScrollBarImageColor3 = accentColor end)
+                for _, el in ipairs(tabPage:GetChildren()) do
+                    if el:IsA("Frame") and el.Name ~= "Placeholder" and el.Name ~= "SectionSpacing" and el.Name ~= "Divider" then
+                        if el.Name == "SectionTitle" then
+                            local title = el:FindFirstChild("Title")
+                            if title and title:IsA("TextLabel") then
+                                setColor(title, "TextColor3", themeColors.TextColor)
+                            end
+                        else
+                            local isPara = el:FindFirstChild("Content") and not el:FindFirstChild("Switch") and not el:FindFirstChild("Interact")
+                            setColor(el, "BackgroundColor3", isPara and secBg or elemBg)
+                            local st = el:FindFirstChild("ParaBoxStroke") or el:FindFirstChildOfClass("UIStroke")
+                            setStrokeColor(st, isPara and secStroke or elemStroke)
+                            local title = el:FindFirstChild("Title")
+                            if title and title:IsA("TextLabel") then
+                                setColor(title, "TextColor3", themeColors.TextColor)
+                            end
+                            local content = el:FindFirstChild("Content")
+                            if content and content:IsA("TextLabel") then
+                                setColor(content, "TextColor3", themeColors.TextColor:Lerp(themeColors.Background, 0.2))
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
 
     for _, descendant in ipairs(mainFrame:GetDescendants()) do
         if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
-            if descendant.Name ~= "ArrowIcon" and descendant.Name ~= "StepMinus" and descendant.Name ~= "StepPlus" then
-                descendant.TextColor3 = themeColors.TextColor
+            if descendant.Name ~= "ArrowIcon" and descendant.Name ~= "StepMinus" and descendant.Name ~= "StepPlus" and descendant.Name ~= "CollapseToggle" and descendant.Name ~= "NotifBellBtn" then
+                setColor(descendant, "TextColor3", themeColors.TextColor)
             end
         elseif descendant:IsA("ScrollingFrame") then
-            descendant.ScrollBarImageColor3 = themeColors.TabBackgroundSelected
+            pcall(function() descendant.ScrollBarImageColor3 = accentColor end)
         end
 
         if descendant.Name == "Tab" or descendant.Name == "TabButton" then
-            descendant.BackgroundColor3 = themeColors.ElementBackground
-        elseif descendant.Name == "Interact" or descendant.Name == "Switch" then
-            descendant.BackgroundColor3 = themeColors.ElementBackground
-        elseif descendant.Name == "Slider" or descendant.Name == "SliderBar" or descendant.Name == "Progress" then
-            descendant.BackgroundColor3 = themeColors.TabBackgroundSelected
-        elseif descendant:IsA("Frame") and (descendant:FindFirstChild("Interact") or descendant:FindFirstChild("Switch") or descendant:FindFirstChild("Slider") or descendant:FindFirstChild("Dropdown")) then
-            descendant.BackgroundColor3 = themeColors.ElementBackground
+            setColor(descendant, "BackgroundColor3", elemBg)
             local st = descendant:FindFirstChildOfClass("UIStroke")
-            if st then st.Color = themeColors.ElementStroke end
+            setStrokeColor(st, themeColors.TabStroke or accentColor)
+        elseif descendant.Name == "Interact" or descendant.Name == "Switch" then
+            setColor(descendant, "BackgroundColor3", elemBg)
+        elseif descendant.Name == "Slider" or descendant.Name == "SliderBar" or descendant.Name == "Progress" then
+            setColor(descendant, "BackgroundColor3", accentColor)
+        elseif descendant:IsA("Frame") and (descendant:FindFirstChild("Interact") or descendant:FindFirstChild("Switch") or descendant:FindFirstChild("Slider") or descendant:FindFirstChild("Dropdown")) then
+            setColor(descendant, "BackgroundColor3", elemBg)
+            local st = descendant:FindFirstChildOfClass("UIStroke")
+            setStrokeColor(st, elemStroke)
         elseif descendant:IsA("Frame") and descendant:FindFirstChild("Content") and descendant:FindFirstChild("Title") and not descendant:FindFirstChild("Switch") then
-            descendant.BackgroundColor3 = themeColors.SecondaryElementBackground
+            setColor(descendant, "BackgroundColor3", secBg)
             local st = descendant:FindFirstChild("ParaBoxStroke") or descendant:FindFirstChildOfClass("UIStroke")
-            if st then st.Color = themeColors.SecondaryElementStroke or themeColors.ElementStroke end
+            setStrokeColor(st, secStroke)
         end
     end
 
     -- Update cyberStroke, scanBg, ambientHalo to theme colors
     local cStroke = mainFrame:FindFirstChild("CyberStroke")
-    if cStroke then cStroke.Color = accentColor end
+    setStrokeColor(cStroke, accentColor)
     local scanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
     if scanBg then
-        scanBg.BackgroundColor3 = themeColors.Background
+        setColor(scanBg, "BackgroundColor3", themeColors.Background)
         local sGrad = scanBg:FindFirstChild("ScanGrad")
         if sGrad then
             local darkKey = themeColors.Background
             local lightKey = themeColors.Background:Lerp(accentColor, 0.08)
-            sGrad.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0,      darkKey),
-                ColorSequenceKeypoint.new(0.06,   lightKey),
-                ColorSequenceKeypoint.new(0.12,   darkKey),
-                ColorSequenceKeypoint.new(0.19,   lightKey),
-                ColorSequenceKeypoint.new(0.25,   darkKey),
-                ColorSequenceKeypoint.new(0.31,   lightKey),
-                ColorSequenceKeypoint.new(0.38,   darkKey),
-                ColorSequenceKeypoint.new(0.44,   lightKey),
-                ColorSequenceKeypoint.new(0.50,   darkKey),
-                ColorSequenceKeypoint.new(0.56,   lightKey),
-                ColorSequenceKeypoint.new(0.63,   darkKey),
-                ColorSequenceKeypoint.new(0.69,   lightKey),
-                ColorSequenceKeypoint.new(0.75,   darkKey),
-                ColorSequenceKeypoint.new(0.81,   lightKey),
-                ColorSequenceKeypoint.new(0.88,   darkKey),
-                ColorSequenceKeypoint.new(0.94,   lightKey),
-                ColorSequenceKeypoint.new(1,      darkKey),
-            })
+            pcall(function()
+                sGrad.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0,      darkKey),
+                    ColorSequenceKeypoint.new(0.06,   lightKey),
+                    ColorSequenceKeypoint.new(0.12,   darkKey),
+                    ColorSequenceKeypoint.new(0.19,   lightKey),
+                    ColorSequenceKeypoint.new(0.25,   darkKey),
+                    ColorSequenceKeypoint.new(0.31,   lightKey),
+                    ColorSequenceKeypoint.new(0.38,   darkKey),
+                    ColorSequenceKeypoint.new(0.44,   lightKey),
+                    ColorSequenceKeypoint.new(0.50,   darkKey),
+                    ColorSequenceKeypoint.new(0.56,   lightKey),
+                    ColorSequenceKeypoint.new(0.63,   darkKey),
+                    ColorSequenceKeypoint.new(0.69,   lightKey),
+                    ColorSequenceKeypoint.new(0.75,   darkKey),
+                    ColorSequenceKeypoint.new(0.81,   lightKey),
+                    ColorSequenceKeypoint.new(0.88,   darkKey),
+                    ColorSequenceKeypoint.new(0.94,   lightKey),
+                    ColorSequenceKeypoint.new(1,      darkKey),
+                })
+            end)
         end
     end
 
     for _, desc in ipairs(mainFrame:GetDescendants()) do
         if desc.Name == "SectionLeftBar" then
-            desc.BackgroundColor3 = accentColor
+            setColor(desc, "BackgroundColor3", accentColor)
         elseif desc.Name == "StepMinus" or desc.Name == "StepPlus" then
-            desc.TextColor3 = accentColor
+            setColor(desc, "TextColor3", accentColor)
+        elseif desc.Name == "CollapseToggle" then
+            local st = desc:FindFirstChildOfClass("UIStroke")
+            setStrokeColor(st, accentColor)
         end
+    end
+
+    local topbarLine = topbar and topbar:FindFirstChild("TopbarAccentLine")
+    if topbarLine then
+        setColor(topbarLine, "BackgroundColor3", accentColor)
     end
 
     -- Sync keybind map row keycap text + stroke colours via stored direct refs.
     -- This avoids fragile DOM traversal and updates ALL rows reliably.
-    local accentColor = themeColors.TabBackgroundSelected or GetThemeAccentColor()
     local refs = TASFFEnv.Theme.KbmKeycapRefs
     if refs then
         for _, r in ipairs(refs) do
@@ -553,7 +629,7 @@ local function ApplyRayfieldTheme(themeColors)
 
     -- Direct reference updates for Keybind Map frame stroke, title text, and toggle button
     if TASFFEnv.Theme.KbmOuterStroke then
-        pcall(function() TASFFEnv.Theme.KbmOuterStroke.Color = accentColor end)
+        setStrokeColor(TASFFEnv.Theme.KbmOuterStroke, accentColor)
     end
     if TASFFEnv.Theme.KbmTitle then
         pcall(function() TASFFEnv.Theme.KbmTitle.TextColor3 = accentColor end)
@@ -567,7 +643,7 @@ local function ApplyRayfieldTheme(themeColors)
     if kbm then
         pcall(function()
             local stroke = kbm:FindFirstChildOfClass("UIStroke") or kbm:FindFirstChild("KBMStroke")
-            if stroke then stroke.Color = accentColor end
+            setStrokeColor(stroke, accentColor)
             local header = kbm:FindFirstChild("KBMHeader")
             if header then
                 for _, child in ipairs(header:GetChildren()) do
@@ -577,6 +653,18 @@ local function ApplyRayfieldTheme(themeColors)
                 end
             end
         end)
+    end
+
+    local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
+    if bottomBar then
+        local bStroke = bottomBar:FindFirstChildOfClass("UIStroke")
+        setStrokeColor(bStroke, accentColor)
+        local kbmBtn = bottomBar:FindFirstChild("KBMBarBtn")
+        if kbmBtn then
+            setColor(kbmBtn, "TextColor3", accentColor)
+            local ks = kbmBtn:FindFirstChildOfClass("UIStroke")
+            setStrokeColor(ks, accentColor)
+        end
     end
 
     return true
@@ -2944,8 +3032,8 @@ local function PatchRayfieldDOM()
         local topTrans = (topbar and topbar.BackgroundTransparency) or mainFrame.BackgroundTransparency
         local mainTrans = mainFrame.BackgroundTransparency
         local isVis = ((not rGui or rGui.Enabled) and mainFrame.Visible)
-        local isExpanded = (mainFrame.AbsoluteSize.Y > 60 and mainTrans < 0.8)
-        local isClosing = (not isVis) or (mainTrans > 0.08) or (mainFrame.AbsoluteSize.Y < 120)
+        local isExpanded = isVis and (mainFrame.AbsoluteSize.Y >= 100)
+        local isClosing = (not isVis) or (mainFrame.AbsoluteSize.Y < 80)
 
         -- CyberStroke
         local cStroke = mainFrame:FindFirstChild("CyberStroke")

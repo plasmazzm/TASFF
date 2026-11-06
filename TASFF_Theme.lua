@@ -462,19 +462,15 @@ local function ApplyRayfieldTheme(themeColors)
         end
     end
 
-    -- Sync keybind map row keycap text + stroke colours to new accent.
-    -- KeybindMap is defined later in this file; guard with rawget-style check.
-    local kbm = TASFFEnv.Theme.KeybindMap
-    if kbm then
-        for _, row in ipairs(kbm:GetChildren()) do
-            if row:IsA("Frame") and row.Name:match("^KBMRow") then
-                local keycap = row:FindFirstChildOfClass("TextLabel")
-                if keycap then
-                    keycap.TextColor3 = themeColors.TabBackgroundSelected
-                    local kcStk = keycap:FindFirstChildOfClass("UIStroke")
-                    if kcStk then kcStk.Color = themeColors.TabBackgroundSelected end
-                end
-            end
+    -- Sync keybind map row keycap text + stroke colours via stored direct refs.
+    -- This avoids fragile DOM traversal and updates ALL rows reliably.
+    local refs = TASFFEnv.Theme.KbmKeycapRefs
+    if refs then
+        for _, r in ipairs(refs) do
+            pcall(function()
+                r.cap.TextColor3 = themeColors.TabBackgroundSelected
+                r.stroke.Color   = themeColors.TabBackgroundSelected
+            end)
         end
     end
 
@@ -1481,6 +1477,9 @@ kbmToggle.ZIndex = 92
 Instance.new("UICorner", kbmToggle).CornerRadius = UDim.new(0, 4)
 
 -- Rows
+-- KbmKeycapRefs: direct refs to each keycap TextLabel and its UIStroke so
+-- ApplyRayfieldTheme can sync accent colours without fragile DOM traversal.
+local KbmKeycapRefs = {}
 for i, entry in ipairs(KEYBIND_MAP) do
     local row = Instance.new("Frame", KeybindMap)
     row.Name = "KBMRow" .. i
@@ -1508,6 +1507,7 @@ for i, entry in ipairs(KEYBIND_MAP) do
     kcStroke.Color = GetThemeAccentColor()
     kcStroke.Thickness = 1
     kcStroke.Transparency = 0.5
+    table.insert(KbmKeycapRefs, {cap = keycap, stroke = kcStroke})
 
     local actionLabel = Instance.new("TextLabel", row)
     actionLabel.Size = UDim2.new(1, -86, 1, 0)
@@ -1538,7 +1538,8 @@ kbmToggle.MouseButton1Click:Connect(function()
 end)
 
 TASFFEnv.Theme.SetKBMExpanded = SetKBMExpanded
-TASFFEnv.Theme.KeybindMap = KeybindMap
+TASFFEnv.Theme.KeybindMap     = KeybindMap
+TASFFEnv.Theme.KbmKeycapRefs  = KbmKeycapRefs
 
 -- ── 4. Floating Hover Tooltips for Controls ──────────────────────
 local TooltipFrame = Instance.new("Frame")
@@ -1659,6 +1660,8 @@ FindRayfieldGui = function()
     end
     return nil
 end
+-- Export so TASFF_UI.lua can use it for the loading cover placement
+TASFFEnv.Theme.FindRayfieldGui = function() return FindRayfieldGui() end
 
 local function PulseTopbar(color)
     local rGui = FindRayfieldGui()
@@ -3481,6 +3484,20 @@ local function PatchRayfieldDOM()
                     title.Font = Enum.Font.GothamBold
                     content.TextColor3 = Color3.fromRGB(195, 200, 210)
                     content.Font = Enum.Font.GothamMedium
+                end
+
+                -- Integrated palette preview card: injected into "Preset Preview" paragraph frames
+                if title and title:IsA("TextLabel") and title.Text:find("Preset Preview", 1, true) then
+                    if not desc:FindFirstChild("ThemePreviewCard") then
+                        local rawThemeName = title.Text:match("Preset Preview[%s%-—]+(.+)$")
+                            or (S.ActivePresetName)
+                            or "Solaris Gold"
+                        task.spawn(function()
+                            pcall(function()
+                                RenderThemePreviewCard(desc, rawThemeName)
+                            end)
+                        end)
+                    end
                 end
             -- Attach universal carbon overlay to non-paragraph interactive elements
             elseif not IsParagraphFrame(desc.Parent) then

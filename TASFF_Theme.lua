@@ -613,6 +613,30 @@ local function ApplyRayfieldTheme(themeColors)
     local oldScanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
     if oldScanBg then oldScanBg:Destroy() end
 
+    -- Recolor carbon weave gradient stripes to new accent
+    local carbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
+    local cGrad = carbonBg and carbonBg:FindFirstChild("CarbonWeaveGrad")
+    if cGrad then
+        local stripe = accentColor:Lerp(Color3.fromRGB(90, 90, 110), 0.65)
+        local dark   = Color3.fromRGB(14, 14, 20)
+        local mid    = Color3.fromRGB(18, 18, 26)
+        cGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0,    dark),
+            ColorSequenceKeypoint.new(0.12, stripe),
+            ColorSequenceKeypoint.new(0.25, mid),
+            ColorSequenceKeypoint.new(0.37, stripe),
+            ColorSequenceKeypoint.new(0.5,  dark),
+            ColorSequenceKeypoint.new(0.62, stripe),
+            ColorSequenceKeypoint.new(0.75, mid),
+            ColorSequenceKeypoint.new(0.87, stripe),
+            ColorSequenceKeypoint.new(1,    dark),
+        })
+    end
+
+    -- Recolor ambient halo to new accent
+    local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
+    if ambientHalo then ambientHalo.ImageColor3 = accentColor end
+
     for _, desc in ipairs(mainFrame:GetDescendants()) do
         if desc.Name == "SectionLeftBar" then
             setColor(desc, "BackgroundColor3", accentColor)
@@ -2360,6 +2384,58 @@ local function PatchRayfieldDOM()
     local existingScanGrad = mainFrame:FindFirstChild("MainScanlinesGrad")
     if existingScanGrad then existingScanGrad:Destroy() end
 
+    -- 0a2. Atmospheric Carbon Weave Scanline Background (ZIndex 2, behind Elements at 3)
+    do
+        local acc = GetThemeAccentColor()
+        local carbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
+        if not carbonBg then
+            carbonBg = Instance.new("Frame")
+            carbonBg.Name = "TASFF_CarbonBg"
+            carbonBg.Size = UDim2.new(1, 0, 1, 0)
+            carbonBg.Position = UDim2.new(0, 0, 0, 0)
+            carbonBg.BackgroundTransparency = 1
+            carbonBg.BorderSizePixel = 0
+            carbonBg.ZIndex = 2
+            carbonBg.Interactable = false
+            local cCorner = Instance.new("UICorner", carbonBg)
+            cCorner.CornerRadius = UDim.new(0, 8)
+            -- Primary diagonal stripe layer
+            local cGrad = Instance.new("UIGradient", carbonBg)
+            cGrad.Name = "CarbonWeaveGrad"
+            cGrad.Rotation = 45
+            carbonBg.Parent = mainFrame
+        end
+        -- Update / build gradient keypoints with current accent
+        local cGrad = carbonBg:FindFirstChild("CarbonWeaveGrad")
+        if cGrad then
+            local stripe = acc:Lerp(Color3.fromRGB(90, 90, 110), 0.65)
+            local dark   = Color3.fromRGB(14, 14, 20)
+            local mid    = Color3.fromRGB(18, 18, 26)
+            cGrad.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0,    dark),
+                ColorSequenceKeypoint.new(0.12, stripe),
+                ColorSequenceKeypoint.new(0.25, mid),
+                ColorSequenceKeypoint.new(0.37, stripe),
+                ColorSequenceKeypoint.new(0.5,  dark),
+                ColorSequenceKeypoint.new(0.62, stripe),
+                ColorSequenceKeypoint.new(0.75, mid),
+                ColorSequenceKeypoint.new(0.87, stripe),
+                ColorSequenceKeypoint.new(1,    dark),
+            })
+            cGrad.Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0,    0.90),
+                NumberSequenceKeypoint.new(0.12, 0.72),
+                NumberSequenceKeypoint.new(0.25, 0.90),
+                NumberSequenceKeypoint.new(0.37, 0.72),
+                NumberSequenceKeypoint.new(0.5,  0.90),
+                NumberSequenceKeypoint.new(0.62, 0.72),
+                NumberSequenceKeypoint.new(0.75, 0.90),
+                NumberSequenceKeypoint.new(0.87, 0.72),
+                NumberSequenceKeypoint.new(1,    0.90),
+            })
+        end
+    end
+
     -- Ensure Elements container and pages are visible, transparent, and in front
     local elements = mainFrame:FindFirstChild("Elements", true)
     if elements and elements:IsA("GuiObject") then
@@ -2420,7 +2496,8 @@ local function PatchRayfieldDOM()
         if legacyAuraParent then legacyAuraParent:Destroy() end
     end
 
-    -- Create genuine soft halo in mainFrame.Parent (the Rayfield ScreenGui) with ZIndex = 0
+    -- Create genuine soft ambient bloom halo in mainFrame.Parent (behind menu, ZIndex 0)
+    -- Uses AbsolutePosition for correct centering since Rayfield stores drag as fromOffset
     local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
     if not ambientHalo and mainFrame.Parent then
         ambientHalo = Instance.new("ImageLabel")
@@ -2429,18 +2506,29 @@ local function PatchRayfieldDOM()
         ambientHalo.Image = "rbxassetid://5028857084" -- Soft radial blur 9-slice glow
         ambientHalo.ScaleType = Enum.ScaleType.Slice
         ambientHalo.SliceCenter = Rect.new(24, 24, 276, 276)
+        ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
         ambientHalo.ImageColor3 = GetThemeAccentColor()
-        ambientHalo.ImageTransparency = 0.08
+        ambientHalo.ImageTransparency = 0.45
         ambientHalo.ZIndex = 0
         ambientHalo.Parent = mainFrame.Parent
     end
 
     if ambientHalo then
         ambientHalo.ImageColor3 = GetThemeAccentColor()
-        ambientHalo.ImageTransparency = 0.08
-        ambientHalo.AnchorPoint = mainFrame.AnchorPoint
-        ambientHalo.Position = mainFrame.Position
-        ambientHalo.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 50, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 50)
+        ambientHalo.ImageTransparency = 0.45
+        ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
+        -- Centre the bloom on the menu using absolute pixel coords
+        -- (mainFrame.Position may be fromOffset; AbsolutePosition is always pixels)
+        local pAbsPos  = (mainFrame.Parent and mainFrame.Parent:IsA("GuiObject"))
+                         and mainFrame.Parent.AbsolutePosition or Vector2.zero
+        local mAbsPos  = mainFrame.AbsolutePosition
+        local mAbsSize = mainFrame.AbsoluteSize
+        local expand   = 180 -- px expansion each side for a wide soft bloom
+        ambientHalo.Position = UDim2.fromOffset(
+            mAbsPos.X - pAbsPos.X + mAbsSize.X * 0.5,
+            mAbsPos.Y - pAbsPos.Y + mAbsSize.Y * 0.5
+        )
+        ambientHalo.Size = UDim2.fromOffset(mAbsSize.X + expand * 2, mAbsSize.Y + expand * 2)
     end
 
     -- 0d. Topbar Clean Accent Line & Notification Center Bell (Shifted clear of Search)
@@ -3086,10 +3174,18 @@ local function PatchRayfieldDOM()
             ambientHalo.Visible = (isVis and isExpanded and not isClosing)
             if ambientHalo.Visible then
                 ambientHalo.ImageColor3 = GetThemeAccentColor()
-                ambientHalo.ImageTransparency = math.clamp(0.08 + mainTrans * 0.92, 0, 1)
-                ambientHalo.AnchorPoint = mainFrame.AnchorPoint
-                ambientHalo.Position = mainFrame.Position
-                ambientHalo.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset + 50, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset + 50)
+                ambientHalo.ImageTransparency = math.clamp(0.45 + mainTrans * 0.55, 0, 1)
+                ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
+                local pAbsPos  = (mainFrame.Parent and mainFrame.Parent:IsA("GuiObject"))
+                                 and mainFrame.Parent.AbsolutePosition or Vector2.zero
+                local mAbsPos  = mainFrame.AbsolutePosition
+                local mAbsSize = mainFrame.AbsoluteSize
+                local expand   = 180
+                ambientHalo.Position = UDim2.fromOffset(
+                    mAbsPos.X - pAbsPos.X + mAbsSize.X * 0.5,
+                    mAbsPos.Y - pAbsPos.Y + mAbsSize.Y * 0.5
+                )
+                ambientHalo.Size = UDim2.fromOffset(mAbsSize.X + expand * 2, mAbsSize.Y + expand * 2)
             end
         end
 
@@ -3102,6 +3198,10 @@ local function PatchRayfieldDOM()
         -- Clean up any residual scanline frame
         local mMesh = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
         if mMesh then mMesh:Destroy() end
+
+        -- Sync carbon weave visibility
+        local cBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
+        if cBg then cBg.Visible = (isVis and isExpanded and not isClosing) end
 
         -- Attached TASFF_BottomBar sync (parented directly to mainFrame with zero drag lag)
         local bBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
@@ -3201,7 +3301,19 @@ local function PatchRayfieldDOM()
         mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
         mainFrame:GetPropertyChangedSignal("Position"):Connect(function()
             local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
-            if ambientHalo then ambientHalo.Position = mainFrame.Position end
+            if ambientHalo and ambientHalo.Visible then
+                local pAbsPos  = (mainFrame.Parent and mainFrame.Parent:IsA("GuiObject"))
+                                 and mainFrame.Parent.AbsolutePosition or Vector2.zero
+                local mAbsPos  = mainFrame.AbsolutePosition
+                local mAbsSize = mainFrame.AbsoluteSize
+                local expand   = 180
+                ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
+                ambientHalo.Position = UDim2.fromOffset(
+                    mAbsPos.X - pAbsPos.X + mAbsSize.X * 0.5,
+                    mAbsPos.Y - pAbsPos.Y + mAbsSize.Y * 0.5
+                )
+                ambientHalo.Size = UDim2.fromOffset(mAbsSize.X + expand * 2, mAbsSize.Y + expand * 2)
+            end
             if NotificationDrawer and NotificationDrawer.Visible then UpdateDrawerPosition() end
         end)
         mainFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)

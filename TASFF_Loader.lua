@@ -226,9 +226,40 @@ if not executorCapabilities.LoadString then
     error("[TASFF Loader] This executor does not provide loadstring; modules cannot be compiled.")
 end
 local cachedRayfieldFactory = nil
+
+local function PatchRayfieldSource(src)
+    if type(src) ~= "string" then return src end
+    -- 1. Guard setElementsVisible against missing UIStroke so Hide/Unhide NEVER crashes (Line 1768)
+    local t1 = "TweenService:Create(element.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = show and strokeTarget or 1}):Play()"
+    local r1 = "local _elStroke = element:FindFirstChildOfClass('UIStroke') or element:FindFirstChild('UIStroke'); if _elStroke then TweenService:Create(_elStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = show and strokeTarget or 1}):Play() end"
+    if src:find(t1, 1, true) then
+        src = src:gsub(t1, r1, 1)
+    end
+
+    -- 2. Guard element stroke update on theme switch (Line 1355)
+    local t2 = "Element.UIStroke.Color = SelectedTheme.ElementStroke"
+    local r2 = "local _elSt2 = Element:FindFirstChildOfClass('UIStroke') or Element:FindFirstChild('UIStroke'); if _elSt2 then _elSt2.Color = SelectedTheme.ElementStroke end"
+    if src:find(t2, 1, true) then
+        src = src:gsub(t2, r2, 1)
+    end
+
+    -- 3. Guard dropdown option stroke updates on theme change when options have been refreshed (Line 3452)
+    local t3 = "DropdownOption.UIStroke.Color = SelectedTheme.ElementStroke"
+    local r3 = "if DropdownOption and DropdownOption.Parent and (DropdownOption:FindFirstChildOfClass('UIStroke') or DropdownOption:FindFirstChild('UIStroke')) then (DropdownOption:FindFirstChildOfClass('UIStroke') or DropdownOption.UIStroke).Color = SelectedTheme.ElementStroke end"
+    if src:find(t3, 1, true) then
+        src = src:gsub(t3, r3, 1)
+    end
+
+    -- 4. Expose Object/Paragraph reference from CreateParagraph so modules can style preview cards
+    src = src:gsub("return ParagraphValue", "ParagraphValue.Object = Paragraph; ParagraphValue.Paragraph = Paragraph; return ParagraphValue", 1)
+
+    return src
+end
+
 local rayfieldOk, RayfieldOrError = pcall(function()
     local cacheBust = "?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
     local rayfieldSource = SafeHttpGet("https://sirius.menu/rayfield" .. cacheBust, "Rayfield")
+    rayfieldSource = PatchRayfieldSource(rayfieldSource)
     local rayfieldFactory, compileError = loadstring(rayfieldSource)
     if type(rayfieldFactory) ~= "function" then
         error("[TASFF Loader] Failed to compile Rayfield bootstrap: " .. tostring(compileError))
@@ -431,6 +462,7 @@ local function StartLoadingSequence()
                 pcall(function()
                     local cacheBust = "?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
                     local rfSource = SafeHttpGet("https://sirius.menu/rayfield" .. cacheBust, "Rayfield")
+                    rfSource = PatchRayfieldSource(rfSource)
                     local fac = loadstring(rfSource)
                     if type(fac) == "function" then
                         cachedRayfieldFactory = fac

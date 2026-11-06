@@ -505,30 +505,55 @@ local function ApplyRayfieldTheme(themeColors)
     -- Recolor Elements container and all tab pages
     local elementsFrame = mainFrame:FindFirstChild("Elements", true)
     if elementsFrame and elementsFrame:IsA("GuiObject") then
-        setColor(elementsFrame, "BackgroundColor3", themeColors.Background)
+        elementsFrame.Visible = true
+        elementsFrame.ZIndex = 3
+        elementsFrame.BackgroundTransparency = 1
         for _, tabPage in ipairs(elementsFrame:GetChildren()) do
             if tabPage:IsA("ScrollingFrame") then
-                setColor(tabPage, "BackgroundColor3", themeColors.Background)
+                tabPage.Visible = true
+                tabPage.ZIndex = 3
+                tabPage.BackgroundTransparency = 1
                 pcall(function() tabPage.ScrollBarImageColor3 = accentColor end)
                 for _, el in ipairs(tabPage:GetChildren()) do
                     if el:IsA("Frame") and el.Name ~= "Placeholder" and el.Name ~= "SectionSpacing" and el.Name ~= "Divider" then
+                        el.ZIndex = 4
+                        el.Visible = true
                         if el.Name == "SectionTitle" then
                             local title = el:FindFirstChild("Title")
                             if title and title:IsA("TextLabel") then
+                                title.ZIndex = 5
+                                title.Visible = true
+                                title.TextTransparency = 0
                                 setColor(title, "TextColor3", themeColors.TextColor)
                             end
                         else
                             local isPara = el:FindFirstChild("Content") and not el:FindFirstChild("Switch") and not el:FindFirstChild("Interact")
                             setColor(el, "BackgroundColor3", isPara and secBg or elemBg)
+                            el.BackgroundTransparency = 0
                             local st = el:FindFirstChild("ParaBoxStroke") or el:FindFirstChildOfClass("UIStroke")
                             setStrokeColor(st, isPara and secStroke or elemStroke)
                             local title = el:FindFirstChild("Title")
                             if title and title:IsA("TextLabel") then
+                                title.ZIndex = 5
+                                title.Visible = true
+                                title.TextTransparency = 0
                                 setColor(title, "TextColor3", themeColors.TextColor)
                             end
                             local content = el:FindFirstChild("Content")
                             if content and content:IsA("TextLabel") then
+                                content.ZIndex = 5
+                                content.Visible = true
+                                content.TextTransparency = 0
                                 setColor(content, "TextColor3", themeColors.TextColor:Lerp(themeColors.Background, 0.2))
+                            end
+                            for _, child in ipairs(el:GetDescendants()) do
+                                if child:IsA("GuiObject") then
+                                    child.ZIndex = math.max(child.ZIndex, 5)
+                                    child.Visible = true
+                                    if child:IsA("TextLabel") or child:IsA("TextBox") then
+                                        child.TextTransparency = 0
+                                    end
+                                end
                             end
                         end
                     end
@@ -565,39 +590,11 @@ local function ApplyRayfieldTheme(themeColors)
         end
     end
 
-    -- Update cyberStroke, scanBg, ambientHalo to theme colors
+    -- Update cyberStroke, clean up scanBg, ambientHalo to theme colors
     local cStroke = mainFrame:FindFirstChild("CyberStroke")
     setStrokeColor(cStroke, accentColor)
-    local scanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
-    if scanBg then
-        setColor(scanBg, "BackgroundColor3", themeColors.Background)
-        local sGrad = scanBg:FindFirstChild("ScanGrad")
-        if sGrad then
-            local darkKey = themeColors.Background
-            local lightKey = themeColors.Background:Lerp(accentColor, 0.08)
-            pcall(function()
-                sGrad.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0,      darkKey),
-                    ColorSequenceKeypoint.new(0.06,   lightKey),
-                    ColorSequenceKeypoint.new(0.12,   darkKey),
-                    ColorSequenceKeypoint.new(0.19,   lightKey),
-                    ColorSequenceKeypoint.new(0.25,   darkKey),
-                    ColorSequenceKeypoint.new(0.31,   lightKey),
-                    ColorSequenceKeypoint.new(0.38,   darkKey),
-                    ColorSequenceKeypoint.new(0.44,   lightKey),
-                    ColorSequenceKeypoint.new(0.50,   darkKey),
-                    ColorSequenceKeypoint.new(0.56,   lightKey),
-                    ColorSequenceKeypoint.new(0.63,   darkKey),
-                    ColorSequenceKeypoint.new(0.69,   lightKey),
-                    ColorSequenceKeypoint.new(0.75,   darkKey),
-                    ColorSequenceKeypoint.new(0.81,   lightKey),
-                    ColorSequenceKeypoint.new(0.88,   darkKey),
-                    ColorSequenceKeypoint.new(0.94,   lightKey),
-                    ColorSequenceKeypoint.new(1,      darkKey),
-                })
-            end)
-        end
-    end
+    local oldScanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
+    if oldScanBg then oldScanBg:Destroy() end
 
     for _, desc in ipairs(mainFrame:GetDescendants()) do
         if desc.Name == "SectionLeftBar" then
@@ -2322,57 +2319,27 @@ local function PatchRayfieldDOM()
     mainFrame.ClipsDescendants = true
     mainFrame.BackgroundColor3 = menuBg
 
-    -- 0a. Atmospheric Scanline Grid on Window Background
-    -- Use a child Frame (NOT UIGradient on mainFrame) so Rayfield's BackgroundColor3
-    -- writes never erase the grid. ZIndex 1 keeps it strictly BEHIND all cards.
+    -- 0a. Clean up any residual overlays that would obstruct Rayfield's Elements
+    local oldScanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
+    if oldScanBg then oldScanBg:Destroy() end
     local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
     if existingMesh then existingMesh:Destroy() end
     local existingScanGrad = mainFrame:FindFirstChild("MainScanlinesGrad")
     if existingScanGrad then existingScanGrad:Destroy() end
 
-    local scanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
-    if not scanBg then
-        scanBg = Instance.new("Frame")
-        scanBg.Name = "TASFF_ScanlinesBg"
-        scanBg.Size = UDim2.new(1, 0, 1, 0)
-        scanBg.Position = UDim2.new(0, 0, 0, 0)
-        scanBg.BackgroundColor3 = menuBg
-        scanBg.BackgroundTransparency = 0
-        scanBg.BorderSizePixel = 0
-        scanBg.ZIndex = 1   -- strictly behind all Rayfield content (cards default to ZIndex 2+)
-        -- Match menu corner radius
-        local menuCorner = mainFrame:FindFirstChildOfClass("UICorner")
-        if menuCorner then
-            Instance.new("UICorner", scanBg).CornerRadius = menuCorner.CornerRadius
+    -- Ensure Elements container and pages are visible, transparent, and in front
+    local elements = mainFrame:FindFirstChild("Elements", true)
+    if elements and elements:IsA("GuiObject") then
+        elements.Visible = true
+        elements.ZIndex = 3
+        elements.BackgroundTransparency = 1
+        for _, tabPage in ipairs(elements:GetChildren()) do
+            if tabPage:IsA("ScrollingFrame") then
+                tabPage.Visible = true
+                tabPage.ZIndex = 3
+                tabPage.BackgroundTransparency = 1
+            end
         end
-        -- Horizontal scanlines gradient (alternating theme background and subtle accent tint; <= 20 keypoints)
-        local darkKey = menuBg
-        local lightKey = menuBg:Lerp(menuAccent, 0.08)
-        local scanGrad = Instance.new("UIGradient")
-        scanGrad.Name = "ScanGrad"
-        scanGrad.Rotation = 90
-        scanGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,      darkKey),
-            ColorSequenceKeypoint.new(0.06,   lightKey),
-            ColorSequenceKeypoint.new(0.12,   darkKey),
-            ColorSequenceKeypoint.new(0.19,   lightKey),
-            ColorSequenceKeypoint.new(0.25,   darkKey),
-            ColorSequenceKeypoint.new(0.31,   lightKey),
-            ColorSequenceKeypoint.new(0.38,   darkKey),
-            ColorSequenceKeypoint.new(0.44,   lightKey),
-            ColorSequenceKeypoint.new(0.50,   darkKey),
-            ColorSequenceKeypoint.new(0.56,   lightKey),
-            ColorSequenceKeypoint.new(0.63,   darkKey),
-            ColorSequenceKeypoint.new(0.69,   lightKey),
-            ColorSequenceKeypoint.new(0.75,   darkKey),
-            ColorSequenceKeypoint.new(0.81,   lightKey),
-            ColorSequenceKeypoint.new(0.88,   darkKey),
-            ColorSequenceKeypoint.new(0.94,   lightKey),
-            ColorSequenceKeypoint.new(1,      darkKey),
-        })
-        scanGrad.Transparency = NumberSequence.new(0)
-        scanGrad.Parent = scanBg
-        scanBg.Parent = mainFrame
     end
 
     -- 0b. Animated Cyber Neon Border with Rotating Gradient
@@ -3068,12 +3035,9 @@ local function PatchRayfieldDOM()
             nativeShadow.Visible = false
         end
 
-        -- Main Window Scanlines Background (child Frame — stays behind elements at ZIndex 1)
+        -- Clean up any residual scanline frame
         local mMesh = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
-        if mMesh then
-            mMesh.Visible = (isVis and isExpanded and not isClosing)
-            mMesh.BackgroundTransparency = mainTrans
-        end
+        if mMesh then mMesh:Destroy() end
 
         -- Attached TASFF_BottomBar sync (rigidly parented directly to mainFrame with zero drag lag)
         local bBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
@@ -3447,6 +3411,19 @@ local function PatchRayfieldDOM()
                                     local cardBg = curTc.ElementBackground or HexToColor3(curPal.UIElement)
                                     local cardStroke = curTc.ElementStroke or HexToColor3(curPal.Overlay)
 
+                                    -- Ensure section title itself is crisp and in front
+                                    local secTitle = secFrame:FindFirstChild("Title")
+                                    if secTitle and secTitle:IsA("TextLabel") then
+                                        secTitle.TextColor3 = curTc.TextColor or Color3.fromRGB(240, 240, 240)
+                                        secTitle.TextTransparency = 0
+                                        secTitle.ZIndex = 5
+                                        secTitle.Visible = true
+                                    end
+
+                                    child.Visible = true
+                                    child.ZIndex = 4
+                                    child.BackgroundTransparency = 0
+
                                     if not child:FindFirstChild("Content") or child:FindFirstChild("Switch") or child:FindFirstChild("Interact") then
                                         child.BackgroundColor3 = cardBg
                                     else
@@ -3456,6 +3433,19 @@ local function PatchRayfieldDOM()
                                     local existingSt = child:FindFirstChildOfClass("UIStroke")
                                     if existingSt then
                                         existingSt.Color = cardStroke
+                                    end
+
+                                    for _, descChild in ipairs(child:GetDescendants()) do
+                                        if descChild:IsA("GuiObject") then
+                                            descChild.Visible = true
+                                            descChild.ZIndex = math.max(descChild.ZIndex, 5)
+                                            if descChild:IsA("TextLabel") or descChild:IsA("TextBox") then
+                                                descChild.TextTransparency = 0
+                                                if descChild.Name == "Title" then
+                                                    descChild.TextColor3 = curTc.TextColor or Color3.fromRGB(240, 240, 240)
+                                                end
+                                            end
+                                        end
                                     end
                                 end
                             end

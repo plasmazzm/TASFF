@@ -356,61 +356,132 @@ do
         covStroke.Thickness = 1.5
         covStroke.Transparency = 0.25
 
+        -- Background Cyber Scanlines Grid
+        local bgGrid = Instance.new("Frame", _cov)
+        bgGrid.Name = "CoverGrid"
+        bgGrid.Size = UDim2.new(1, 0, 1, 0)
+        bgGrid.BackgroundColor3 = Color3.fromRGB(11, 12, 18)
+        bgGrid.BackgroundTransparency = 0
+        bgGrid.BorderSizePixel = 0
+        bgGrid.ZIndex = 500
+        local gridGrad = Instance.new("UIGradient", bgGrid)
+        gridGrad.Rotation = 90
+        gridGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(10, 11, 17)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(18, 20, 32)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 11, 17))
+        })
+
         -- Center Tactical Staging Card
         local card = Instance.new("Frame", _cov)
         card.Name = "CenterCard"
-        card.Size = UDim2.new(0, 270, 0, 82)
+        card.Size = UDim2.new(0, 310, 0, 110)
         card.AnchorPoint = Vector2.new(0.5, 0.5)
         card.Position = UDim2.new(0.5, 0, 0.5, 0)
-        card.BackgroundColor3 = Color3.fromRGB(17, 19, 28)
-        card.BackgroundTransparency = 0.15
+        card.BackgroundColor3 = Color3.fromRGB(15, 17, 26)
+        card.BackgroundTransparency = 0.05
         card.BorderSizePixel = 0
         card.ZIndex = 501
-        Instance.new("UICorner", card).CornerRadius = UDim.new(0, 7)
+        Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
 
         local cardStroke = Instance.new("UIStroke", card)
         cardStroke.Color = covAccent
-        cardStroke.Thickness = 1
-        cardStroke.Transparency = 0.45
+        cardStroke.Thickness = 1.2
+        cardStroke.Transparency = 0.35
+
+        -- Corner brackets
+        local function addBracket(anchor, pos, size)
+            local b = Instance.new("Frame", card)
+            b.Size = size
+            b.AnchorPoint = anchor
+            b.Position = pos
+            b.BackgroundColor3 = covAccent
+            b.BorderSizePixel = 0
+            b.ZIndex = 502
+            Instance.new("UICorner", b).CornerRadius = UDim.new(0, 2)
+        end
+        addBracket(Vector2.new(0, 0), UDim2.new(0, 3, 0, 3), UDim2.new(0, 10, 0, 2))
+        addBracket(Vector2.new(0, 0), UDim2.new(0, 3, 0, 3), UDim2.new(0, 2, 0, 10))
+        addBracket(Vector2.new(1, 0), UDim2.new(1, -3, 0, 3), UDim2.new(0, 10, 0, 2))
+        addBracket(Vector2.new(1, 0), UDim2.new(1, -3, 0, 3), UDim2.new(0, 2, 0, 10))
+        addBracket(Vector2.new(0, 1), UDim2.new(0, 3, 1, -3), UDim2.new(0, 10, 0, 2))
+        addBracket(Vector2.new(0, 1), UDim2.new(0, 3, 1, -3), UDim2.new(0, 2, 0, 10))
+        addBracket(Vector2.new(1, 1), UDim2.new(1, -3, 1, -3), UDim2.new(0, 10, 0, 2))
+        addBracket(Vector2.new(1, 1), UDim2.new(1, -3, 1, -3), UDim2.new(0, 2, 0, 10))
+
+        -- Status Indicator Dot
+        local dot = Instance.new("Frame", card)
+        dot.Size = UDim2.new(0, 6, 0, 6)
+        dot.Position = UDim2.new(0, 14, 0, 14)
+        dot.BackgroundColor3 = covAccent
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 502
+        Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
 
         local title = Instance.new("TextLabel", card)
-        title.Size = UDim2.new(1, -20, 0, 22)
-        title.Position = UDim2.new(0, 10, 0, 10)
+        title.Size = UDim2.new(1, -50, 0, 20)
+        title.Position = UDim2.new(0, 26, 0, 8)
         title.BackgroundTransparency = 1
         title.Font = Enum.Font.GothamBold
-        title.TextSize = 14
+        title.TextSize = 13
         title.TextColor3 = covAccent
-        title.Text = "TASFF " .. tostring(S.CurrentVersion or "2.3.0")
-        title.TextXAlignment = Enum.TextXAlignment.Center
+        title.Text = "TASFF " .. tostring(S.CurrentVersion or "2.3.0") .. "  //  STAGING"
+        title.TextXAlignment = Enum.TextXAlignment.Left
         title.ZIndex = 502
 
         local sub = Instance.new("TextLabel", card)
-        sub.Size = UDim2.new(1, -20, 0, 16)
-        sub.Position = UDim2.new(0, 10, 0, 34)
+        sub.Size = UDim2.new(1, -28, 0, 16)
+        sub.Position = UDim2.new(0, 14, 0, 32)
         sub.BackgroundTransparency = 1
         sub.Font = Enum.Font.GothamMedium
         sub.TextSize = 9
-        sub.TextColor3 = Color3.fromRGB(190, 195, 215)
-        sub.Text = "STAGING ENVIRONMENT & PALETTES"
-        sub.TextXAlignment = Enum.TextXAlignment.Center
+        sub.TextColor3 = Color3.fromRGB(180, 185, 205)
+        sub.Text = "COMPILING PALETTES & CONFIGURATIONS..."
+        sub.TextXAlignment = Enum.TextXAlignment.Left
         sub.ZIndex = 502
 
-        -- Mini pulsing tactical status bar
+        -- Tactical Progress Track
         local barBg = Instance.new("Frame", card)
-        barBg.Size = UDim2.new(1, -40, 0, 3)
-        barBg.Position = UDim2.new(0, 20, 0, 58)
-        barBg.BackgroundColor3 = Color3.fromRGB(28, 30, 44)
+        barBg.Size = UDim2.new(1, -28, 0, 4)
+        barBg.Position = UDim2.new(0, 14, 0, 56)
+        barBg.BackgroundColor3 = Color3.fromRGB(26, 28, 42)
         barBg.BorderSizePixel = 0
         barBg.ZIndex = 502
         Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
 
         local barFill = Instance.new("Frame", barBg)
-        barFill.Size = UDim2.new(0.7, 0, 1, 0)
+        barFill.Size = UDim2.new(0.2, 0, 1, 0)
         barFill.Position = UDim2.new(0, 0, 0, 0)
         barFill.BackgroundColor3 = covAccent
         barFill.BorderSizePixel = 0
         barFill.ZIndex = 503
         Instance.new("UICorner", barFill).CornerRadius = UDim.new(1, 0)
+
+        -- Animate progress bar looping pulse
+        task.spawn(function()
+            local TweenService = game:GetService("TweenService")
+            while barFill and barFill.Parent do
+                local t1 = TweenService:Create(barFill, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {Size = UDim2.new(0.85, 0, 1, 0)})
+                t1:Play()
+                t1.Completed:Wait()
+                if not (barFill and barFill.Parent) then break end
+                local t2 = TweenService:Create(barFill, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {Size = UDim2.new(0.25, 0, 1, 0)})
+                t2:Play()
+                t2.Completed:Wait()
+            end
+        end)
+
+        -- Telemetry status strip
+        local telem = Instance.new("TextLabel", card)
+        telem.Size = UDim2.new(1, -28, 0, 16)
+        telem.Position = UDim2.new(0, 14, 0, 72)
+        telem.BackgroundTransparency = 1
+        telem.Font = Enum.Font.Code
+        telem.TextSize = 8
+        telem.TextColor3 = Color3.fromRGB(120, 125, 145)
+        telem.Text = "KERNEL: OK  |  OVERLAY: SYNCHRONIZED  |  LOADER: v2.3"
+        telem.TextXAlignment = Enum.TextXAlignment.Left
+        telem.ZIndex = 502
 
         _cov.Parent = _main
     end
@@ -3155,6 +3226,14 @@ local function UpdateGlobalThemeMonitor(themeName)
     task.spawn(function()
         pcall(function()
             local pFrame = GlobalThemeMonitor and (GlobalThemeMonitor.Paragraph or GlobalThemeMonitor.Object)
+            if not pFrame and Rayfield and Rayfield.Main then
+                for _, desc in ipairs(Rayfield.Main:GetDescendants()) do
+                    if desc:IsA("Frame") and desc.Name ~= "Template" and desc:FindFirstChild("Title") and desc.Title:IsA("TextLabel") and desc.Title.Text:find("Preset Preview", 1, true) then
+                        pFrame = desc
+                        break
+                    end
+                end
+            end
             if pFrame and TASFFTheme and TASFFTheme.RenderThemePreviewCard then
                 TASFFTheme.RenderThemePreviewCard(pFrame, themeName)
             end

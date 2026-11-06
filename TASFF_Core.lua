@@ -1197,37 +1197,85 @@ local function RebuildIntelMonitor()
     if envTheme and envTheme.SetTabBadge then
         pcall(function() envTheme.SetTabBadge("Intel", #sorted) end)
     end
-    if #sorted == 0 then
-        pcall(function() S.IntelMonitorLabel:Set({Title="Intel Monitor (0 tracked)", Content="No tracked players."}) end)
-        return
-    end
+
     local lines = {}
     local mostDangerousName, mostDangerousPts = nil, 0
-    for _, entry in ipairs(sorted) do
-        local name = entry.Name
-        local data = entry.Data
-        local pts  = data.points or 0
-        local src  = data.source or "Marked"
-        local po   = Players:FindFirstChild(name)
-        local displaySuffix = (po and po.DisplayName ~= name) and (" (" .. po.DisplayName .. ")") or ""
-        local selected = (S.IntelSelected == name) and " [SELECTED]" or ""
-        -- Show recorded kill count for this intel player
-        local pkills = (S.PriorityPlayerKills or {})[name]
-        local killSuffix = pkills and pkills > 0 and ("  ☠ " .. pkills .. "k") or ""
-        local permSuffix = data.permanent and " [PERM]" or ""
-        local conf = "●●○○"
-        if src == "Kill Count" or src == "Nemesis" or data.permanent then
-            conf = "●●●●"
-        elseif src == "Damage" or src:find("Damage") then
-            conf = "●●●○"
-        elseif src == "Instincts" or src:find("Instinct") then
-            conf = "●●○○"
-        else
-            conf = "●○○○"
+
+    if #sorted > 0 then
+        table.insert(lines, "── ACTIVE TRACKED THREATS ──")
+        for _, entry in ipairs(sorted) do
+            local name = entry.Name
+            local data = entry.Data
+            local pts  = data.points or 0
+            local src  = data.source or "Marked"
+            local po   = Players:FindFirstChild(name)
+            local displaySuffix = (po and po.DisplayName ~= name) and (" (" .. po.DisplayName .. ")") or ""
+            local selected = (S.IntelSelected == name) and " [SELECTED]" or ""
+            local pkills = (S.PriorityPlayerKills or {})[name]
+            local killSuffix = pkills and pkills > 0 and ("  ☠ " .. pkills .. "k") or ""
+            local permSuffix = data.permanent and " [PERM]" or ""
+            local conf = "●●○○"
+            if src == "Kill Count" or src == "Nemesis" or data.permanent then
+                conf = "●●●●"
+            elseif src == "Damage" or src:find("Damage") then
+                conf = "●●●○"
+            elseif src == "Instincts" or src:find("Instinct") then
+                conf = "●●○○"
+            else
+                conf = "●○○○"
+            end
+            table.insert(lines, string.format("%s %s%s  [%s]%s  %d pts%s%s", conf, name, displaySuffix, src, permSuffix, pts, killSuffix, selected))
+            if pts > mostDangerousPts then mostDangerousPts = pts; mostDangerousName = name end
         end
-        table.insert(lines, string.format("%s %s%s  [%s]%s  %d pts%s%s", conf, name, displaySuffix, src, permSuffix, pts, killSuffix, selected))
-        if pts > mostDangerousPts then mostDangerousPts = pts; mostDangerousName = name end
+    else
+        table.insert(lines, "── ACTIVE TRACKED THREATS ──\nNo active tracked targets.")
     end
+
+    -- ── PERMANENT LABELS (Nemesis & Blacklist) ──
+    local permLines = {}
+    local seenPerm = {}
+    -- Nemesis players
+    for n, _ in pairs(S.NemesisMemory or {}) do
+        if not seenPerm[n] then
+            seenPerm[n] = true
+            local sel = (S.IntelSelected == n) and " [SELECTED]" or ""
+            table.insert(permLines, "  [NEMESIS] " .. n .. sel)
+        end
+    end
+    if S.ManualPlayerLabels then
+        for n, mode in pairs(S.ManualPlayerLabels) do
+            if mode == "Nemesis" and not seenPerm[n] then
+                seenPerm[n] = true
+                local sel = (S.IntelSelected == n) and " [SELECTED]" or ""
+                table.insert(permLines, "  [NEMESIS] " .. n .. sel)
+            end
+        end
+    end
+    -- Blacklisted players
+    for _, n in ipairs(S.BlacklistedPlayers or {}) do
+        if not seenPerm[n] then
+            seenPerm[n] = true
+            local sel = (S.IntelSelected == n) and " [SELECTED]" or ""
+            table.insert(permLines, "  [BLACKLIST] " .. n .. sel)
+        end
+    end
+    if S.ManualPlayerLabels then
+        for n, mode in pairs(S.ManualPlayerLabels) do
+            if mode == "Blacklist" and not seenPerm[n] then
+                seenPerm[n] = true
+                local sel = (S.IntelSelected == n) and " [SELECTED]" or ""
+                table.insert(permLines, "  [BLACKLIST] " .. n .. sel)
+            end
+        end
+    end
+
+    table.insert(lines, "\n── PERMANENT LABELS (NEMESIS & BLACKLIST) ──")
+    if #permLines > 0 then
+        for _, pl in ipairs(permLines) do table.insert(lines, pl) end
+    else
+        table.insert(lines, "  No permanent labels configured.")
+    end
+
     local heatmap = ""
     if mostDangerousName then
         local po2 = Players:FindFirstChild(mostDangerousName)
@@ -1274,22 +1322,34 @@ S.AddToIntel = AddToIntel
 
 local function RemoveFromIntel(name, forceRemoveNemesis)
     if not name or name == "" then return end
-    local data = S.IntelPlayers[name]
+    local data = S.IntelPlayers and S.IntelPlayers[name]
     if data and data.nemesis and not forceRemoveNemesis then
-        Notify({Title="Intel",Content="Use 'Remove Nemesis' to remove a Nemesis player.",Duration=2,Image="shield-off"})
+        Notify({Title="Intel",Content="Use 'Remove Selected (Nemesis)' to remove a Nemesis.",Duration=2,Image="shield-off"})
         return
     end
     if data then
         S.IntelPlayers[name] = nil
     end
-    S.ThreatMemory[name] = nil
-    S.NemesisMemory[name] = nil
+    if S.ThreatMemory then S.ThreatMemory[name] = nil end
+    if forceRemoveNemesis then
+        if S.NemesisMemory then S.NemesisMemory[name] = nil end
+        if S.ManualPlayerLabels and S.ManualPlayerLabels[name] == "Nemesis" then
+            S.ManualPlayerLabels[name] = nil
+        end
+    else
+        local bIdx = table.find(S.BlacklistedPlayers or {}, name)
+        if bIdx then table.remove(S.BlacklistedPlayers, bIdx) end
+        if S.ManualPlayerLabels and S.ManualPlayerLabels[name] == "Blacklist" then
+            S.ManualPlayerLabels[name] = nil
+        end
+    end
     if S.PlayerKillCounts then S.PlayerKillCounts[name] = 0 end
-    local idx = table.find(S.PriorityPlayers, name)
+    local idx = table.find(S.PriorityPlayers or {}, name)
     if idx then table.remove(S.PriorityPlayers, idx) end
     SyncPriorityUI()
     if S.IntelSelected == name then S.IntelSelected = "" end
     RebuildIntelMonitor()
+    if S.RefreshUnifiedLabelList then pcall(S.RefreshUnifiedLabelList) end
 end
 
 S.RemoveFromIntel = RemoveFromIntel
@@ -2411,7 +2471,9 @@ local function HandleClickToMark()
                     if S.IntelPlayers then S.IntelPlayers[targetName] = nil end
                     SyncPriorityUI()
                 end
-                if S.ManualPlayerLabels then S.ManualPlayerLabels[targetName] = nil end
+                if S.ManualPlayerLabels and S.ManualPlayerLabels[targetName] == "Priority" then
+                    S.ManualPlayerLabels[targetName] = nil
+                end
                 _refreshLabel()
                 Notify({Title="TASFF Mark", Content="Unmarked "..targetName.." from Intel.", Duration=2, Image="minus-circle"})
             else
@@ -2421,10 +2483,12 @@ local function HandleClickToMark()
                     table.insert(S.PriorityPlayers, targetName)
                     SyncPriorityUI()
                 end
-                if not S.ManualPlayerLabels then S.ManualPlayerLabels = {} end
-                S.ManualPlayerLabels[targetName] = "Priority"
+                -- Priority is temporary per session; not stored in permanent ManualPlayerLabels
+                if S.ManualPlayerLabels and S.ManualPlayerLabels[targetName] == "Priority" then
+                    S.ManualPlayerLabels[targetName] = nil
+                end
                 _refreshLabel()
-                Notify({Title="TASFF Mark", Content="Marked "..targetName.." as "..mode.."!", Duration=2, Image="crosshair"})
+                Notify({Title="TASFF Mark", Content="Marked "..targetName.." as Priority!", Duration=2, Image="crosshair"})
             end
         end
     else

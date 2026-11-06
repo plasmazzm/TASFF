@@ -474,6 +474,23 @@ local function ApplyRayfieldTheme(themeColors)
         end
     end
 
+    -- Sync Keybind Map frame stroke, title text, and toggle button text
+    local kbm = TASFFEnv.Theme.KeybindMap
+    if kbm then
+        pcall(function()
+            local stroke = kbm:FindFirstChildOfClass("UIStroke")
+            if stroke then stroke.Color = themeColors.TabBackgroundSelected end
+            local header = kbm:FindFirstChild("KBMHeader")
+            if header then
+                for _, child in ipairs(header:GetChildren()) do
+                    if child:IsA("TextLabel") or child:IsA("TextButton") then
+                        child.TextColor3 = themeColors.TabBackgroundSelected
+                    end
+                end
+            end
+        end)
+    end
+
     return true
 end
 TASFFEnv.Theme.ApplyRayfieldTheme = ApplyRayfieldTheme
@@ -2117,33 +2134,27 @@ local function PatchRayfieldDOM()
         if menuCorner then
             Instance.new("UICorner", scanBg).CornerRadius = menuCorner.CornerRadius
         end
-        -- Horizontal scanlines gradient (repeating dark/mid-blue stripes)
+        -- Horizontal scanlines gradient (repeating dark/mid-blue stripes; <= 20 keypoints)
         local scanGrad = Instance.new("UIGradient")
         scanGrad.Name = "ScanGrad"
         scanGrad.Rotation = 90
         scanGrad.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0,      Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.03,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.06,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.09,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.06,   Color3.fromRGB(55,  62, 95)),
             ColorSequenceKeypoint.new(0.12,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.16,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.20,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.30,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.35,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.40,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.45,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.19,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.31,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.38,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.44,   Color3.fromRGB(55,  62, 95)),
             ColorSequenceKeypoint.new(0.50,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.60,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.65,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.70,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.80,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.85,   Color3.fromRGB(55,  62, 95)),
-            ColorSequenceKeypoint.new(0.90,   Color3.fromRGB(8,   9,  16)),
-            ColorSequenceKeypoint.new(0.95,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.56,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.63,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.69,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.81,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.88,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.94,   Color3.fromRGB(55,  62, 95)),
             ColorSequenceKeypoint.new(1,      Color3.fromRGB(8,   9,  16)),
         })
         scanGrad.Transparency = NumberSequence.new(0)
@@ -3637,6 +3648,15 @@ local function PatchRayfieldDOM()
     -- Fade out and destroy the loading cover now that all patches are applied
     local coverToFade = mainFrame:FindFirstChild("TASFF_LoadCover")
     if coverToFade then
+        for _, child in ipairs(coverToFade:GetDescendants()) do
+            if child:IsA("TextLabel") or child:IsA("TextButton") then
+                TweenService:Create(child, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
+            elseif child:IsA("UIStroke") then
+                TweenService:Create(child, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
+            elseif child:IsA("GuiObject") then
+                TweenService:Create(child, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
+            end
+        end
         TweenService:Create(coverToFade, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
         task.delay(0.45, function()
             if coverToFade and coverToFade.Parent then
@@ -3841,6 +3861,15 @@ task.spawn(function()
     local _main2 = _rGui2 and (_rGui2:FindFirstChild("Main", true) or _rGui2:FindFirstChildOfClass("Frame"))
     local _cov2 = _main2 and _main2:FindFirstChild("TASFF_LoadCover")
     if _cov2 then
+        for _, child in ipairs(_cov2:GetDescendants()) do
+            if child:IsA("TextLabel") or child:IsA("TextButton") then
+                TweenService:Create(child, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
+            elseif child:IsA("UIStroke") then
+                TweenService:Create(child, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
+            elseif child:IsA("GuiObject") then
+                TweenService:Create(child, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
+            end
+        end
         TweenService:Create(_cov2, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
         task.delay(0.6, function()
             if _cov2 and _cov2.Parent then _cov2:Destroy() end

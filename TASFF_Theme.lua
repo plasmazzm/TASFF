@@ -1523,28 +1523,48 @@ end
 TASFFEnv.Theme.SetTabBadge = SetTabBadge
 
 -- Universal Atmospheric Carbon Weave Texture & Control Hover Glow Helpers
--- Applies high-contrast diagonal carbon UIGradient directly onto the frame background.
+-- Injects a child Frame overlay so the carbon weave is always visible regardless
+-- of what Rayfield writes to the parent frame's BackgroundColor3.
 local function AttachCarbonOverlay(targetFrame, _unused)
     if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
     local marker = Instance.new("BoolValue")
     marker.Name = "CarbonOverlay"
     marker.Parent = targetFrame
 
-    local existing = targetFrame:FindFirstChildOfClass("UIGradient")
-    if existing and existing.Name ~= "CyberGrad" then existing:Destroy() end
+    -- Overlay frame inside the card — independent of Rayfield's color writes
+    local overlay = Instance.new("Frame")
+    overlay.Name = "CarbonOverlayFrame"
+    overlay.Size = UDim2.new(1, 0, 1, 0)
+    overlay.Position = UDim2.new(0, 0, 0, 0)
+    overlay.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
+    overlay.BackgroundTransparency = 0.52  -- semi-transparent so card text/controls still show
+    overlay.BorderSizePixel = 0
+    overlay.ZIndex = (targetFrame.ZIndex or 1) + 1
+    -- Match parent corner radius so overlay doesn't overflow rounded cards
+    local parentCorner = targetFrame:FindFirstChildOfClass("UICorner")
+    if parentCorner then
+        Instance.new("UICorner", overlay).CornerRadius = parentCorner.CornerRadius
+    end
 
+    -- Diagonal carbon weave gradient — high contrast (dark/medium-blue stripes)
     local grad = Instance.new("UIGradient")
     grad.Name = "CarbonGradient"
     grad.Rotation = 45
     grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,    Color3.fromRGB(16,  18,  26)),
-        ColorSequenceKeypoint.new(0.25, Color3.fromRGB(65,  70,  95)),
-        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(16,  18,  26)),
-        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(65,  70,  95)),
-        ColorSequenceKeypoint.new(1,    Color3.fromRGB(16,  18,  26)),
+        ColorSequenceKeypoint.new(0,    Color3.fromRGB(6,   8,  16)),
+        ColorSequenceKeypoint.new(0.12, Color3.fromRGB(85,  92, 128)),
+        ColorSequenceKeypoint.new(0.25, Color3.fromRGB(6,   8,  16)),
+        ColorSequenceKeypoint.new(0.37, Color3.fromRGB(85,  92, 128)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(6,   8,  16)),
+        ColorSequenceKeypoint.new(0.62, Color3.fromRGB(85,  92, 128)),
+        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(6,   8,  16)),
+        ColorSequenceKeypoint.new(0.87, Color3.fromRGB(85,  92, 128)),
+        ColorSequenceKeypoint.new(1,    Color3.fromRGB(6,   8,  16)),
     })
     grad.Transparency = NumberSequence.new(0)
-    grad.Parent = targetFrame
+    grad.Parent = overlay
+
+    overlay.Parent = targetFrame
 end
 
 local function AttachHoverGlow(card)
@@ -1856,46 +1876,87 @@ local function PatchRayfieldDOM()
     local mainFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
     if not mainFrame then return false end
 
+    -- Loading Cover: hides the unstyled flash right after Rayfield's open animation
+    -- Created immediately — fades out at end of patch when all styling is applied
+    local loadCover = mainFrame:FindFirstChild("TASFF_LoadCover")
+    if not loadCover then
+        loadCover = Instance.new("Frame")
+        loadCover.Name = "TASFF_LoadCover"
+        loadCover.Size = UDim2.new(1, 0, 1, 0)
+        loadCover.Position = UDim2.new(0, 0, 0, 0)
+        loadCover.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
+        loadCover.BackgroundTransparency = 0
+        loadCover.BorderSizePixel = 0
+        loadCover.ZIndex = 500   -- above everything — will be destroyed after fade
+        local lcc = Instance.new("UICorner", loadCover)
+        lcc.CornerRadius = UDim.new(0, 8)
+        loadCover.Parent = mainFrame
+    end
+
     if S.UIOpacity and S.UIOpacity < 1.0 then
         mainFrame.BackgroundTransparency = 1 - S.UIOpacity
     end
     mainFrame.ClipsDescendants = false
 
-    -- 0a. Atmospheric Scanline Grid on Window Background (directly on mainFrame — CAN NEVER COVER CARDS)
+    -- 0a. Atmospheric Scanline Grid on Window Background
+    -- Use a child Frame (NOT UIGradient on mainFrame) so Rayfield's BackgroundColor3
+    -- writes never erase the grid. ZIndex 1 keeps it strictly BEHIND all cards.
     local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
     if existingMesh then existingMesh:Destroy() end
+    local existingScanGrad = mainFrame:FindFirstChild("MainScanlinesGrad")
+    if existingScanGrad then existingScanGrad:Destroy() end
 
-    mainFrame.BackgroundColor3 = Color3.fromRGB(15, 16, 23)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
+    mainFrame.BackgroundTransparency = 0
 
-    local scanGrad = mainFrame:FindFirstChild("MainScanlinesGrad")
-    if not scanGrad then
-        scanGrad = Instance.new("UIGradient", mainFrame)
-        scanGrad.Name = "MainScanlinesGrad"
+    local scanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
+    if not scanBg then
+        scanBg = Instance.new("Frame")
+        scanBg.Name = "TASFF_ScanlinesBg"
+        scanBg.Size = UDim2.new(1, 0, 1, 0)
+        scanBg.Position = UDim2.new(0, 0, 0, 0)
+        scanBg.BackgroundColor3 = Color3.fromRGB(13, 14, 21)
+        scanBg.BackgroundTransparency = 0
+        scanBg.BorderSizePixel = 0
+        scanBg.ZIndex = 1   -- strictly behind all Rayfield content (cards default to ZIndex 2+)
+        -- Match menu corner radius
+        local menuCorner = mainFrame:FindFirstChildOfClass("UICorner")
+        if menuCorner then
+            Instance.new("UICorner", scanBg).CornerRadius = menuCorner.CornerRadius
+        end
+        -- Horizontal scanlines gradient (repeating dark/mid-blue stripes)
+        local scanGrad = Instance.new("UIGradient")
+        scanGrad.Name = "ScanGrad"
+        scanGrad.Rotation = 90
+        scanGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0,      Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.03,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.06,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.09,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.12,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.16,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.20,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.30,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.35,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.40,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.45,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.50,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.60,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.65,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.70,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.80,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.85,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(0.90,   Color3.fromRGB(8,   9,  16)),
+            ColorSequenceKeypoint.new(0.95,   Color3.fromRGB(55,  62, 95)),
+            ColorSequenceKeypoint.new(1,      Color3.fromRGB(8,   9,  16)),
+        })
+        scanGrad.Transparency = NumberSequence.new(0)
+        scanGrad.Parent = scanBg
+        scanBg.Parent = mainFrame
     end
-    scanGrad.Rotation = 90
-    scanGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,      Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(0.05,   Color3.fromRGB(65,  72,  100)),
-        ColorSequenceKeypoint.new(0.10,   Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(0.15,   Color3.fromRGB(65,  72,  100)),
-        ColorSequenceKeypoint.new(0.20,   Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(0.25,   Color3.fromRGB(65,  72,  100)),
-        ColorSequenceKeypoint.new(0.30,   Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(0.35,   Color3.fromRGB(65,  72,  100)),
-        ColorSequenceKeypoint.new(0.40,   Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(0.45,   Color3.fromRGB(65,  72,  100)),
-        ColorSequenceKeypoint.new(0.50,   Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(0.55,   Color3.fromRGB(65,  72,  100)),
-        ColorSequenceKeypoint.new(0.60,   Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(0.65,   Color3.fromRGB(65,  72,  100)),
-        ColorSequenceKeypoint.new(0.70,   Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(0.75,   Color3.fromRGB(65,  72,  100)),
-        ColorSequenceKeypoint.new(0.80,   Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(0.85,   Color3.fromRGB(65,  72,  100)),
-        ColorSequenceKeypoint.new(0.90,   Color3.fromRGB(12,  13,  19)),
-        ColorSequenceKeypoint.new(1,      Color3.fromRGB(65,  72,  100)),
-    })
-    scanGrad.Transparency = NumberSequence.new(0)
 
     -- 0b. Animated Cyber Neon Border with Rotating Gradient
     local cyberStroke = mainFrame:FindFirstChild("CyberStroke")
@@ -2004,7 +2065,11 @@ local function PatchRayfieldDOM()
             bellBtn = Instance.new("TextButton", topbar)
             bellBtn.Name = "NotifBellBtn"
             bellBtn.Size = UDim2.new(0, 22, 0, 22)
-            bellBtn.Position = UDim2.new(1, -170, 0.5, -11)
+            -- AnchorPoint right-side: placed immediately to the left of Rayfield's
+            -- Search icon (which uses AnchorPoint(1,0.5) at X offset -30 from right).
+            -- We place bell at -58 (search at ~-30, settings at ~-56 → bell at -84 gives clear room).
+            bellBtn.AnchorPoint = Vector2.new(1, 0.5)
+            bellBtn.Position = UDim2.new(1, -58, 0.5, 0)
             bellBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
             bellBtn.BackgroundTransparency = 0.3
             bellBtn.BorderSizePixel = 0
@@ -2051,7 +2116,8 @@ local function PatchRayfieldDOM()
                 end
             end)
         else
-            bellBtn.Position = UDim2.new(1, -170, 0.5, -11)
+            bellBtn.AnchorPoint = Vector2.new(1, 0.5)
+            bellBtn.Position = UDim2.new(1, -58, 0.5, 0)
         end
     end
 
@@ -2071,15 +2137,15 @@ local function PatchRayfieldDOM()
         bottomBar.AnchorPoint = Vector2.new(0, 0)
         bottomBar.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y + mainFrame.AbsoluteSize.Y + 4)
         bottomBar.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 26)
-        bottomBar.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
-        bottomBar.BackgroundTransparency = 0.10
+        bottomBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)   -- fully opaque dark so text is readable
+        bottomBar.BackgroundTransparency = 0
         bottomBar.BorderSizePixel = 0
         bottomBar.ZIndex = 100
         Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 6)
         local barStroke = Instance.new("UIStroke", bottomBar)
         barStroke.Color = GetThemeAccentColor()
-        barStroke.Thickness = 1
-        barStroke.Transparency = 0.5
+        barStroke.Thickness = 1.5
+        barStroke.Transparency = 0.25
 
         -- Carbon texture on bottom bar (procedural diagonal stripe — no rbxassetid)
         local barCarbon = Instance.new("Frame", bottomBar)
@@ -2133,7 +2199,7 @@ local function PatchRayfieldDOM()
         opName.BackgroundTransparency = 1
         opName.Font = Enum.Font.GothamBold
         opName.TextSize = 10
-        opName.TextColor3 = Color3.fromRGB(225, 225, 235)
+        opName.TextColor3 = Color3.fromRGB(235, 240, 255)  -- bright white-blue for readability
         opName.TextXAlignment = Enum.TextXAlignment.Left
         opName.TextTruncate = Enum.TextTruncate.AtEnd
         opName.ZIndex = 103
@@ -2164,7 +2230,7 @@ local function PatchRayfieldDOM()
         sText.BackgroundTransparency = 1
         sText.Font = Enum.Font.GothamBold
         sText.TextSize = 10
-        sText.TextColor3 = Color3.fromRGB(190, 215, 220)
+        sText.TextColor3 = Color3.fromRGB(220, 240, 230)   -- bright readable green-tinted white
         sText.TextXAlignment = Enum.TextXAlignment.Left
         sText.Text = "60 FPS  |  0ms"
         sText.ZIndex = 104
@@ -2393,8 +2459,8 @@ local function PatchRayfieldDOM()
             nativeShadow.Visible = false
         end
 
-        -- Main Window Carbon Mesh (procedural Frame — stays behind elements at ZIndex 0)
-        local mMesh = mainFrame:FindFirstChild("MainCarbonMesh")
+        -- Main Window Scanlines Background (child Frame — stays behind elements at ZIndex 1)
+        local mMesh = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
         if mMesh then
             mMesh.Visible = (isVis and isExpanded)
             mMesh.BackgroundTransparency = mainTrans
@@ -2413,9 +2479,11 @@ local function PatchRayfieldDOM()
                     mainFrame.Position.Y.Scale,
                     mainFrame.Position.Y.Offset + (mainFrame.AbsoluteSize.Y * (1 - mainFrame.AnchorPoint.Y)) + 4
                 )
-                bBar.BackgroundTransparency = math.clamp(0.10 + mainTrans * 0.90, 0, 1)
+                -- Keep bottom bar fully opaque (BackgroundTransparency = 0) for readability;
+                -- only fade text/avatar alpha so it still animates smoothly
+                bBar.BackgroundTransparency = mainTrans
                 local bStroke2 = bBar:FindFirstChildOfClass("UIStroke")
-                if bStroke2 then bStroke2.Transparency = math.clamp(0.5 + mainTrans * 0.5, 0, 1) end
+                if bStroke2 then bStroke2.Transparency = math.clamp(0.25 + mainTrans * 0.75, 0, 1) end
                 local opA = bBar:FindFirstChild("OpAvatar")
                 if opA then opA.ImageTransparency = mainTrans end
                 local opN = bBar:FindFirstChild("OpName")
@@ -2621,29 +2689,36 @@ local function PatchRayfieldDOM()
         -- and visibility by default; this opt-in path is intentionally isolated.
         if S.AdvancedThemeLayoutPatchEnabled == true and desc:IsA("GuiObject") and desc.Name == "SectionTitle" then
             local secFrame = desc
+            -- Ensure the section frame doesn't clip the toggle button which may extend slightly
+            secFrame.ClipsDescendants = false
             if not secFrame:FindFirstChild("CollapseToggle") then
                 local toggleBtn = Instance.new("TextButton")
                 toggleBtn.Name = "CollapseToggle"
                 toggleBtn.Size = UDim2.new(0, 26, 0, 20)
-                toggleBtn.Position = UDim2.new(1, -32, 0.5, -10)
+                toggleBtn.AnchorPoint = Vector2.new(1, 0.5)
+                toggleBtn.Position = UDim2.new(1, -6, 0.5, 0)
                 toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
                 toggleBtn.BackgroundTransparency = 0.3
                 toggleBtn.BorderSizePixel = 0
                 toggleBtn.Text = "" -- NO TEXT, 100% immune to character encoding corruption
-                toggleBtn.ZIndex = 20
+                toggleBtn.ZIndex = 30  -- high enough to be above section backgrounds
                 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 4)
                 local btnStroke = Instance.new("UIStroke", toggleBtn)
-                btnStroke.Color = Color3.fromRGB(50, 50, 65)
+                btnStroke.Color = GetThemeAccentColor()
                 btnStroke.Thickness = 1
+                btnStroke.Transparency = 0.4
 
-                local arrowIcon = Instance.new("ImageLabel", toggleBtn)
+                -- Use TextLabel with Unicode chevron — no rbxassetid dependency
+                local arrowIcon = Instance.new("TextLabel", toggleBtn)
                 arrowIcon.Name = "ArrowIcon"
-                arrowIcon.Size = UDim2.new(0, 12, 0, 12)
-                arrowIcon.Position = UDim2.new(0.5, -6, 0.5, -6)
+                arrowIcon.Size = UDim2.new(1, 0, 1, 0)
+                arrowIcon.Position = UDim2.new(0, 0, 0, 0)
                 arrowIcon.BackgroundTransparency = 1
-                arrowIcon.Image = "rbxassetid://6031090990" -- Vector chevron down asset
-                arrowIcon.ImageColor3 = Color3.fromRGB(180, 180, 195)
-                arrowIcon.ZIndex = 21
+                arrowIcon.Font = Enum.Font.GothamBold
+                arrowIcon.TextSize = 11
+                arrowIcon.Text = "v"   -- simple downward chevron; rotated by Rotation property when collapsed
+                arrowIcon.TextColor3 = Color3.fromRGB(200, 205, 220)
+                arrowIcon.ZIndex = 31
 
                 toggleBtn.Parent = secFrame
 
@@ -2657,10 +2732,10 @@ local function PatchRayfieldDOM()
                     local isCol = not (secFrame:GetAttribute("IsCollapsed") == true)
                     secFrame:SetAttribute("IsCollapsed", isCol)
                     local targetRot = isCol and -90 or 0
-                    local targetCol = isCol and GetThemeAccentColor() or Color3.fromRGB(180, 180, 195)
+                    local targetCol = isCol and GetThemeAccentColor() or Color3.fromRGB(200, 205, 220)
                     TweenService:Create(arrowIcon, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                         Rotation = targetRot,
-                        ImageColor3 = targetCol
+                        TextColor3 = targetCol  -- TextLabel uses TextColor3, not ImageColor3
                     }):Play()
                     PlayUISound(isCol and "toggle_off" or "toggle_on")
 
@@ -2753,7 +2828,7 @@ local function PatchRayfieldDOM()
                 -- Ensure all elements under this section start 100% visible and expanded upon initial load
                 secFrame:SetAttribute("IsCollapsed", false)
                 arrowIcon.Rotation = 0
-                arrowIcon.ImageColor3 = Color3.fromRGB(180, 180, 195)
+                arrowIcon.TextColor3 = Color3.fromRGB(200, 205, 220)  -- TextLabel uses TextColor3
                 local container = secFrame.Parent
                 if container then
                     local pastSec = false
@@ -2772,7 +2847,7 @@ local function PatchRayfieldDOM()
                 local function syncCollapseFade()
                     local t = secFrame.BackgroundTransparency
                     toggleBtn.BackgroundTransparency = math.clamp(0.3 + t * 0.7, 0, 1)
-                    arrowIcon.ImageTransparency = t
+                    arrowIcon.TextTransparency = t   -- TextLabel uses TextTransparency
                     btnStroke.Transparency = t
                 end
                 secFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(syncCollapseFade)
@@ -2780,43 +2855,51 @@ local function PatchRayfieldDOM()
         end
 
         -- Slider Precision Stepper Buttons & Live Value Enhancement
+        -- Correct detection: Rayfield slider cards have a child "Main" that has children "Progress" and "Information"
+        local sliderMainChild = desc:FindFirstChild("Main")
         local isSliderCard = desc:IsA("GuiObject") and (
             desc.Name == "Slider" or
-            desc:FindFirstChild("Slider") or
             desc:FindFirstChild("SliderBar") or
-            (desc:FindFirstChild("Main") and desc.Main:IsA("GuiObject") and desc.Main:FindFirstChild("Progress") and desc.Main:FindFirstChild("Information"))
+            (sliderMainChild and sliderMainChild:IsA("GuiObject") and sliderMainChild:FindFirstChild("Progress") and sliderMainChild:FindFirstChild("Information"))
         )
         if isSliderCard and not desc:FindFirstChild("StepperHooked") then
             local sHook = Instance.new("BoolValue", desc)
             sHook.Name = "StepperHooked"
+            -- Allow stepper buttons to extend outside card bounds
+            desc.ClipsDescendants = false
 
+            -- Position steppers at the right end of the card, vertically centered
+            -- Using AnchorPoint(1,0.5) so they anchor to the right edge
             local stepMinus = Instance.new("TextButton", desc)
             stepMinus.Name = "StepMinus"
-            stepMinus.Size = UDim2.new(0, 20, 0, 20)
-            stepMinus.Position = UDim2.new(1, -52, 0, 5)
-            stepMinus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
+            stepMinus.Size = UDim2.new(0, 22, 0, 22)
+            stepMinus.AnchorPoint = Vector2.new(1, 0.5)
+            stepMinus.Position = UDim2.new(1, -28, 0.5, 0)
+            stepMinus.BackgroundColor3 = Color3.fromRGB(22, 24, 36)
             stepMinus.BorderSizePixel = 0
             stepMinus.Font = Enum.Font.GothamBold
-            stepMinus.TextSize = 13
+            stepMinus.TextSize = 15
             stepMinus.TextColor3 = GetThemeAccentColor()
             stepMinus.Text = "-"
-            stepMinus.ZIndex = 35
+            stepMinus.ZIndex = 50
             Instance.new("UICorner", stepMinus).CornerRadius = UDim.new(0, 4)
             local smStroke = Instance.new("UIStroke", stepMinus)
-            smStroke.Color = Color3.fromRGB(65, 70, 90)
+            smStroke.Color = GetThemeAccentColor()
             smStroke.Thickness = 1
+            smStroke.Transparency = 0.5
 
             local stepPlus = Instance.new("TextButton", desc)
             stepPlus.Name = "StepPlus"
-            stepPlus.Size = UDim2.new(0, 20, 0, 20)
-            stepPlus.Position = UDim2.new(1, -26, 0, 5)
-            stepPlus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
+            stepPlus.Size = UDim2.new(0, 22, 0, 22)
+            stepPlus.AnchorPoint = Vector2.new(1, 0.5)
+            stepPlus.Position = UDim2.new(1, -2, 0.5, 0)
+            stepPlus.BackgroundColor3 = Color3.fromRGB(22, 24, 36)
             stepPlus.BorderSizePixel = 0
             stepPlus.Font = Enum.Font.GothamBold
-            stepPlus.TextSize = 13
+            stepPlus.TextSize = 15
             stepPlus.TextColor3 = GetThemeAccentColor()
             stepPlus.Text = "+"
-            stepPlus.ZIndex = 35
+            stepPlus.ZIndex = 50
             Instance.new("UICorner", stepPlus).CornerRadius = UDim.new(0, 4)
             local spStroke = Instance.new("UIStroke", stepPlus)
             spStroke.Color = Color3.fromRGB(65, 70, 90)
@@ -3073,6 +3156,99 @@ local function PatchRayfieldDOM()
             end
         end
         end
+    end
+
+    -- DescendantAdded watcher: inject collapse buttons and stepper buttons into
+    -- elements that Rayfield adds AFTER the initial DOM walk (e.g. during scrolling or tab switching)
+    if not mainFrame:FindFirstChild("TASFF_DescWatcher") then
+        local dwHook = Instance.new("BoolValue", mainFrame)
+        dwHook.Name = "TASFF_DescWatcher"
+        mainFrame.DescendantAdded:Connect(function(newDesc)
+            task.wait(0.05) -- let Rayfield finish building the subtree
+            pcall(function()
+                -- Late section collapse injection
+                if S.AdvancedThemeLayoutPatchEnabled == true and newDesc:IsA("GuiObject") and newDesc.Name == "SectionTitle" and not newDesc:FindFirstChild("CollapseToggle") then
+                    newDesc.ClipsDescendants = false
+                    local lateBtn = Instance.new("TextButton")
+                    lateBtn.Name = "CollapseToggle"
+                    lateBtn.Size = UDim2.new(0, 26, 0, 20)
+                    lateBtn.AnchorPoint = Vector2.new(1, 0.5)
+                    lateBtn.Position = UDim2.new(1, -6, 0.5, 0)
+                    lateBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+                    lateBtn.BackgroundTransparency = 0.3
+                    lateBtn.BorderSizePixel = 0
+                    lateBtn.Text = ""
+                    lateBtn.ZIndex = 30
+                    Instance.new("UICorner", lateBtn).CornerRadius = UDim.new(0, 4)
+                    local lateBtnStroke = Instance.new("UIStroke", lateBtn)
+                    lateBtnStroke.Color = GetThemeAccentColor()
+                    lateBtnStroke.Thickness = 1
+                    lateBtnStroke.Transparency = 0.4
+                    -- Use TextLabel with Unicode chevron — no rbxassetid dependency
+                    local lateArrow = Instance.new("TextLabel", lateBtn)
+                    lateArrow.Name = "ArrowIcon"
+                    lateArrow.Size = UDim2.new(1, 0, 1, 0)
+                    lateArrow.Position = UDim2.new(0, 0, 0, 0)
+                    lateArrow.BackgroundTransparency = 1
+                    lateArrow.Font = Enum.Font.GothamBold
+                    lateArrow.TextSize = 11
+                    lateArrow.Text = "v"
+                    lateArrow.TextColor3 = Color3.fromRGB(200, 205, 220)
+                    lateArrow.ZIndex = 31
+                    lateBtn.Parent = newDesc
+                end
+
+                -- Late slider stepper injection
+                local lateSliderMain = newDesc:FindFirstChild("Main")
+                local isLateSlider = newDesc:IsA("GuiObject") and
+                    lateSliderMain and lateSliderMain:IsA("GuiObject") and
+                    lateSliderMain:FindFirstChild("Progress") and
+                    lateSliderMain:FindFirstChild("Information") and
+                    not newDesc:FindFirstChild("StepperHooked")
+                if isLateSlider then
+                    newDesc.ClipsDescendants = false
+                    local lHook = Instance.new("BoolValue", newDesc)
+                    lHook.Name = "StepperHooked"
+                    local lMinus = Instance.new("TextButton", newDesc)
+                    lMinus.Name = "StepMinus"
+                    lMinus.Size = UDim2.new(0, 22, 0, 22)
+                    lMinus.AnchorPoint = Vector2.new(1, 0.5)
+                    lMinus.Position = UDim2.new(1, -28, 0.5, 0)
+                    lMinus.BackgroundColor3 = Color3.fromRGB(22, 24, 36)
+                    lMinus.BorderSizePixel = 0
+                    lMinus.Font = Enum.Font.GothamBold
+                    lMinus.TextSize = 15
+                    lMinus.TextColor3 = GetThemeAccentColor()
+                    lMinus.Text = "-"
+                    lMinus.ZIndex = 50
+                    Instance.new("UICorner", lMinus).CornerRadius = UDim.new(0, 4)
+                    local lPlus = Instance.new("TextButton", newDesc)
+                    lPlus.Name = "StepPlus"
+                    lPlus.Size = UDim2.new(0, 22, 0, 22)
+                    lPlus.AnchorPoint = Vector2.new(1, 0.5)
+                    lPlus.Position = UDim2.new(1, -2, 0.5, 0)
+                    lPlus.BackgroundColor3 = Color3.fromRGB(22, 24, 36)
+                    lPlus.BorderSizePixel = 0
+                    lPlus.Font = Enum.Font.GothamBold
+                    lPlus.TextSize = 15
+                    lPlus.TextColor3 = GetThemeAccentColor()
+                    lPlus.Text = "+"
+                    lPlus.ZIndex = 50
+                    Instance.new("UICorner", lPlus).CornerRadius = UDim.new(0, 4)
+                end
+            end)
+        end)
+    end
+
+    -- Fade out and destroy the loading cover now that all patches are applied
+    local coverToFade = mainFrame:FindFirstChild("TASFF_LoadCover")
+    if coverToFade then
+        TweenService:Create(coverToFade, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
+        task.delay(0.45, function()
+            if coverToFade and coverToFade.Parent then
+                coverToFade:Destroy()
+            end
+        end)
     end
 
     -- Update the Feature Overview paragraph with element counts pulled directly from TASFF_Lists.lua

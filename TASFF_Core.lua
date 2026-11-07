@@ -58,6 +58,15 @@ local SnaplineCache             = S.SnaplineCache
 local OOFArrowCache             = S.OOFArrowCache
 local ThreatMemory              = S.ThreatMemory
 local NemesisMemory             = S.NemesisMemory
+
+local function IsPlayerNemesis(name)
+    if not name then return false end
+    if S.NemesisMemory and S.NemesisMemory[name] ~= nil then return true end
+    if S.ManualPlayerLabels and S.ManualPlayerLabels[name] == "Nemesis" then return true end
+    if NemesisMemory and NemesisMemory[name] ~= nil then return true end
+    return false
+end
+S.IsPlayerNemesis = IsPlayerNemesis
 local FrameCounters             = S.FrameCounters
 local PerformanceIntervals      = S.PerformanceIntervals
 local NPCIntervals              = S.NPCIntervals
@@ -3936,16 +3945,16 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         local myPos=myRoot and myRoot.Position or Vector3.new(0,0,0)
         for _,t in ipairs(S.LastVisualList) do
             local isPriority=table.find(PP,t.Name)~=nil
-            local isNemesis=NE and NemesisMemory[t.Name]~=nil
+            local isNemesis=IsPlayerNemesis(t.Name)
             local isBlacklisted=t.IsBlacklisted==true
-            local inFocus=not FM or isPriority
+            local inFocus=not FM or isPriority or isNemesis
             local isPrimary=S.CurrentTarget and t.Instance==S.CurrentTarget.Instance
             if isPrimary and S.TargetPart == "Visible On Screen" then
                 local part = S.LastCustomTargetData and S.LastCustomTargetData.Part
                 isPrimary = part ~= nil and part.Parent ~= nil and part:IsDescendantOf(t.Instance)
                     and IsVisibleCachedWrapper(t.Instance, part.Name, cachedIgnoreList)
             end
-            local show=inFocus and (VM=="All" or VM=="Multiple" or (VM=="Single" and isPrimary)) or isBlacklisted
+            local show=inFocus and (VM=="All" or VM=="Multiple" or (VM=="Single" and isPrimary)) or isBlacklisted or isNemesis or isPriority
 
             local dist=math.floor((myPos-t.Position).Magnitude)
             if not show or not t.Instance or dist>ERD then
@@ -4007,7 +4016,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 h.FillTransparency = 1
                 h.OutlineTransparency = 1
             else
-                if t.IsPlayer then h.Enabled=UH else h.Enabled=UNH end
+                if t.IsPlayer then h.Enabled = (UH or isNemesis or isPriority or isBlacklisted) else h.Enabled = UNH end
             end
             h.OutlineColor=bc
             local rootPart=t.Instance:FindFirstChild("HumanoidRootPart")
@@ -4134,10 +4143,10 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
                 h.DepthMode = Enum.HighlightDepthMode.Occluded
                 h.FillTransparency = 1
                 h.OutlineTransparency = 1
-            elseif ChE then
+            elseif ChE or isNemesis or isPriority then
                 h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
                 h.FillColor=statusESPColor or S.ChamsColor or bc
-                h.FillTransparency=1-(math.clamp(ChO,0,100)/100)
+                h.FillTransparency=(ChE and 1-(math.clamp(ChO,0,100)/100)) or 0.45
                 h.OutlineTransparency = 0
             else
                 h.DepthMode=Enum.HighlightDepthMode.Occluded
@@ -4471,7 +4480,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         local isCT2Priority = ct2Name and (
             (table.find(S.PriorityPlayers or {}, ct2Name) ~= nil) or
             (S.IntelPlayers and S.IntelPlayers[ct2Name] ~= nil) or
-            (NemesisMemory and NemesisMemory[ct2Name] ~= nil)
+            IsPlayerNemesis(ct2Name)
         )
         local priorityTriggerAllowed = not S.TriggerbotPriorityOnly or isCT2Priority
         local triggerAllowed = (not wgEnabled or (heldToolClass ~= "Melee")) and not S._IsHoldingCover and priorityTriggerAllowed
@@ -4515,7 +4524,7 @@ local RenderConnection = RunService.RenderStepped:Connect(function(deltaTime)
         local isCT3Priority = ct3Name and (
             (table.find(S.PriorityPlayers or {}, ct3Name) ~= nil) or
             (S.IntelPlayers and S.IntelPlayers[ct3Name] ~= nil) or
-            (NemesisMemory and NemesisMemory[ct3Name] ~= nil)
+            IsPlayerNemesis(ct3Name)
         )
         local keyPriorityAllowed = not S.TriggerbotPriorityOnly or isCT3Priority
         if S.KeyTriggerbotEnabled and CT3~=nil and TargetingEnabled and AimbotActive and canAimWithTool and keyPriorityAllowed and not S._IsHoldingCover then

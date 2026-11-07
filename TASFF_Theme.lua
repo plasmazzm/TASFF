@@ -149,10 +149,10 @@ local function BuildRayfieldThemeTable(tc)
         Shadow                        = Color3.fromRGB(10, 10, 10),
         NotificationBackground        = lerp(bg, elem, 0.35),
         NotificationActionsBackground = lerp(elem, accent, 0.12),
-        TabBackground                 = bg,
-        TabStroke                     = lerp(elem, accent, 0.25),
-        TabBackgroundSelected         = lerp(elem, text, 0.12),
-        TabTextColor                  = text,
+        TabBackground                 = Color3.fromRGB(16, 16, 22),
+        TabStroke                     = accent,
+        TabBackgroundSelected         = Color3.fromRGB(26, 26, 34),
+        TabTextColor                  = Color3.fromRGB(225, 225, 235),
         SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
         ElementBackground             = elem,
         ElementBackgroundHover        = lerp(elem, text, 0.12),
@@ -504,17 +504,59 @@ local function ApplyRayfieldTheme(themeColors)
     local topbar = mainFrame:FindFirstChild("Topbar", true)
     setColor(topbar, "BackgroundColor3", themeColors.Topbar)
 
-    -- Recolor TabList tabs
+    -- Recolor TabList tabs (distinguishing active vs unselected tabs)
     local tabList = mainFrame:FindFirstChild("TabList", true)
+    local elementsFrame = mainFrame:FindFirstChild("Elements", true)
+    local pageLayout = elementsFrame and elementsFrame:FindFirstChildOfClass("UIPageLayout")
+    local curActiveName = pageLayout and pageLayout.CurrentPage and pageLayout.CurrentPage.Name
+    if not curActiveName and elementsFrame then
+        for _, pg in ipairs(elementsFrame:GetChildren()) do
+            if pg:IsA("ScrollingFrame") and pg.Visible then
+                curActiveName = pg.Name
+                break
+            end
+        end
+    end
     if tabList then
         for _, tabBtn in ipairs(tabList:GetChildren()) do
-            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" then
-                setColor(tabBtn, "BackgroundColor3", elemBg)
-                local st = tabBtn:FindFirstChildOfClass("UIStroke")
-                setStrokeColor(st, themeColors.TabStroke or accentColor)
-                local title = tabBtn:FindFirstChild("Title")
-                if title and title:IsA("TextLabel") then
-                    setColor(title, "TextColor3", themeColors.TextColor)
+            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" and tabBtn.Name ~= "Template" and tabBtn.Name ~= "Placeholder" then
+                local isActive = (curActiveName and tabBtn.Name == curActiveName) or (not curActiveName and tabBtn.Name == "Home")
+                local st = tabBtn:FindFirstChildOfClass("UIStroke") or tabBtn:FindFirstChild("UIStroke")
+                local title = tabBtn:FindFirstChild("Title") or tabBtn:FindFirstChildOfClass("TextLabel")
+                local img = tabBtn:FindFirstChild("Image") or tabBtn:FindFirstChildOfClass("ImageLabel")
+
+                if isActive then
+                    setColor(tabBtn, "BackgroundColor3", themeColors.TabBackgroundSelected or Color3.fromRGB(26, 26, 34))
+                    tabBtn.BackgroundTransparency = 0.1
+                    if st then
+                        st.Color = accentColor
+                        st.Transparency = 0
+                        st.Thickness = 1.5
+                    end
+                    if title then
+                        setColor(title, "TextColor3", Color3.fromRGB(255, 255, 255))
+                        title.TextTransparency = 0
+                    end
+                    if img then
+                        setColor(img, "ImageColor3", Color3.fromRGB(255, 255, 255))
+                        img.ImageTransparency = 0
+                    end
+                else
+                    setColor(tabBtn, "BackgroundColor3", themeColors.TabBackground or Color3.fromRGB(16, 16, 22))
+                    tabBtn.BackgroundTransparency = 0.5
+                    if st then
+                        st.Color = Color3.fromRGB(50, 50, 62)
+                        st.Transparency = 0.65
+                        st.Thickness = 1
+                    end
+                    if title then
+                        setColor(title, "TextColor3", themeColors.TabTextColor or Color3.fromRGB(225, 225, 235))
+                        title.TextTransparency = 0
+                    end
+                    if img then
+                        setColor(img, "ImageColor3", themeColors.TabTextColor or Color3.fromRGB(215, 215, 225))
+                        img.ImageTransparency = 0
+                    end
                 end
             end
         end
@@ -583,13 +625,16 @@ local function ApplyRayfieldTheme(themeColors)
     for _, descendant in ipairs(mainFrame:GetDescendants()) do
         if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
             if descendant.Name ~= "ArrowIcon" and descendant.Name ~= "StepMinus" and descendant.Name ~= "StepPlus" and descendant.Name ~= "CollapseToggle" and descendant.Name ~= "NotifBellBtn" then
-                setColor(descendant, "TextColor3", themeColors.TextColor)
+                local isTabDesc = tabList and descendant:IsDescendantOf(tabList)
+                if not isTabDesc then
+                    setColor(descendant, "TextColor3", themeColors.TextColor)
+                end
             end
         elseif descendant:IsA("ScrollingFrame") then
             pcall(function() descendant.ScrollBarImageColor3 = accentColor end)
         end
 
-        if descendant.Name == "Tab" or descendant.Name == "TabButton" then
+        if (descendant.Name == "Tab" or descendant.Name == "TabButton") and (not tabList or not descendant:IsDescendantOf(tabList)) then
             setColor(descendant, "BackgroundColor3", elemBg)
             local st = descendant:FindFirstChildOfClass("UIStroke")
             setStrokeColor(st, themeColors.TabStroke or accentColor)
@@ -3296,22 +3341,70 @@ local function PatchRayfieldDOM()
 
     if tabList then
         tabList.ZIndex = 10
+        local elementsFrame = mainFrame:FindFirstChild("Elements", true)
+        local pageLayout = elementsFrame and elementsFrame:FindFirstChildOfClass("UIPageLayout")
+
+        local function UpdateTabVisuals(explicitActiveName)
+            if not tabList then return end
+            local curActive = explicitActiveName or (pageLayout and pageLayout.CurrentPage and pageLayout.CurrentPage.Name)
+            if not curActive and elementsFrame then
+                for _, pg in ipairs(elementsFrame:GetChildren()) do
+                    if pg:IsA("ScrollingFrame") and pg.Visible then
+                        curActive = pg.Name
+                        break
+                    end
+                end
+            end
+            local accent = GetThemeAccentColor()
+            for _, tabBtn in ipairs(tabList:GetChildren()) do
+                if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" and tabBtn.Name ~= "Placeholder" then
+                    local isActive = (curActive and tabBtn.Name == curActive)
+                    local st = tabBtn:FindFirstChildOfClass("UIStroke") or tabBtn:FindFirstChild("UIStroke")
+                    local title = tabBtn:FindFirstChild("Title") or tabBtn:FindFirstChildOfClass("TextLabel")
+                    local img = tabBtn:FindFirstChild("Image") or tabBtn:FindFirstChildOfClass("ImageLabel")
+
+                    if isActive then
+                        tabBtn.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
+                        tabBtn.BackgroundTransparency = 0.1
+                        if st then
+                            st.Color = accent
+                            st.Transparency = 0
+                            st.Thickness = 1.5
+                        end
+                        if title then
+                            title.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            title.TextTransparency = 0
+                        end
+                        if img then
+                            img.ImageColor3 = Color3.fromRGB(255, 255, 255)
+                            img.ImageTransparency = 0
+                        end
+                    else
+                        tabBtn.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
+                        tabBtn.BackgroundTransparency = 0.5
+                        if st then
+                            st.Color = Color3.fromRGB(50, 50, 62)
+                            st.Transparency = 0.65
+                            st.Thickness = 1
+                        end
+                        if title then
+                            title.TextColor3 = Color3.fromRGB(225, 225, 235)
+                            title.TextTransparency = 0
+                        end
+                        if img then
+                            img.ImageColor3 = Color3.fromRGB(215, 215, 225)
+                            img.ImageTransparency = 0
+                        end
+                    end
+                end
+            end
+        end
+        TASFFEnv.Theme.UpdateTabVisuals = UpdateTabVisuals
+
         for _, tabBtn in ipairs(tabList:GetChildren()) do
             if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" then
                 tabBtn.ZIndex = 11
                 local tName = tabBtn.Name
-                local tabPod = tabBtn:FindFirstChild("TabGlowPod")
-                if not tabPod then
-                    tabPod = Instance.new("Frame", tabBtn)
-                    tabPod.Name = "TabGlowPod"
-                    tabPod.Size = UDim2.new(1, -8, 0, 2)
-                    tabPod.Position = UDim2.new(0, 4, 1, -2)
-                    tabPod.BackgroundColor3 = GetThemeAccentColor()
-                    tabPod.BackgroundTransparency = 1
-                    tabPod.BorderSizePixel = 0
-                    tabPod.ZIndex = 12
-                    Instance.new("UICorner", tabPod).CornerRadius = UDim.new(1, 0)
-                end
 
                 if not tabBtn:FindFirstChild("BadgeFrame") then
                     local bFrame = Instance.new("Frame")
@@ -3334,26 +3427,44 @@ local function PatchRayfieldDOM()
                     bLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
                     bLabel.Text = "0"
                     _tabBadges[tName] = bLabel
+                end
 
+                local interact = tabBtn:FindFirstChild("Interact") or tabBtn
+                local btn = interact:IsA("GuiButton") and interact or tabBtn:FindFirstChildOfClass("GuiButton") or tabBtn
+                if not tabBtn:GetAttribute("TASFF_TabHooked") then
+                    tabBtn:SetAttribute("TASFF_TabHooked", true)
+                    local function onActivated()
+                        local bFrame = tabBtn:FindFirstChild("BadgeFrame")
+                        if bFrame then bFrame.Visible = false end
+                        PlayUISound("tab")
+                        UpdateTabVisuals(tabBtn.Name)
+                        task.delay(0.05, function() UpdateTabVisuals(tabBtn.Name) end)
+                        task.delay(0.35, function() UpdateTabVisuals(tabBtn.Name) end)
+                        task.delay(0.72, function() UpdateTabVisuals(tabBtn.Name) end)
+                    end
+                    if btn:IsA("GuiButton") then
+                        btn.MouseButton1Click:Connect(onActivated)
+                    end
                     tabBtn.InputBegan:Connect(function(inp)
                         if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-                            bFrame.Visible = false
-                            PlayUISound("tab")
-                            for _, otherTab in ipairs(tabList:GetChildren()) do
-                                local oPod = otherTab:FindFirstChild("TabGlowPod")
-                                if oPod then
-                                    TweenService:Create(oPod, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 1}):Play()
-                                end
-                            end
-                            if tabPod then
-                                tabPod.BackgroundColor3 = GetThemeAccentColor()
-                                TweenService:Create(tabPod, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 0.2}):Play()
-                            end
+                            onActivated()
                         end
                     end)
                 end
             end
         end
+
+        if pageLayout and not pageLayout:GetAttribute("TASFF_PageHooked") then
+            pageLayout:SetAttribute("TASFF_PageHooked", true)
+            pageLayout:GetPropertyChangedSignal("CurrentPage"):Connect(function()
+                local cp = pageLayout.CurrentPage
+                if cp then
+                    UpdateTabVisuals(cp.Name)
+                end
+            end)
+        end
+
+        UpdateTabVisuals()
     end
 
     -- Centralized Full Fading & Window State Synchronizer

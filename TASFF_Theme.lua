@@ -1,4674 +1,578 @@
 -- // ============================================================ // --
--- //   TASFF_Theme.lua  v2.3.0+                                   // --
--- //   Centralised theme, window config, AND Rayfield UI patches. // --
--- //   Load AFTER TASFF_State.lua, BEFORE TASFF_UI.lua.           // --
+-- //   TASFF_loader.lua                                         // --
+-- //   Entry point. Run this file in your executor.             // --
+-- //   Load order: State → Core → UI                           // --
 -- // ============================================================ // --
 
-local S = _G.TASFF_State
-if not S then warn("[TASFF Theme] State not ready."); return end
+if not game:IsLoaded() then game.Loaded:Wait() end
 
-local TASFFEnv = (getgenv and getgenv().TASFF) or {}
-local Connections = TASFFEnv.Connections or {}
-local FindRayfieldGui = nil -- declared forward so early functions (e.g. UpdateDrawerPosition) can call it
-local RayfieldWindow = nil
-local HaloGui = nil -- forward-declared; assigned after ScreenGui creation below (~L889)
-
--- ── Base Theme Defaults ──────────────────────────────────────────
-local ThemeColorDefaults = {
-    Background            = Color3.fromRGB(15,  15,  15),
-    Topbar                = Color3.fromRGB(20,  20,  20),
-    TabBackgroundSelected = Color3.fromRGB(60,  60,  60),
-    ElementBackground     = Color3.fromRGB(28,  28,  28),
-    TextColor             = Color3.fromRGB(240, 240, 240),
+local executorCapabilities = {
+    FileRead = type(readfile) == "function" and type(isfile) == "function",
+    FileWrite = type(writefile) == "function",
+    LoadString = type(loadstring) == "function",
+    HookMetamethod = type(hookmetamethod) == "function",
+    MouseMoveRelative = type(mousemoverel) == "function",
+    MouseMoveAbsolute = type(mousemoveabs) == "function",
 }
 
--- ── Global Theme Options ─────────────────────────────────────────
-local GlobalThemeOptions = {
-    "Default","Ocean","AmberGlow","Amethyst","Green","Bloom",
-    "DarkBlue","Serenity","Light","Cyberpunk","Crimson Blood",
-    "Emerald Forest","Solaris Gold","Retro Synth","Dracula",
-    "Monochrome Void","Sakura","Toxic Slime","Glacier",
-}
+-- // ── Module Source Configuration ──────────────────────────────── // --
+-- Set your preferred loading method below.
+-- Method A (recommended): Host files on GitHub and use raw URLs.
+-- Method B: Load from executor filesystem (if executor supports readfile).
 
-local GlobalThemePalettes = {
-    Default         = {Base="#F0F0F0",Overlay="#F0F0F0",Drawing="#C8C8C8",Priority="#FF4D4D",Threat="#FF884D",Nemesis="#B366FF",Blacklist="#FFB347",Chams="#B4B4B4",Combat="#FFFFFF",Visible="#4DFFA6",Hidden="#FF4D6D",UIBackground="#0F0F0F",UITopbar="#141414",UIAccent="#3C3C3C",UIElement="#1C1C1C",UIText="#F0F0F0"},
-    Ocean           = {Base="#D8F7FF",Overlay="#38DDF2",Drawing="#49B8D0",Priority="#FF5B6E",Threat="#FF965C",Nemesis="#B991FF",Blacklist="#FFB14A",Chams="#1EB9D4",Combat="#FFF1A8",Visible="#51E6A3",Hidden="#FF647C",UIBackground="#071923",UITopbar="#0D2532",UIAccent="#22D3EE",UIElement="#102D3A",UIText="#E4F7FA"},
-    AmberGlow       = {Base="#FFF0D6",Overlay="#FFC46B",Drawing="#E5A34A",Priority="#FF5555",Threat="#FF7A32",Nemesis="#C58BFF",Blacklist="#FFD166",Chams="#E58D2B",Combat="#FFF2A6",Visible="#8BE28B",Hidden="#FF6262",UIBackground="#1A1510",UITopbar="#292016",UIAccent="#F5A623",UIElement="#332719",UIText="#FFF1D6"},
-    Amethyst        = {Base="#F3E8FF",Overlay="#C4A1FF",Drawing="#A67DE8",Priority="#FF667D",Threat="#FF9D66",Nemesis="#E0A8FF",Blacklist="#FFC36E",Chams="#8B5CF6",Combat="#FFE6A6",Visible="#75E6B0",Hidden="#FF6685",UIBackground="#160F20",UITopbar="#21152F",UIAccent="#A855F7",UIElement="#2A1D3B",UIText="#F2E9FF"},
-    Green           = {Base="#E4FFE7",Overlay="#5CFF77",Drawing="#30D957",Priority="#FF5570",Threat="#FF9A45",Nemesis="#C58BFF",Blacklist="#FFD44D",Chams="#24C94B",Combat="#FFF06A",Visible="#7CFF5B",Hidden="#FF5460",UIBackground="#07140B",UITopbar="#0D2113",UIAccent="#39E75F",UIElement="#142B1A",UIText="#E7FFE9"},
-    Bloom           = {Base="#FFF1F7",Overlay="#FF91C8",Drawing="#EC91BE",Priority="#E85D75",Threat="#F49A59",Nemesis="#A987DC",Blacklist="#EAAE64",Chams="#D884B5",Combat="#FFE3A6",Visible="#7CCFA3",Hidden="#E66C80",UIBackground="#241923",UITopbar="#32212F",UIAccent="#E88BB9",UIElement="#3B2A38",UIText="#FFF0F6"},
-    DarkBlue        = {Base="#E2EDFF",Overlay="#5EA6FF",Drawing="#5487D6",Priority="#FF526A",Threat="#FF965C",Nemesis="#B48CFF",Blacklist="#FFC05C",Chams="#3978D6",Combat="#FFE99A",Visible="#59D7AA",Hidden="#FF617A",UIBackground="#08111F",UITopbar="#101D31",UIAccent="#438DFF",UIElement="#162640",UIText="#EAF2FF"},
-    Serenity        = {Base="#F0F1F6",Overlay="#AAB8D8",Drawing="#8796B5",Priority="#E87583",Threat="#E99A69",Nemesis="#A28BD0",Blacklist="#D6AD72",Chams="#778BAA",Combat="#F0DFA8",Visible="#81C6A7",Hidden="#E87C8C",UIBackground="#171A21",UITopbar="#222731",UIAccent="#8799C0",UIElement="#2B303B",UIText="#EEF0F6"},
-    Light           = {Base="#20242A",Overlay="#2878D0",Drawing="#51677D",Priority="#C93449",Threat="#D46A28",Nemesis="#7848B8",Blacklist="#B46A16",Chams="#347AB8",Combat="#C18A16",Visible="#178A52",Hidden="#C93449",UIBackground="#F4F5F7",UITopbar="#E5E8ED",UIAccent="#3478C8",UIElement="#FFFFFF",UIText="#20242A"},
-    Cyberpunk       = {Base="#F8F4FF",Overlay="#00F5FF",Drawing="#00BFCB",Priority="#FF2A8A",Threat="#FF7A18",Nemesis="#C357FF",Blacklist="#FFD400",Chams="#00D9E8",Combat="#FFE600",Visible="#39FF88",Hidden="#FF2A64",UIBackground="#05030A",UITopbar="#100817",UIAccent="#FF2EAA",UIElement="#160D20",UIText="#F8F4FF"},
-    ["Crimson Blood"]   = {Base="#F6E9EC",Overlay="#F05265",Drawing="#C9374B",Priority="#FF304A",Threat="#FF7A43",Nemesis="#B887D1",Blacklist="#E5A044",Chams="#A8112C",Combat="#FFD2A1",Visible="#63C994",Hidden="#FF3D55",UIBackground="#100609",UITopbar="#1D0A10",UIAccent="#C91E3A",UIElement="#2A1018",UIText="#F6E9EC"},
-    ["Emerald Forest"]  = {Base="#E8F5E9",Overlay="#63D99A",Drawing="#42B77A",Priority="#FF6675",Threat="#FF9A4D",Nemesis="#B992D6",Blacklist="#E9C46A",Chams="#178A55",Combat="#FFE08A",Visible="#75E6A1",Hidden="#F05B67",UIBackground="#07140F",UITopbar="#10231A",UIAccent="#29A96B",UIElement="#193326",UIText="#E9F6EE"},
-    ["Solaris Gold"]    = {Base="#FFF5D6",Overlay="#FFD45C",Drawing="#C7A64B",Priority="#FF5965",Threat="#FF8A3D",Nemesis="#BA91D7",Blacklist="#FFE27A",Chams="#C49A36",Combat="#FFF078",Visible="#80D6A1",Hidden="#FF5B61",UIBackground="#100E08",UITopbar="#1D190D",UIAccent="#D5A932",UIElement="#2A2415",UIText="#FFF4D5"},
-    ["Retro Synth"]     = {Base="#FFF0E4",Overlay="#FF9A56",Drawing="#E47A4C",Priority="#FF4D75",Threat="#FFB04A",Nemesis="#C174E8",Blacklist="#F3D05B",Chams="#D95B77",Combat="#FFE28A",Visible="#62D7A2",Hidden="#FF5870",UIBackground="#160D20",UITopbar="#251332",UIAccent="#FF784F",UIElement="#321C3C",UIText="#FFF0E4"},
-    Dracula         = {Base="#F8F8F2",Overlay="#BD93F9",Drawing="#A67AE8",Priority="#FF5C7A",Threat="#FF9E64",Nemesis="#D6A7FF",Blacklist="#F1C56B",Chams="#9C6ADE",Combat="#F1FA8C",Visible="#50FA7B",Hidden="#FF5555",UIBackground="#191622",UITopbar="#242133",UIAccent="#BD93F9",UIElement="#302C40",UIText="#F8F8F2"},
-    ["Monochrome Void"] = {Base="#FFFFFF",Overlay="#FFFFFF",Drawing="#D0D0D0",Priority="#FFFFFF",Threat="#C4C4C4",Nemesis="#EEEEEE",Blacklist="#AAAAAA",Chams="#BDBDBD",Combat="#FFFFFF",Visible="#F2F2F2",Hidden="#888888",UIBackground="#000000",UITopbar="#080808",UIAccent="#FFFFFF",UIElement="#151515",UIText="#FFFFFF"},
-    Sakura          = {Base="#FFF0F5",Overlay="#F5A3C7",Drawing="#D77FA8",Priority="#FF547D",Threat="#FF976D",Nemesis="#B58AE0",Blacklist="#E9B45C",Chams="#C96F99",Combat="#FFE2A8",Visible="#71D5A2",Hidden="#F05472",UIBackground="#191419",UITopbar="#261D25",UIAccent="#E98DB4",UIElement="#30262F",UIText="#FFF0F5"},
-    ["Toxic Slime"]     = {Base="#F1FFD6",Overlay="#B6FF00",Drawing="#83D600",Priority="#FF3D67",Threat="#FF8F20",Nemesis="#C57AFF",Blacklist="#F4ED00",Chams="#66C900",Combat="#F4FF37",Visible="#62FF57",Hidden="#FF3355",UIBackground="#0A1005",UITopbar="#141F08",UIAccent="#A6E600",UIElement="#1E2B0D",UIText="#F2FFD9"},
-    Glacier         = {Base="#F2FAFF",Overlay="#B8E8FF",Drawing="#86C4E0",Priority="#F06A7C",Threat="#EFA16D",Nemesis="#A995D7",Blacklist="#E1BD78",Chams="#6AAFCB",Combat="#FFF0B0",Visible="#69D6B0",Hidden="#F06A7C",UIBackground="#11191F",UITopbar="#1C2931",UIAccent="#9ADCF5",UIElement="#263640",UIText="#F1FAFF"},
-}
+local USE_HTTP   = true      -- true = Method A (HttpGet), false = Method B (readfile)
+local BASE_URL   = "https://raw.githubusercontent.com/plasmazzm/TASFF/refs/heads/main/"
+-- ^ Replace with your actual GitHub raw base URL, e.g.:
+-- "https://raw.githubusercontent.com/tasf/TASFF/main/"
+-- Each file will be fetched as BASE_URL .. "TASFF_State.lua" etc.
 
-local ColorPresetMap = {
-    ["Purple"]="#8A2BE2",["Cyan"]="#00FFFF",["Red"]="#FF0000",["Black"]="#000000",
-    ["Yellow"]="#FFFF00",["Lime"]="#00FF00",["Green"]="#008000",["Orange"]="#FFA500",
-    ["White"]="#FFFFFF",["Blue"]="#0000FF",["Brown"]="#8B4513",["Pink"]="#FFC0CB",
-    ["Gray"]="#808080",["Maroon"]="#800000",["Tan"]="#D2B48C",["Coral"]="#FF7F50",
-    ["Banana"]="#FADA5E",["Rose"]="#FF007F",
-}
--- Convert hex strings to Color3
-for k, hex in pairs(ColorPresetMap) do
-    local r = tonumber(hex:sub(2,3),16)/255
-    local g = tonumber(hex:sub(4,5),16)/255
-    local b = tonumber(hex:sub(6,7),16)/255
-    ColorPresetMap[k] = Color3.new(r,g,b)
+local function SafeHttpGet(url, label)
+    local ok, result = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if not ok or type(result) ~= "string" or result == "" then
+        error("[TASFF Loader] Unable to fetch " .. label .. " from " .. tostring(url))
+    end
+    return result
 end
 
-local ColorDropdownOptions = {
-    "Purple","Cyan","Red","Black","Yellow","Lime","Green","Orange",
-    "White","Blue","Brown","Pink","Gray","Maroon","Tan","Coral","Banana","Rose",
-}
+-- // ── Executor Compatibility Guards ────────────────────────────── // --
+-- Stub out functions that may not exist on every executor.
+-- These prevent runtime errors on executors missing certain APIs.
 
-local GlobalThemeColorNames = {
-    {"White",Color3.fromRGB(255,255,255)},{"Soft White",Color3.fromRGB(235,240,245)},
-    {"Black",Color3.fromRGB(8,8,8)},{"Gray",Color3.fromRGB(128,128,128)},
-    {"Silver",Color3.fromRGB(200,205,215)},{"Slate",Color3.fromRGB(105,120,140)},
-    {"Red",Color3.fromRGB(220,45,65)},{"Crimson",Color3.fromRGB(160,20,45)},
-    {"Orange",Color3.fromRGB(240,125,45)},{"Amber",Color3.fromRGB(230,165,45)},
-    {"Gold",Color3.fromRGB(210,175,65)},{"Yellow",Color3.fromRGB(240,225,70)},
-    {"Green",Color3.fromRGB(45,175,90)},{"Emerald",Color3.fromRGB(35,145,100)},
-    {"Lime",Color3.fromRGB(155,220,45)},{"Cyan",Color3.fromRGB(45,200,220)},
-    {"Ice Blue",Color3.fromRGB(145,215,245)},{"Blue",Color3.fromRGB(55,125,220)},
-    {"Navy",Color3.fromRGB(25,45,90)},{"Teal",Color3.fromRGB(40,145,150)},
-    {"Purple",Color3.fromRGB(130,75,190)},{"Violet",Color3.fromRGB(155,80,220)},
-    {"Lavender",Color3.fromRGB(185,155,225)},{"Pink",Color3.fromRGB(230,135,180)},
-    {"Hot Pink",Color3.fromRGB(245,55,150)},
-}
-
-local GlobalThemeColorFields = {
-    {title="Default Highlight & Tags",  field="HighlightColor",         role="Base"},
-    {title="FOV Circle",                field="FOVColor",               role="Overlay"},
-    {title="Crosshair",                 field="CrosshairColor",         role="Overlay"},
-    {title="Box ESP",                   field="BoxColor",               role="Drawing"},
-    {title="Skeleton ESP",              field="SkeletonColor",          role="Drawing"},
-    {title="Snaplines",                 field="SnaplineColor",          role="Drawing"},
-    {title="Off-Screen Arrows",         field="OOFArrowColor",          role="Drawing"},
-    {title="Priority Players",          field="PriorityHighlightColor", role="Priority"},
-    {title="Threat Players",            field="ThreatHighlightColor",   role="Threat"},
-    {title="Nemesis Players",           field="NemesisHighlightColor",  role="Nemesis"},
-    {title="Blacklisted Players",       field="BlacklistedTagColor",    role="Blacklist"},
-    {title="Chams",                     field="ChamsColor",             role="Chams"},
-    {title="Kill Flash",                field="KillFlashColor",         role="Combat"},
-    {title="Visible Target",            field="VisibleColor",           role="Visible"},
-    {title="Hidden Target",             field="HiddenColor",            role="Hidden"},
-    {title="Environmental ESP",         field="EnvironmentalESPColor",  role="Drawing"},
-    {title="UI Background",     themeField="Background",                role="UIBackground"},
-    {title="UI Topbar",         themeField="Topbar",                    role="UITopbar"},
-    {title="UI Selected Accent",themeField="TabBackgroundSelected",     role="UIAccent"},
-    {title="UI Element BG",     themeField="ElementBackground",         role="UIElement"},
-    {title="UI Text",           themeField="TextColor",                 role="UIText"},
-}
-local function HexToColor3(hex)
-    if typeof(hex) == "Color3" then return hex end
-    if type(hex) ~= "string" then return Color3.fromRGB(255, 255, 255) end
-    hex = hex:gsub("#", "")
-    if #hex < 6 then return Color3.fromRGB(255, 255, 255) end
-    local r = tonumber(hex:sub(1, 2), 16) or 255
-    local g = tonumber(hex:sub(3, 4), 16) or 255
-    local b = tonumber(hex:sub(5, 6), 16) or 255
-    return Color3.fromRGB(r, g, b)
+if not mousemoveabs then
+    function mousemoveabs(x, y) end
 end
-TASFFEnv.Theme = TASFFEnv.Theme or {}
-TASFFEnv.Theme.HexToColor3 = HexToColor3
-
--- Builds a complete Rayfield theme table from a small set of base colours.
--- Everything (tab/button/input/toggle/dropdown strokes, hovers, notifications)
--- is derived from the palette so switching presets repaints the WHOLE window
--- instead of leaving hardcoded dark greys behind.
-local function BuildRayfieldThemeTable(tc)
-    if type(tc) == "string" and GlobalThemePalettes[tc] then
-        tc = GlobalThemePalettes[tc]
+if not mousemoverel then
+    function mousemoverel(x, y) end
+end
+if not mouse1press then
+    function mouse1press() end
+end
+if not mouse1release then
+    function mouse1release() end
+end
+if not mouse1click then
+    function mouse1click()
+        mouse1press()
+        task.wait(0.01)
+        mouse1release()
     end
-    tc = tc or ThemeColorDefaults
-
-    local bg     = tc.Background or (tc.UIBackground and HexToColor3(tc.UIBackground)) or ThemeColorDefaults.Background
-    local top    = tc.Topbar or (tc.UITopbar and HexToColor3(tc.UITopbar)) or ThemeColorDefaults.Topbar
-    local accent = tc.TabBackgroundSelected or (tc.UIAccent and HexToColor3(tc.UIAccent)) or (tc.Overlay and HexToColor3(tc.Overlay)) or ThemeColorDefaults.TabBackgroundSelected
-    local elem   = tc.ElementBackground or (tc.UIElement and HexToColor3(tc.UIElement)) or ThemeColorDefaults.ElementBackground
-    local text   = tc.TextColor or (tc.UIText and HexToColor3(tc.UIText)) or ThemeColorDefaults.TextColor
-
-    local function lerp(a, b, t) return a:Lerp(b, t) end
-
-    return {
-        TextColor                     = text,
-        Background                    = bg,
-        Topbar                        = top,
-        Shadow                        = Color3.fromRGB(10, 10, 10),
-        NotificationBackground        = lerp(bg, elem, 0.35),
-        NotificationActionsBackground = lerp(elem, accent, 0.12),
-        TabBackground                 = Color3.fromRGB(16, 16, 22),
-        TabStroke                     = accent,
-        TabBackgroundSelected         = Color3.fromRGB(26, 26, 34),
-        TabTextColor                  = Color3.fromRGB(225, 225, 235),
-        SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
-        ElementBackground             = elem,
-        ElementBackgroundHover        = lerp(elem, text, 0.12),
-        SecondaryElementBackground    = lerp(bg, elem, 0.85),
-        ElementStroke                 = lerp(elem, accent, 0.30),
-        SecondaryElementStroke        = lerp(elem, accent, 0.18),
-        SliderBackground              = elem,
-        SliderProgress                = accent,
-        SliderStroke                  = accent,
-        ToggleBackground              = elem,
-        ToggleEnabled                 = accent,
-        ToggleDisabled                = lerp(elem, bg, 0.50),
-        ToggleEnabledStroke           = accent,
-        ToggleDisabledStroke          = lerp(elem, bg, 0.30),
-        ToggleEnabledOuterStroke      = accent,
-        ToggleDisabledOuterStroke     = lerp(elem, bg, 0.40),
-        DropdownSelected              = accent,
-        DropdownUnselected            = bg,
-        InputBackground               = lerp(bg, elem, 0.70),
-        InputStroke                   = accent,
-        PlaceholderColor              = lerp(text, bg, 0.45),
-    }
 end
 
--- ── Tooltip / Glossary Definitions Map ───────────────────────────
-local ControlTooltips = {
-    ["Master Switch"] = "Global killswitch for all combat systems. When off, no aimbot, triggerbot, or locks run.",
-    ["Silent Aim"] = "Redirects weapon projectiles or raycasts toward the target without moving your camera.",
-    ["Sticky Aim"] = "Prevents switching targets until the current target is dead or completely out of range/view.",
-    ["Humanized Aim"] = "Simulates human motor imperfections (curved paths, tremor, inertia) to bypass spectator scrutiny.",
-    ["Aim Arc"] = "Curvature intensity of the aim path towards the target instead of a straight line.",
-    ["Aim Deadzone (px)"] = "Pixel radius around crosshair where aimbot applies zero adjustment to eliminate micro-jitter.",
-    ["Hand Tremor"] = "Injects microscopic involuntary hand tremor oscillations into mouse movements.",
-    ["Target Inertia"] = "Accounts for target velocity damping, leading shots smoothly during momentum changes.",
-    ["Hitbox Drift"] = "Slowly wanders lock position across the target's torso/head instead of pinning to an exact joint center.",
-    ["Cover Anticipation"] = "Temporarily keeps aiming at cover edge when a target ducks behind geometry, waiting for repassing.",
-    ["VOS Priority Parts"] = "Visible On Screen body parts order: selects highest priority visible part before falling back.",
-    ["Randomize Hitbox"] = "Randomly cycles between eligible body parts on each target acquisition.",
-    ["Center-Screen Priority"] = "Prioritizes targets closest to screen center over nearest distance.",
-    ["Dynamic FOV"] = "Scales FOV radius inversely with target distance (larger close-up, tighter at long range).",
-    ["Chams"] = "Draws highlighted visual boxes around character limbs that remain visible through solid geometry.",
-    ["Environmental ESP"] = "Highlights world props, terrain slices, and cover objects near targets.",
-    ["OOF Arrows"] = "Off-screen indicators that point in the direction of out-of-view enemies.",
-    ["Threat Detector"] = "Monitors who is aiming at or damaging you and flags them as active threats.",
-    ["Kill Feed"] = "Scans game kill feeds and damage tags to attribute kills and threat rankings.",
-    ["Nemesis System"] = "Tracks repeat attackers; permanently marks frequent killers with distinct visual cues.",
-    ["Click-to-Mark"] = "Allows manual target tagging by clicking or pressing a hotkey while looking at a player.",
-    ["Focus Mode"] = "Suppresses non-priority ESP elements when engaging priority or nemesis targets.",
-    ["Screen Cloaking"] = "Hides all TASFF overlays from OBS, Discord, and screen capture software.",
-    ["Performance Mode"] = "Adjusts frame-skipping intervals to maximize performance on low-end hardware.",
-}
-
---- Returns Rayfield Window Config
-local function GetWindowConfig(themeColors, selectedThemeName)
-    local tc = themeColors or ThemeColorDefaults
-    -- NOTE: ToggleUIKeybind is deliberately omitted so Rayfield preserves whatever
-    -- the user last bound via the in-game keybind dialog (stored in settings.rfld).
-    -- Passing it here would reset their saved choice every launch.
-    return {
-        Name            = "TASFF " .. (S.CurrentVersion or "2.3.0") .. " - " .. (selectedThemeName or "Default"),
-        Icon            = 0,
-        LoadingTitle    = "The Aimbot Script Final Form",
-        LoadingSubtitle = "by Plasmazzm",
-        Theme = BuildRayfieldThemeTable(tc),
-        ConfigurationSaving = {
-            Enabled    = true,
-            FolderName = "TASFF V" .. (S.CurrentVersion or "2.3.0"),
-            FileName   = "Config_Place_" .. tostring(game.PlaceId or "Global")
-        }
-    }
+-- Silent aim requires these — stub them if missing (silent aim simply won't work)
+if not hookmetamethod then
+    warn("[TASFF] hookmetamethod not found — Silent Aim will be unavailable.")
+    function hookmetamethod(obj, method, hook) return hook end
+end
+if not checkcaller then
+    function checkcaller() return false end
+end
+if not getnamecallmethod then
+    function getnamecallmethod() return "" end
 end
 
-local function GetDefaultThemeColors()
-    return table.clone(ThemeColorDefaults)
+-- Filesystem stubs (preset save/load will be silently disabled if missing)
+if not isfile then
+    function isfile(path) return false end
+end
+if not readfile then
+    function readfile(path) return "{}" end
+end
+if not writefile then
+    function writefile(path, content) end
 end
 
--- Export module functions & tables
-TASFFEnv.Theme = TASFFEnv.Theme or {}
-TASFFEnv.Theme.GetWindowConfig        = GetWindowConfig
-TASFFEnv.Theme.BuildRayfieldThemeTable = BuildRayfieldThemeTable
-TASFFEnv.Theme.GetDefaultThemeColors  = GetDefaultThemeColors
-TASFFEnv.Theme.ColorPresetMap         = ColorPresetMap
-TASFFEnv.Theme.ColorDropdownOptions   = ColorDropdownOptions
-TASFFEnv.Theme.GlobalThemeOptions     = GlobalThemeOptions
-TASFFEnv.Theme.GlobalThemePalettes    = GlobalThemePalettes
-TASFFEnv.Theme.GlobalThemeColorNames  = GlobalThemeColorNames
-TASFFEnv.Theme.GlobalThemeColorFields = GlobalThemeColorFields
-TASFFEnv.Theme.ColorFields            = {
-    "HighlightColor", "FOVColor", "CrosshairColor", "BoxColor", "SkeletonColor",
-    "SnaplineColor", "OOFArrowColor", "PriorityHighlightColor", "ThreatHighlightColor",
-    "NemesisHighlightColor", "BlacklistedTagColor", "ChamsColor", "KillFlashColor",
-    "VisibleColor", "HiddenColor", "EnvironmentalESPColor"
-}
-TASFFEnv.Theme.ColorFlagMap           = {
-    HighlightColor         = "HighlightColorPicker",
-    FOVColor               = "FOVCircleColorPicker",
-    CrosshairColor         = "CrosshairColorPicker",
-    BoxColor               = "BoxESPColorPicker",
-    SkeletonColor          = "SkeletonESPColorPicker",
-    SnaplineColor          = "SnaplineFineColorPicker",
-    OOFArrowColor          = "OOFArrowColorPicker",
-    PriorityHighlightColor = "PriorityHighlightColorPicker",
-    ThreatHighlightColor   = "ThreatHighlightColorPicker",
-    NemesisHighlightColor  = "NemesisHighlightColorPicker",
-    BlacklistedTagColor    = "BlacklistedTagColorPicker",
-    ChamsColor             = "ChamsColorPicker",
-    KillFlashColor         = "KillFlashColorPicker",
-    VisibleColor           = "VisibleColorPicker",
-    HiddenColor            = "HiddenColorPicker",
-    EnvironmentalESPColor  = "EnvironmentalESPColorPicker",
-}
-TASFFEnv.Theme.Defaults               = ThemeColorDefaults
-TASFFEnv.Theme.ControlTooltips        = ControlTooltips
+-- // ── Re-inject Safety ────────────────────────────────────────── // --
+-- If TASFF is already running (re-injection), gracefully shut down
+-- the previous instance before starting a fresh one.
 
-local function HexToColor3(hex)
-    if typeof(hex) == "Color3" then return hex end
-    if type(hex) ~= "string" then return Color3.fromRGB(255, 255, 255) end
-    hex = hex:gsub("#", "")
-    if #hex < 6 then return Color3.fromRGB(255, 255, 255) end
-    local r = tonumber(hex:sub(1, 2), 16) or 255
-    local g = tonumber(hex:sub(3, 4), 16) or 255
-    local b = tonumber(hex:sub(5, 6), 16) or 255
-    return Color3.fromRGB(r, g, b)
-end
-TASFFEnv.Theme.HexToColor3 = HexToColor3
+local previousTASFF = getgenv() and getgenv().TASFF or nil
+if previousTASFF and type(previousTASFF) == "table" then
+    warn("[TASFF] Previous instance detected — performing clean shutdown.")
+    -- Atomically clear the running flag so every loop guard exits on their very next iteration
+    previousTASFF.Running = false
+    -- Immediately nil the global so no new code can observe the old instance
+    getgenv().TASFF = nil
 
--- ── Visual Theme Showcase Gallery Previewer ──────────────────────
-local function RenderThemePreviewCard(container, themeName)
-    if not container then return end
-    local existing = container:FindFirstChild("ThemePreviewCard")
-    if existing then existing:Destroy() end
+    -- Give background loops two ticks to observe the flag and exit cleanly
+    task.wait(0.15)
 
-    local palette = GlobalThemePalettes[themeName] or GlobalThemePalettes.Default
-    local uiBg = HexToColor3(palette.UIBackground)
-    local uiTopbar = HexToColor3(palette.UITopbar)
-    local uiAccent = HexToColor3(palette.UIAccent)
-    local uiElem = HexToColor3(palette.UIElement)
-    local uiText = HexToColor3(palette.UIText)
-
-    -- Make sure container does not clip the preview card and expands its height
-    -- Specifically disable AutomaticSize on the Preset Preview container so setting explicit height works cleanly
-    container.AutomaticSize = Enum.AutomaticSize.None
-    container.ClipsDescendants = false
-    local cTitle = container:FindFirstChild("Title")
-    local cContent = container:FindFirstChild("Content")
-    local titleH = (cTitle and cTitle:IsA("TextLabel") and cTitle.TextBounds.Y) or 20
-    local contentH = (cContent and cContent:IsA("TextLabel") and cContent.TextBounds.Y) or 36
-    local offsetTop = math.max(48, titleH + contentH + 18)
-    container.Size = UDim2.new(1, -10, 0, offsetTop + 155)
-
-    local card = Instance.new("Frame")
-    card.Name = "ThemePreviewCard"
-    card.Size = UDim2.new(1, 0, 0, 145)
-    card.Position = UDim2.new(0, 0, 0, offsetTop)
-    card.BackgroundColor3 = uiBg
-    card.BorderSizePixel = 0
-    card.ClipsDescendants = true
-    card.ZIndex = math.max(5, container.ZIndex + 5)
-    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
-    local cardStroke = Instance.new("UIStroke", card)
-    cardStroke.Color = uiAccent
-    cardStroke.Thickness = 1.5
-
-    -- Mini Topbar
-    local topbar = Instance.new("Frame", card)
-    topbar.Size = UDim2.new(1, 0, 0, 24)
-    topbar.BackgroundColor3 = uiTopbar
-    topbar.BorderSizePixel = 0
-    topbar.ZIndex = card.ZIndex + 1
-    Instance.new("UICorner", topbar).CornerRadius = UDim.new(0, 8)
-
-    local topbarTitle = Instance.new("TextLabel", topbar)
-    topbarTitle.Size = UDim2.new(1, -60, 1, 0)
-    topbarTitle.Position = UDim2.new(0, 8, 0, 0)
-    topbarTitle.BackgroundTransparency = 1
-    topbarTitle.Font = Enum.Font.GothamBold
-    topbarTitle.TextSize = 11
-    topbarTitle.TextColor3 = uiText
-    topbarTitle.TextXAlignment = Enum.TextXAlignment.Left
-    topbarTitle.Text = "TASFF 2.3.0  |  Theme: " .. tostring(themeName)
-    topbarTitle.ZIndex = topbar.ZIndex + 1
-
-    -- Window Action Dots
-    local dots = {"#FF5555", "#FFBD2E", "#27C93F"}
-    for i, hex in ipairs(dots) do
-        local dot = Instance.new("Frame", topbar)
-        dot.Size = UDim2.new(0, 7, 0, 7)
-        dot.Position = UDim2.new(1, -12 - (3 - i) * 11, 0.5, -3)
-        dot.BackgroundColor3 = HexToColor3(hex)
-        dot.BorderSizePixel = 0
-        dot.ZIndex = topbar.ZIndex + 1
-        Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+    -- Restore metamethod hooks + remove drawings + disconnect connections
+    if previousTASFF.Cleanup then
+        pcall(previousTASFF.Cleanup)
     end
 
-    -- Mini Active Tab indicator
-    local tabPill = Instance.new("Frame", card)
-    tabPill.Size = UDim2.new(0, 75, 0, 18)
-    tabPill.Position = UDim2.new(0, 8, 0, 30)
-    tabPill.BackgroundColor3 = uiAccent
-    tabPill.BorderSizePixel = 0
-    tabPill.ZIndex = card.ZIndex + 1
-    Instance.new("UICorner", tabPill).CornerRadius = UDim.new(0, 4)
-    local tabLabel = Instance.new("TextLabel", tabPill)
-    tabLabel.Size = UDim2.new(1, 0, 1, 0)
-    tabLabel.BackgroundTransparency = 1
-    tabLabel.Font = Enum.Font.GothamBold
-    tabLabel.TextSize = 9
-    tabLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    tabLabel.Text = "[*] Active Tab"
-    tabLabel.ZIndex = tabPill.ZIndex + 1
-
-    -- Mini Element Card
-    local elemCard = Instance.new("Frame", card)
-    elemCard.Size = UDim2.new(1, -16, 0, 32)
-    elemCard.Position = UDim2.new(0, 8, 0, 52)
-    elemCard.BackgroundColor3 = uiElem
-    elemCard.BorderSizePixel = 0
-    elemCard.ZIndex = card.ZIndex + 1
-    Instance.new("UICorner", elemCard).CornerRadius = UDim.new(0, 6)
-    local elemStroke = Instance.new("UIStroke", elemCard)
-    elemStroke.Color = Color3.fromRGB(45, 45, 55)
-
-    local elemText = Instance.new("TextLabel", elemCard)
-    elemText.Size = UDim2.new(1, -55, 1, 0)
-    elemText.Position = UDim2.new(0, 8, 0, 0)
-    elemText.BackgroundTransparency = 1
-    elemText.Font = Enum.Font.Gotham
-    elemText.TextSize = 10
-    elemText.TextColor3 = uiText
-    elemText.TextXAlignment = Enum.TextXAlignment.Left
-    elemText.Text = "Sample Feature Setting"
-    elemText.ZIndex = elemCard.ZIndex + 1
-
-    -- Mini Toggle on the right
-    local miniToggle = Instance.new("Frame", elemCard)
-    miniToggle.Size = UDim2.new(0, 32, 0, 16)
-    miniToggle.Position = UDim2.new(1, -38, 0.5, -8)
-    miniToggle.BackgroundColor3 = uiAccent
-    miniToggle.BorderSizePixel = 0
-    miniToggle.ZIndex = elemCard.ZIndex + 1
-    Instance.new("UICorner", miniToggle).CornerRadius = UDim.new(1, 0)
-    local toggleKnob = Instance.new("Frame", miniToggle)
-    toggleKnob.Size = UDim2.new(0, 12, 0, 12)
-    toggleKnob.Position = UDim2.new(1, -14, 0.5, -6)
-    toggleKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    toggleKnob.BorderSizePixel = 0
-    toggleKnob.ZIndex = miniToggle.ZIndex + 1
-    Instance.new("UICorner", toggleKnob).CornerRadius = UDim.new(1, 0)
-
-    -- Combat Color Swatches Bar
-    local swatchBar = Instance.new("Frame", card)
-    swatchBar.Size = UDim2.new(1, -16, 0, 48)
-    swatchBar.Position = UDim2.new(0, 8, 0, 88)
-    swatchBar.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-    swatchBar.BackgroundTransparency = 0.4
-    swatchBar.ZIndex = card.ZIndex + 1
-    Instance.new("UICorner", swatchBar).CornerRadius = UDim.new(0, 6)
-
-    local swatchTitle = Instance.new("TextLabel", swatchBar)
-    swatchTitle.Size = UDim2.new(1, -10, 0, 14)
-    swatchTitle.Position = UDim2.new(0, 6, 0, 2)
-    swatchTitle.BackgroundTransparency = 1
-    swatchTitle.Font = Enum.Font.GothamBold
-    swatchTitle.TextSize = 9
-    swatchTitle.TextColor3 = Color3.fromRGB(170, 170, 180)
-    swatchTitle.TextXAlignment = Enum.TextXAlignment.Left
-    swatchTitle.Text = "COMBAT & ESP PALETTE SWATCHES:"
-    swatchTitle.ZIndex = swatchBar.ZIndex + 1
-
-    local combatItems = {
-        {"VIS", palette.Visible, "Visible"},
-        {"HID", palette.Hidden, "Hidden"},
-        {"PRI", palette.Priority, "Priority"},
-        {"THR", palette.Threat, "Threat"},
-        {"NEM", palette.Nemesis, "Nemesis"},
-        {"CHM", palette.Chams, "Chams"},
-    }
-    for i, item in ipairs(combatItems) do
-        local swPill = Instance.new("Frame", swatchBar)
-        swPill.Size = UDim2.new(0, 36, 0, 20)
-        swPill.Position = UDim2.new(0, 6 + (i - 1) * 42, 0, 20)
-        swPill.BackgroundColor3 = HexToColor3(item[2])
-        swPill.BorderSizePixel = 0
-        swPill.ZIndex = swatchBar.ZIndex + 1
-        Instance.new("UICorner", swPill).CornerRadius = UDim.new(0, 4)
-
-        local swLabel = Instance.new("TextLabel", swPill)
-        swLabel.Size = UDim2.new(1, 0, 1, 0)
-        swLabel.BackgroundTransparency = 1
-        swLabel.Font = Enum.Font.GothamBold
-        swLabel.TextSize = 8
-        swLabel.TextColor3 = Color3.fromRGB(15, 15, 15)
-        swLabel.Text = item[1]
-        swLabel.ZIndex = swPill.ZIndex + 1
-    end
-
-    card.Parent = container
-    return card
-end
-TASFFEnv.Theme.RenderThemePreviewCard = RenderThemePreviewCard
-
-local function ApplyRayfieldTheme(themeColors)
-    if type(themeColors) ~= "table" then return false end
-    local fullTheme = BuildRayfieldThemeTable(themeColors)
-    for k, v in pairs(themeColors) do
-        if fullTheme[k] == nil then
-            fullTheme[k] = v
-        end
-    end
-    themeColors = fullTheme
-    TASFFEnv.Theme.ActiveThemeColors = themeColors
-
-    local accentColor = themeColors.SliderProgress or themeColors.ToggleEnabled or Color3.fromRGB(240, 175, 50)
-    local elemBg = themeColors.ElementBackground or Color3.fromRGB(28, 28, 28)
-    local elemStroke = themeColors.ElementStroke or accentColor
-    local secBg = themeColors.SecondaryElementBackground or elemBg
-    local secStroke = themeColors.SecondaryElementStroke or elemStroke
-
-    local rGui = RayfieldWindow
-    local mainFrame
-    if rGui and typeof(rGui) == "Instance" then
-        mainFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
-    elseif type(rGui) == "table" then
-        mainFrame = rGui.Main or rGui.main
-    end
-    if mainFrame and typeof(mainFrame) ~= "Instance" then
-        mainFrame = nil
-    end
-    if not mainFrame then
-        rGui = FindRayfieldGui and FindRayfieldGui()
-        mainFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
-    end
-    if not rGui or not mainFrame or typeof(mainFrame) ~= "Instance" then return false end
-
-    local function setColor(instance, property, color)
-        if color and typeof(color) == "Color3" and instance and typeof(instance) == "Instance" and instance:IsA("GuiObject") then
-            pcall(function() instance[property] = color end)
+    -- Belt-and-suspenders: also iterate connections directly
+    if previousTASFF.Connections then
+        for _, conn in pairs(previousTASFF.Connections) do
+            pcall(function() conn:Disconnect() end)
         end
     end
 
-    local function setStrokeColor(stroke, color)
-        if stroke and typeof(stroke) == "Instance" and stroke:IsA("UIStroke") and color and typeof(color) == "Color3" then
-            pcall(function() stroke.Color = color end)
-        end
-    end
-
-    setColor(mainFrame, "BackgroundColor3", themeColors.Background)
-
-    local topbar = mainFrame:FindFirstChild("Topbar", true)
-    setColor(topbar, "BackgroundColor3", themeColors.Topbar)
-
-    -- Recolor TabList tabs (distinguishing active vs unselected tabs)
-    local tabList = mainFrame:FindFirstChild("TabList", true)
-    local elementsFrame = mainFrame:FindFirstChild("Elements", true)
-    local pageLayout = elementsFrame and elementsFrame:FindFirstChildOfClass("UIPageLayout")
-    local curActiveName = pageLayout and pageLayout.CurrentPage and pageLayout.CurrentPage.Name
-    if not curActiveName and elementsFrame then
-        for _, pg in ipairs(elementsFrame:GetChildren()) do
-            if pg:IsA("ScrollingFrame") and pg.Visible then
-                curActiveName = pg.Name
-                break
-            end
-        end
-    end
-    if tabList then
-        for _, tabBtn in ipairs(tabList:GetChildren()) do
-            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" and tabBtn.Name ~= "Template" and tabBtn.Name ~= "Placeholder" then
-                local isActive = (curActiveName and tabBtn.Name == curActiveName) or (not curActiveName and tabBtn.Name == "Home")
-                local st = tabBtn:FindFirstChildOfClass("UIStroke") or tabBtn:FindFirstChild("UIStroke")
-                local title = tabBtn:FindFirstChild("Title") or tabBtn:FindFirstChildOfClass("TextLabel")
-                local img = tabBtn:FindFirstChild("Image") or tabBtn:FindFirstChildOfClass("ImageLabel")
-
-                if isActive then
-                    setColor(tabBtn, "BackgroundColor3", themeColors.TabBackgroundSelected or Color3.fromRGB(26, 26, 34))
-                    tabBtn.BackgroundTransparency = 0.1
-                    if st then
-                        st.Color = accentColor
-                        st.Transparency = 0
-                        st.Thickness = 1.5
-                    end
-                    if title then
-                        setColor(title, "TextColor3", Color3.fromRGB(255, 255, 255))
-                        title.TextTransparency = 0
-                    end
-                    if img then
-                        setColor(img, "ImageColor3", Color3.fromRGB(255, 255, 255))
-                        img.ImageTransparency = 0
-                    end
-                else
-                    setColor(tabBtn, "BackgroundColor3", themeColors.TabBackground or Color3.fromRGB(16, 16, 22))
-                    tabBtn.BackgroundTransparency = 0.5
-                    if st then
-                        st.Color = Color3.fromRGB(50, 50, 62)
-                        st.Transparency = 0.65
-                        st.Thickness = 1
-                    end
-                    if title then
-                        setColor(title, "TextColor3", themeColors.TabTextColor or Color3.fromRGB(225, 225, 235))
-                        title.TextTransparency = 0
-                    end
-                    if img then
-                        setColor(img, "ImageColor3", themeColors.TabTextColor or Color3.fromRGB(215, 215, 225))
-                        img.ImageTransparency = 0
-                    end
-                end
-            end
-        end
-    end
-
-    -- Recolor Elements container and all tab pages
-    local elementsFrame = mainFrame:FindFirstChild("Elements", true)
-    if elementsFrame and elementsFrame:IsA("GuiObject") then
-        elementsFrame.Visible = true
-        elementsFrame.ZIndex = 3
-        elementsFrame.BackgroundTransparency = 1
-        for _, tabPage in ipairs(elementsFrame:GetChildren()) do
-            if tabPage:IsA("ScrollingFrame") then
-                tabPage.Visible = true
-                tabPage.ZIndex = 3
-                tabPage.BackgroundTransparency = 1
-                pcall(function() tabPage.ScrollBarImageColor3 = accentColor end)
-                for _, el in ipairs(tabPage:GetChildren()) do
-                    if el:IsA("Frame") and el.Name ~= "Placeholder" and el.Name ~= "SectionSpacing" and el.Name ~= "Divider" then
-                        el.ZIndex = 4
-                        el.Visible = true
-                        if el.Name == "SectionTitle" then
-                            local title = el:FindFirstChild("Title")
-                            if title and title:IsA("TextLabel") then
-                                title.ZIndex = 5
-                                title.Visible = true
-                                title.TextTransparency = 0
-                                setColor(title, "TextColor3", themeColors.TextColor)
-                            end
-                        else
-                            local isPara = el:FindFirstChild("Content") and not el:FindFirstChild("Switch") and not el:FindFirstChild("Interact")
-                            setColor(el, "BackgroundColor3", isPara and secBg or elemBg)
-                            el.BackgroundTransparency = 0
-                            local st = el:FindFirstChild("ParaBoxStroke") or el:FindFirstChildOfClass("UIStroke")
-                            setStrokeColor(st, isPara and secStroke or elemStroke)
-                            local title = el:FindFirstChild("Title")
-                            if title and title:IsA("TextLabel") then
-                                title.ZIndex = 5
-                                title.Visible = true
-                                title.TextTransparency = 0
-                                setColor(title, "TextColor3", themeColors.TextColor)
-                            end
-                            local content = el:FindFirstChild("Content")
-                            if content and content:IsA("TextLabel") then
-                                content.ZIndex = 5
-                                content.Visible = true
-                                content.TextTransparency = 0
-                                setColor(content, "TextColor3", themeColors.TextColor:Lerp(themeColors.Background, 0.2))
-                            end
-                            for _, child in ipairs(el:GetDescendants()) do
-                                if child:IsA("GuiObject") then
-                                    child.ZIndex = math.max(child.ZIndex, 5)
-                                    child.Visible = true
-                                    if child:IsA("TextLabel") or child:IsA("TextBox") then
-                                        child.TextTransparency = 0
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    for _, descendant in ipairs(mainFrame:GetDescendants()) do
-        if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
-            if descendant.Name ~= "ArrowIcon" and descendant.Name ~= "StepMinus" and descendant.Name ~= "StepPlus" and descendant.Name ~= "CollapseToggle" and descendant.Name ~= "NotifBellBtn" then
-                local isTabDesc = tabList and descendant:IsDescendantOf(tabList)
-                if not isTabDesc then
-                    setColor(descendant, "TextColor3", themeColors.TextColor)
-                end
-            end
-        elseif descendant:IsA("ScrollingFrame") then
-            pcall(function() descendant.ScrollBarImageColor3 = accentColor end)
-        end
-
-        if (descendant.Name == "Tab" or descendant.Name == "TabButton") and (not tabList or not descendant:IsDescendantOf(tabList)) then
-            setColor(descendant, "BackgroundColor3", elemBg)
-            local st = descendant:FindFirstChildOfClass("UIStroke")
-            setStrokeColor(st, themeColors.TabStroke or accentColor)
-        elseif descendant.Name == "Interact" or descendant.Name == "Switch" then
-            setColor(descendant, "BackgroundColor3", elemBg)
-        elseif descendant.Name == "Slider" or descendant.Name == "SliderBar" or descendant.Name == "Progress" then
-            setColor(descendant, "BackgroundColor3", accentColor)
-        elseif descendant:IsA("Frame") and (descendant:FindFirstChild("Interact") or descendant:FindFirstChild("Switch") or descendant:FindFirstChild("Slider") or descendant:FindFirstChild("Dropdown")) then
-            setColor(descendant, "BackgroundColor3", elemBg)
-            local st = descendant:FindFirstChildOfClass("UIStroke")
-            setStrokeColor(st, elemStroke)
-        elseif descendant:IsA("Frame") and descendant:FindFirstChild("Content") and descendant:FindFirstChild("Title") and not descendant:FindFirstChild("Switch") then
-            setColor(descendant, "BackgroundColor3", secBg)
-            local st = descendant:FindFirstChild("ParaBoxStroke") or descendant:FindFirstChildOfClass("UIStroke")
-            setStrokeColor(st, secStroke)
-        end
-    end
-
-    -- Update cyberStroke, clean up scanBg, ambientHalo to theme colors
-    local cStroke = mainFrame:FindFirstChild("CyberStroke")
-    setStrokeColor(cStroke, accentColor)
-    local oldScanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
-    if oldScanBg then oldScanBg:Destroy() end
-
-    -- Recolor carbon weave gradient stripes to new accent
-    local carbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
-    if carbonBg then
-        local w1 = carbonBg:FindFirstChild("Weave1")
-        local w2 = carbonBg:FindFirstChild("Weave2")
-        local g1 = w1 and w1:FindFirstChildOfClass("UIGradient")
-        local g2 = w2 and w2:FindFirstChildOfClass("UIGradient")
-        local stripe = accentColor:Lerp(Color3.fromRGB(140, 140, 160), 0.5)
-        local dark   = Color3.fromRGB(8, 8, 12)
-        local colorSeq = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,    dark),
-            ColorSequenceKeypoint.new(0.09, stripe),
-            ColorSequenceKeypoint.new(0.17, dark),
-            ColorSequenceKeypoint.new(0.26, stripe),
-            ColorSequenceKeypoint.new(0.34, dark),
-            ColorSequenceKeypoint.new(0.43, stripe),
-            ColorSequenceKeypoint.new(0.5,  dark),
-            ColorSequenceKeypoint.new(0.59, stripe),
-            ColorSequenceKeypoint.new(0.67, dark),
-            ColorSequenceKeypoint.new(0.76, stripe),
-            ColorSequenceKeypoint.new(0.84, dark),
-            ColorSequenceKeypoint.new(0.93, stripe),
-            ColorSequenceKeypoint.new(1,    dark),
-        })
-        if g1 then g1.Color = colorSeq end
-        if g2 then g2.Color = colorSeq end
-    end
-
-    -- Recolor ambient halo layers to new accent
-    local haloContainer = TASFFEnv.Theme._HaloContainer or (HaloGui and HaloGui:FindFirstChild("TASFF_AmbientHalo"))
-    if haloContainer then
-        for _, lf in ipairs(haloContainer:GetChildren()) do
-            if lf:IsA("Frame") and lf.Name == "HaloLayer" then
-                lf.BackgroundColor3 = accentColor
-            end
-        end
-    end
-
-    for _, desc in ipairs(mainFrame:GetDescendants()) do
-        if desc.Name == "SectionLeftBar" then
-            setColor(desc, "BackgroundColor3", accentColor)
-        elseif desc.Name == "StepMinus" or desc.Name == "StepPlus" then
-            setColor(desc, "TextColor3", accentColor)
-        elseif desc.Name == "CollapseToggle" then
-            local st = desc:FindFirstChildOfClass("UIStroke")
-            setStrokeColor(st, accentColor)
-        end
-    end
-
-    local topbarLine = topbar and topbar:FindFirstChild("TopbarAccentLine")
-    if topbarLine then
-        setColor(topbarLine, "BackgroundColor3", accentColor)
-    end
-
-    -- Sync keybind map row keycap text + stroke colours via stored direct refs.
-    -- This avoids fragile DOM traversal and updates ALL rows reliably.
-    local refs = TASFFEnv.Theme.KbmKeycapRefs
-    if refs then
-        for _, r in ipairs(refs) do
+    -- Belt-and-suspenders: also iterate drawings directly
+    if previousTASFF.Drawings then
+        for _, d in pairs(previousTASFF.Drawings) do
             pcall(function()
-                r.cap.TextColor3 = accentColor
-                r.stroke.Color   = accentColor
+                if d and d.Frame then d.Frame:Destroy()
+                elseif d and d.Remove then d:Remove()
+                elseif d and d.Destroy then d:Destroy() end
             end)
         end
     end
 
-    -- Direct reference updates for Keybind Map frame stroke, title text, and toggle button
-    if TASFFEnv.Theme.KbmOuterStroke then
-        setStrokeColor(TASFFEnv.Theme.KbmOuterStroke, accentColor)
-    end
-    if TASFFEnv.Theme.KbmTitle then
-        pcall(function() TASFFEnv.Theme.KbmTitle.TextColor3 = accentColor end)
-    end
-    if TASFFEnv.Theme.KbmToggle then
-        pcall(function() TASFFEnv.Theme.KbmToggle.TextColor3 = accentColor end)
+    if previousTASFF.Rayfield and previousTASFF.Rayfield.Destroy then
+        pcall(function() previousTASFF.Rayfield:Destroy() end)
     end
 
-    -- Sync Keybind Map frame stroke, title text, and toggle button text via DOM fallback
-    local kbm = TASFFEnv.Theme.KeybindMap
-    if kbm then
-        pcall(function()
-            local stroke = kbm:FindFirstChildOfClass("UIStroke") or kbm:FindFirstChild("KBMStroke")
-            setStrokeColor(stroke, accentColor)
-            local header = kbm:FindFirstChild("KBMHeader")
-            if header then
-                for _, child in ipairs(header:GetChildren()) do
-                    if child:IsA("TextLabel") or child:IsA("TextButton") then
-                        child.TextColor3 = accentColor
-                    end
-                end
-            end
-        end)
-    end
-
-    local bottomBar = (mainFrame and mainFrame:FindFirstChild("TASFF_BottomBar"))
-        or (mainFrame and mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
-        or (OverlayGui and OverlayGui:FindFirstChild("TASFF_BottomBar"))
-    if bottomBar then
-        local bStroke = bottomBar:FindFirstChildOfClass("UIStroke")
-        setStrokeColor(bStroke, accentColor)
-        local barLine = bottomBar:FindFirstChild("BarAccentLine")
-        if barLine then
-            setColor(barLine, "BackgroundColor3", accentColor)
-            local bg = barLine:FindFirstChildOfClass("UIGradient")
-            if bg then
-                bg.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0,   Color3.fromRGB(10, 10, 15)),
-                    ColorSequenceKeypoint.new(0.5, accentColor),
-                    ColorSequenceKeypoint.new(1,   Color3.fromRGB(10, 10, 15)),
-                })
-            end
-        end
-        local kbmBtn = bottomBar:FindFirstChild("KBMBarBtn")
-        if kbmBtn then
-            setColor(kbmBtn, "TextColor3", accentColor)
-            local ks = kbmBtn:FindFirstChildOfClass("UIStroke")
-            setStrokeColor(ks, accentColor)
-        end
-    end
-
-    return true
-end
-TASFFEnv.Theme.ApplyRayfieldTheme = ApplyRayfieldTheme
-TASFFEnv.Theme.SetRayfieldWindow = function(window)
-    RayfieldWindow = window
-    return ApplyRayfieldTheme(TASFFEnv.Theme.ActiveThemeColors)
-end
-
--- // ============================================================ // --
--- //   RUNTIME UI EXTENSIONS & OVERLAYS                          // --
--- // ============================================================ // --
-
-local CoreGui = game:GetService("CoreGui")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local TextService = game:GetService("TextService")
-local StatsService = game:GetService("Stats")
-local SoundService = game:GetService("SoundService")
-local LocalPlayer = Players.LocalPlayer
-
--- Audio-Tactile Sound Feedback Helper
-local function PlayUISound(soundType)
-    if not (S.AudioFeedbackEnabled ~= false) then return end
-    task.spawn(function()
-        pcall(function()
-            local soundId = "rbxassetid://6895079853"
-            local pitch = 1.0
-            if soundType == "toggle_on" then
-                soundId = "rbxassetid://6895079853"
-                pitch = 1.2
-            elseif soundType == "toggle_off" then
-                soundId = "rbxassetid://6895079853"
-                pitch = 0.85
-            elseif soundType == "tab" then
-                soundId = "rbxassetid://9114223175"
-                pitch = 1.05
-            elseif soundType == "stepper" then
-                soundId = "rbxassetid://9119713951"
-                pitch = 1.35
-            elseif soundType == "preset" then
-                soundId = "rbxassetid://9114223175"
-                pitch = 1.3
-            end
-            local snd = Instance.new("Sound")
-            snd.SoundId = soundId
-            snd.Volume = math.clamp((S.AudioFeedbackVolume or 0.5) * 1.0, 0, 1)
-            snd.Pitch = pitch
-            snd.Parent = SoundService
-            snd:Play()
-            snd.Ended:Connect(function()
-                snd:Destroy()
-            end)
-            task.delay(1.5, function()
-                if snd and snd.Parent then snd:Destroy() end
-            end)
-        end)
-    end)
-end
-TASFFEnv.Theme.PlayUISound = PlayUISound
-
--- Draggable Overlay Helper (Alt-drag or direct handle drag with coordinate persistence)
-local function MakeDraggable(frame, dragHandle, posKeyX, posKeyY)
-    dragHandle = dragHandle or frame
-    local isDragging = false
-    local dragStart, frameStart
-    dragHandle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = true
-            dragStart = input.Position
-            frameStart = frame.AbsolutePosition
-        end
-    end)
-    dragHandle.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            if isDragging then
-                isDragging = false
-                if posKeyX and posKeyY then
-                    S[posKeyX] = frame.Position.X.Offset
-                    S[posKeyY] = frame.Position.Y.Offset
-                end
-            end
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            local newX = frameStart.X + delta.X
-            local newY = frameStart.Y + delta.Y
-            frame.Position = UDim2.new(0, newX, 0, newY)
-        end
-    end)
-    if posKeyX and posKeyY and S[posKeyX] and S[posKeyY] then
-        frame.Position = UDim2.new(0, S[posKeyX], 0, S[posKeyY])
-    end
-end
-TASFFEnv.Theme.MakeDraggable = MakeDraggable
-
--- Theme Color dynamic query helpers (syncs with user-selected UI theme)
-local function GetThemeAccentColor()
-    if S.CustomAccentColor then return S.CustomAccentColor end
-    local curPreset = S.GlobalTheme or (TASFFEnv.Theme and TASFFEnv.Theme.SelectedThemeName) or (S.ActivePresetName ~= "" and S.ActivePresetName)
-    if curPreset and GlobalThemePalettes[curPreset] then
-        local p = GlobalThemePalettes[curPreset]
-        local hex = p.UIAccent or p.Overlay
-        if hex then return HexToColor3(hex) end
-    end
-    if TASFFEnv.Theme and TASFFEnv.Theme.ActiveThemeColors then
-        local tc = TASFFEnv.Theme.ActiveThemeColors
-        if tc.SliderProgress then return tc.SliderProgress end
-        if tc.ToggleEnabled then return tc.ToggleEnabled end
-    end
-    return Color3.fromRGB(245, 166, 35)
-end
-
-local function GetThemeTextColor()
-    if TASFFEnv.Theme and TASFFEnv.Theme.ActiveThemeColors and TASFFEnv.Theme.ActiveThemeColors.TextColor then
-        return TASFFEnv.Theme.ActiveThemeColors.TextColor
-    end
-    return Color3.fromRGB(240, 240, 245)
-end
-
-local function GetCurrentPing()
-    local ping = 0
-    pcall(function()
-        local net = StatsService:FindFirstChild("Network")
-        if net then
-            local serverStats = net:FindFirstChild("ServerStatsItem")
-            if serverStats then
-                local dataPing = serverStats:FindFirstChild("Data Ping")
-                if dataPing then
-                    ping = math.floor(dataPing:GetValue())
-                    return
-                end
-            end
-        end
-        local perf = StatsService:FindFirstChild("PerformanceStats")
-        if perf then
-            local pingStat = perf:FindFirstChild("Ping")
-            if pingStat then
-                ping = math.floor(pingStat:GetValue())
-                return
-            end
-        end
-    end)
-    return ping
-end
-
--- Master GUI container for TASFF Overlays
-local OverlayGui = Instance.new("ScreenGui")
-OverlayGui.Name = "TASFF_OverlayGui"
-OverlayGui.ResetOnSpawn = false
-OverlayGui.IgnoreGuiInset = true
-OverlayGui.DisplayOrder = 999999999
-OverlayGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
--- Dedicated BEHIND-menu ScreenGui for the ambient halo bloom
--- DisplayOrder = -100 guarantees it renders under Rayfield's ScreenGui
--- Assigned into the upvalue declared at the top of the file (line 14)
-HaloGui = Instance.new("ScreenGui")
-HaloGui.Name = "TASFF_HaloGui"
-HaloGui.ResetOnSpawn = false
-HaloGui.IgnoreGuiInset = true
-HaloGui.DisplayOrder = -100
-HaloGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-local function EnsureOverlayParented()
-    if OverlayGui.Parent and OverlayGui.Parent.Parent then return true end
-
-    -- 1. Try gethui()
+    local parentsToClean = {}
     pcall(function()
         if typeof(gethui) == "function" then
             local h = gethui()
-            if h then OverlayGui.Parent = h; HaloGui.Parent = h end
+            if h then table.insert(parentsToClean, h) end
         end
     end)
-    if OverlayGui.Parent then return true end
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then table.insert(parentsToClean, cg) end
+    local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if pg then table.insert(parentsToClean, pg) end
 
-    -- 2. Try syn.protect_gui + CoreGui
-    pcall(function()
-        if syn and typeof(syn.protect_gui) == "function" then
-            syn.protect_gui(OverlayGui)
-            syn.protect_gui(HaloGui)
-            OverlayGui.Parent = CoreGui
-            HaloGui.Parent = CoreGui
-        end
-    end)
-    if OverlayGui.Parent then return true end
-
-    -- 3. Try CoreGui directly
-    pcall(function()
-        OverlayGui.Parent = CoreGui
-        HaloGui.Parent = CoreGui
-    end)
-    if OverlayGui.Parent then return true end
-
-    -- 4. Try CoreGui.RobloxGui
-    pcall(function()
-        local rg = CoreGui:FindFirstChild("RobloxGui")
-        if rg then OverlayGui.Parent = rg; HaloGui.Parent = rg end
-    end)
-    if OverlayGui.Parent then return true end
-
-    -- 5. Fallback to LocalPlayer.PlayerGui
-    pcall(function()
-        local lp = Players.LocalPlayer or game:GetService("Players").LocalPlayer
-        local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
-        if pg then OverlayGui.Parent = pg; HaloGui.Parent = pg end
-    end)
-    return (OverlayGui.Parent ~= nil)
-end
-
-EnsureOverlayParented()
-if OverlayGui.Parent then
-    print("[TASFF Theme] Overlay ScreenGui mounted to " .. tostring(OverlayGui.Parent.Name))
-else
-    warn("[TASFF Theme] Warning: Could not parent Overlay ScreenGui.")
-end
-
--- ── 1. Persistent HUD Strip ──────────────────────────────────────
-local HUDStrip = Instance.new("Frame")
-HUDStrip.Name = "HUDStrip"
-HUDStrip.Size = UDim2.new(0, 640, 0, 26)
-HUDStrip.Position = UDim2.new(0.5, -320, 0, 4)
-HUDStrip.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
-HUDStrip.BackgroundTransparency = 0.25
-HUDStrip.BorderSizePixel = 0
-HUDStrip.Visible = (S.HUDStripEnabled ~= false)
-HUDStrip.Parent = OverlayGui
-MakeDraggable(HUDStrip, HUDStrip, "HUDStripPosX", "HUDStripPosY")
-
-local HUDCorner = Instance.new("UICorner", HUDStrip)
-HUDCorner.CornerRadius = UDim.new(0, 6)
-local HUDStroke = Instance.new("UIStroke", HUDStrip)
-HUDStroke.Color = Color3.fromRGB(45, 45, 55)
-HUDStroke.Thickness = 1
-
-local HUDLabel = Instance.new("TextLabel", HUDStrip)
-HUDLabel.Size = UDim2.new(1, -72, 1, 0)
-HUDLabel.Position = UDim2.new(0, 6, 0, 0)
-HUDLabel.BackgroundTransparency = 1
-HUDLabel.Font = Enum.Font.GothamMedium
-HUDLabel.TextSize = 11
-HUDLabel.TextColor3 = Color3.fromRGB(230, 230, 235)
-HUDLabel.TextXAlignment = Enum.TextXAlignment.Center
-HUDLabel.Text = "[TASFF v2.3.0] Initializing..."
-
--- Real-time Sparkline Graph canvas inside HUD strip
-local SparkCanvas = Instance.new("Frame", HUDStrip)
-SparkCanvas.Name = "HUDSparkCanvas"
-SparkCanvas.Size = UDim2.new(0, 56, 0, 18)
-SparkCanvas.Position = UDim2.new(1, -62, 0.5, -9)
-SparkCanvas.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
-SparkCanvas.BackgroundTransparency = 0.4
-SparkCanvas.BorderSizePixel = 0
-Instance.new("UICorner", SparkCanvas).CornerRadius = UDim.new(0, 3)
-
-local sparkBars = {}
-for i = 1, 10 do
-    local b = Instance.new("Frame", SparkCanvas)
-    b.Size = UDim2.new(0, 4, 0, 8)
-    b.Position = UDim2.new(0, 2 + (i - 1) * 5, 1, -10)
-    b.BackgroundColor3 = Color3.fromRGB(0, 230, 120)
-    b.BorderSizePixel = 0
-    sparkBars[i] = b
-end
-
--- Update HUD Strip & Sparkline on RenderStepped
-local _lastFpsTime, _fpsFrames, _currFps = tick(), 0, 60
-local _lastSparkUpdate = tick()
-table.insert(Connections, RunService.RenderStepped:Connect(function()
-    _fpsFrames = _fpsFrames + 1
-    local now = tick()
-    if now - _lastFpsTime >= 0.5 then
-        _currFps = math.floor(_fpsFrames / (now - _lastFpsTime))
-        _fpsFrames = 0
-        _lastFpsTime = now
-    end
-
-    if now - _lastSparkUpdate >= 0.25 then
-        _lastSparkUpdate = now
-        for i = 1, 9 do
-            sparkBars[i].Size = sparkBars[i + 1].Size
-            sparkBars[i].Position = UDim2.new(0, 2 + (i - 1) * 5, 1, -sparkBars[i + 1].Size.Y.Offset - 1)
-            sparkBars[i].BackgroundColor3 = sparkBars[i + 1].BackgroundColor3
-        end
-        local newH = math.clamp(math.floor((_currFps / 60) * 14), 2, 16)
-        local barColor = (_currFps >= 50 and Color3.fromRGB(0, 230, 120))
-            or (_currFps >= 30 and Color3.fromRGB(240, 200, 50))
-            or Color3.fromRGB(255, 60, 60)
-        sparkBars[10].Size = UDim2.new(0, 4, 0, newH)
-        sparkBars[10].Position = UDim2.new(0, 2 + 9 * 5, 1, -newH - 1)
-        sparkBars[10].BackgroundColor3 = barColor
-    end
-
-    if HUDStrip.Visible ~= (S.HUDStripEnabled ~= false) then
-        HUDStrip.Visible = (S.HUDStripEnabled ~= false)
-    end
-    if not HUDStrip.Visible then return end
-
-    local isAimActive = (S.MasterEnabled ~= false and S.TargetingEnabled == true)
-    local aimbotStr = isAimActive and "<font color='#4DFF88'>AIM: ON</font>" or "<font color='#FF5555'>AIM: OFF</font>"
-    local silentStr = S.SilentAimEnabled and " | <font color='#00F5FF'>SILENT</font>" or ""
-    local humanStr = S.HumanizedAimEnabled and " | <font color='#FFD45C'>HUMAN</font>" or ""
-    local threats = (S.ThreatPlayers and #S.ThreatPlayers or 0)
-    local threatStr = threats > 0 and (" | <font color='#FF4444'>THREATS: " .. threats .. "</font>") or ""
-    local tgtName = S.CurrentTarget and S.CurrentTarget.Name or "None"
-    local presetStr = S.ActivePresetName or "Default"
-    local pingMs = GetCurrentPing()
-    local markMode = S.ActiveMarkingMode or "Priority"
-    local markColor = markMode == "Blacklist" and "#FF9933"
-        or markMode == "Nemesis" and "#FF3366"
-        or "#00F5FF"
-    local markStr = " | <font color='" .. markColor .. "'>MARK: " .. markMode:upper() .. "</font>"
-
-    HUDLabel.RichText = true
-    HUDLabel.Text = string.format("[TASFF] %s%s%s | TGT: %s%s%s | P: %s | %d FPS | %dms",
-        aimbotStr, silentStr, humanStr, tgtName, threatStr, markStr, presetStr, _currFps, pingMs)
-end))
-
--- ── 2. Threat Radar Mini-Map ─────────────────────────────────────
-local RadarFrame = Instance.new("Frame")
-RadarFrame.Name = "RadarFrame"
-RadarFrame.Size = UDim2.new(0, 140, 0, 140)
-RadarFrame.Position = UDim2.new(0, 20, 0.5, -70)
-RadarFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-RadarFrame.BackgroundTransparency = 0.35
-RadarFrame.BorderSizePixel = 0
-RadarFrame.Visible = (S.RadarEnabled == true)
-RadarFrame.ClipsDescendants = true
-RadarFrame.Parent = OverlayGui
-MakeDraggable(RadarFrame, RadarFrame, "RadarPosX", "RadarPosY")
-
-local RadarCorner = Instance.new("UICorner", RadarFrame)
-RadarCorner.CornerRadius = UDim.new(1, 0)
-local RadarStroke = Instance.new("UIStroke", RadarFrame)
-RadarStroke.Color = Color3.fromRGB(60, 60, 75)
-RadarStroke.Thickness = 1.5
-
--- Center Crosshair for Radar
-local RadarCenter = Instance.new("Frame", RadarFrame)
-RadarCenter.Size = UDim2.new(0, 4, 0, 4)
-RadarCenter.Position = UDim2.new(0.5, -2, 0.5, -2)
-RadarCenter.BackgroundColor3 = Color3.fromRGB(0, 255, 200)
-Instance.new("UICorner", RadarCenter).CornerRadius = UDim.new(1, 0)
-
--- ── 2b. Floating Target Inspection Hologram Card ──────────────────
-local TargetCardFrame = Instance.new("Frame")
-TargetCardFrame.Name = "TargetCardFrame"
-TargetCardFrame.Size = UDim2.new(0, 220, 0, 74)
-TargetCardFrame.Position = UDim2.new(0.5, -110, 0, 36)
-TargetCardFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-TargetCardFrame.BackgroundTransparency = 0.25
-TargetCardFrame.BorderSizePixel = 0
-TargetCardFrame.Visible = false
-TargetCardFrame.Parent = OverlayGui
-Instance.new("UICorner", TargetCardFrame).CornerRadius = UDim.new(0, 8)
-local tcStroke = Instance.new("UIStroke", TargetCardFrame)
-tcStroke.Color = GetThemeAccentColor()
-tcStroke.Thickness = 1.2
-MakeDraggable(TargetCardFrame, TargetCardFrame, "TargetCardPosX", "TargetCardPosY")
-
-local tcAvatar = Instance.new("ImageLabel", TargetCardFrame)
-tcAvatar.Size = UDim2.new(0, 48, 0, 48)
-tcAvatar.Position = UDim2.new(0, 10, 0, 10)
-tcAvatar.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
-tcAvatar.BorderSizePixel = 0
-tcAvatar.Image = ""
-Instance.new("UICorner", tcAvatar).CornerRadius = UDim.new(0, 6)
-
-local tcName = Instance.new("TextLabel", TargetCardFrame)
-tcName.Size = UDim2.new(1, -70, 0, 16)
-tcName.Position = UDim2.new(0, 64, 0, 8)
-tcName.BackgroundTransparency = 1
-tcName.Font = Enum.Font.GothamBold
-tcName.TextSize = 12
-tcName.TextColor3 = Color3.fromRGB(245, 245, 250)
-tcName.TextXAlignment = Enum.TextXAlignment.Left
-tcName.TextTruncate = Enum.TextTruncate.AtEnd
-tcName.Text = "Target"
-
-local tcSub = Instance.new("TextLabel", TargetCardFrame)
-tcSub.Size = UDim2.new(1, -70, 0, 14)
-tcSub.Position = UDim2.new(0, 64, 0, 26)
-tcSub.BackgroundTransparency = 1
-tcSub.Font = Enum.Font.Gotham
-tcSub.TextSize = 10
-tcSub.TextColor3 = Color3.fromRGB(180, 180, 195)
-tcSub.TextXAlignment = Enum.TextXAlignment.Left
-tcSub.TextTruncate = Enum.TextTruncate.AtEnd
-tcSub.Text = "0 studs | Unarmed"
-
-local tcHpBg = Instance.new("Frame", TargetCardFrame)
-tcHpBg.Size = UDim2.new(1, -74, 0, 6)
-tcHpBg.Position = UDim2.new(0, 64, 0, 46)
-tcHpBg.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-tcHpBg.BorderSizePixel = 0
-Instance.new("UICorner", tcHpBg).CornerRadius = UDim.new(1, 0)
-
-local tcHpFill = Instance.new("Frame", tcHpBg)
-tcHpFill.Size = UDim2.new(1, 0, 1, 0)
-tcHpFill.BackgroundColor3 = Color3.fromRGB(45, 220, 110)
-tcHpFill.BorderSizePixel = 0
-Instance.new("UICorner", tcHpFill).CornerRadius = UDim.new(1, 0)
-
-local tcTag = Instance.new("TextLabel", TargetCardFrame)
-tcTag.Size = UDim2.new(1, -74, 0, 12)
-tcTag.Position = UDim2.new(0, 64, 0, 56)
-tcTag.BackgroundTransparency = 1
-tcTag.Font = Enum.Font.GothamBold
-tcTag.TextSize = 9
-tcTag.TextColor3 = Color3.fromRGB(0, 230, 255)
-tcTag.TextXAlignment = Enum.TextXAlignment.Left
-tcTag.Text = "[TARGET ACQUIRED]"
-
--- Live Target Card update loop
-table.insert(Connections, RunService.RenderStepped:Connect(function()
-    if not (S.TargetCardEnabled ~= false) then
-        TargetCardFrame.Visible = false
-        return
-    end
-    local tgt = S.CurrentTarget
-    if not tgt then
-        TargetCardFrame.Visible = false
-        return
-    end
-
-    local tgtChar = nil
-    if typeof(tgt) == "Instance" then
-        if tgt:IsA("Player") then
-            tgtChar = tgt.Character
-        elseif tgt:IsA("Model") then
-            tgtChar = tgt
-        elseif tgt.Parent and tgt.Parent:IsA("Model") then
-            tgtChar = tgt.Parent
-        end
-    elseif type(tgt) == "table" then
-        local c = tgt.Character or tgt.Model or tgt.Instance or tgt.Player
-        if typeof(c) == "Instance" then
-            if c:IsA("Player") then
-                tgtChar = c.Character
-            elseif c:IsA("Model") then
-                tgtChar = c
-            end
-        end
-    end
-
-    if not (tgtChar and typeof(tgtChar) == "Instance") then
-        TargetCardFrame.Visible = false
-        return
-    end
-
-    local tgtHum = tgtChar:FindFirstChildOfClass("Humanoid")
-    local tgtRoot = tgtChar:FindFirstChild("HumanoidRootPart") or tgtChar:FindFirstChild("Head") or tgtChar.PrimaryPart
-    local myChar = LocalPlayer.Character
-    local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Head"))
-
-    if not (tgtRoot and myRoot and tgtHum and tgtHum.Health > 0) then
-        TargetCardFrame.Visible = false
-        return
-    end
-
-    TargetCardFrame.Visible = true
-    tcStroke.Color = GetThemeAccentColor()
-    tcName.Text = (tgt.DisplayName and tgt.DisplayName ~= "") and (tgt.DisplayName .. " (@" .. tgt.Name .. ")") or tgt.Name
-
-    local dist = math.floor((tgtRoot.Position - myRoot.Position).Magnitude)
-    local tool = tgtChar:FindFirstChildOfClass("Tool")
-    local toolName = tool and tool.Name or "Unarmed"
-    tcSub.Text = string.format("%d studs  |  %s", dist, toolName)
-
-    local hpPct = math.clamp(tgtHum.Health / math.max(1, tgtHum.MaxHealth), 0, 1)
-    tcHpFill.Size = UDim2.new(hpPct, 0, 1, 0)
-    tcHpFill.BackgroundColor3 = (hpPct > 0.6 and Color3.fromRGB(45, 220, 110))
-        or (hpPct > 0.3 and Color3.fromRGB(240, 190, 50))
-        or Color3.fromRGB(255, 60, 60)
-
-    if S.NemesisMemory and S.NemesisMemory[tgt.Name] then
-        tcTag.TextColor3 = Color3.fromRGB(180, 100, 255)
-        tcTag.Text = "[NEMESIS TARGET]"
-    elseif S.ThreatPlayers and table.find(S.ThreatPlayers, tgt.Name) then
-        tcTag.TextColor3 = Color3.fromRGB(255, 120, 50)
-        tcTag.Text = "[HIGH THREAT]"
-    elseif S.PriorityPlayers and table.find(S.PriorityPlayers, tgt.Name) then
-        tcTag.TextColor3 = Color3.fromRGB(255, 215, 0)
-        tcTag.Text = "[PRIORITY TARGET]"
-    else
-        tcTag.TextColor3 = GetThemeAccentColor()
-        tcTag.Text = "[TARGET ACQUIRED]"
-    end
-
-    local tgtPlayer = Players:GetPlayerFromCharacter(tgtChar) or tgt
-    if tgtPlayer and tgtPlayer.UserId and tgtPlayer.UserId > 0 then
-        tcAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(tgtPlayer.UserId) .. "&w=100&h=100"
-    end
-end))
-
--- ── 2c. Compact Floating HUD Pill (when main menu closed) ──────────
-local CompactHUDFrame = Instance.new("Frame")
-CompactHUDFrame.Name = "CompactHUDFrame"
-CompactHUDFrame.Size = UDim2.new(0, 210, 0, 30)
-CompactHUDFrame.Position = UDim2.new(0.5, -105, 0, 34)
-CompactHUDFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-CompactHUDFrame.BackgroundTransparency = 0.25
-CompactHUDFrame.BorderSizePixel = 0
-CompactHUDFrame.Visible = false
-CompactHUDFrame.Parent = OverlayGui
-Instance.new("UICorner", CompactHUDFrame).CornerRadius = UDim.new(0, 6)
-local chStroke = Instance.new("UIStroke", CompactHUDFrame)
-chStroke.Color = GetThemeAccentColor()
-chStroke.Thickness = 1
-MakeDraggable(CompactHUDFrame, CompactHUDFrame, "CompactHUDPosX", "CompactHUDPosY")
-
-local chMasterBtn = Instance.new("TextButton", CompactHUDFrame)
-chMasterBtn.Size = UDim2.new(0, 20, 0, 20)
-chMasterBtn.Position = UDim2.new(0, 6, 0.5, -10)
-chMasterBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-chMasterBtn.Font = Enum.Font.GothamBold
-chMasterBtn.TextSize = 12
-chMasterBtn.Text = "[!]"
-chMasterBtn.TextColor3 = Color3.fromRGB(0, 255, 120)
-Instance.new("UICorner", chMasterBtn).CornerRadius = UDim.new(1, 0)
-chMasterBtn.MouseButton1Click:Connect(function()
-    if S.ToggleMasterSwitch then
-        S.ToggleMasterSwitch()
-    else
-        S.MasterEnabled = not S.MasterEnabled
-    end
-    PlayUISound(S.MasterEnabled and "toggle_on" or "toggle_off")
-end)
-
-local chLabel = Instance.new("TextLabel", CompactHUDFrame)
-chLabel.Size = UDim2.new(1, -62, 1, 0)
-chLabel.Position = UDim2.new(0, 30, 0, 0)
-chLabel.BackgroundTransparency = 1
-chLabel.Font = Enum.Font.Gotham
-chLabel.TextSize = 10
-chLabel.TextColor3 = Color3.fromRGB(230, 230, 240)
-chLabel.TextXAlignment = Enum.TextXAlignment.Left
-chLabel.Text = "AIM: ON | Tgt: None"
-
-local chExpandBtn = Instance.new("TextButton", CompactHUDFrame)
-chExpandBtn.Size = UDim2.new(0, 22, 0, 20)
-chExpandBtn.Position = UDim2.new(1, -26, 0.5, -10)
-chExpandBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-chExpandBtn.Font = Enum.Font.GothamBold
-chExpandBtn.TextSize = 11
-chExpandBtn.TextColor3 = Color3.fromRGB(200, 200, 215)
-chExpandBtn.Text = "[+]"
-Instance.new("UICorner", chExpandBtn).CornerRadius = UDim.new(0, 4)
-chExpandBtn.MouseButton1Click:Connect(function()
-    local rGui = FindRayfieldGui()
-    local mFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
-    if mFrame then
-        mFrame.Visible = true
-        mFrame.BackgroundTransparency = 1 - (S.UIOpacity or 1.0)
-    end
-    PlayUISound("click")
-end)
-
--- ── 2d. Keystrokes Visualizer Widget ──────────────────────────────
-local KeystrokesFrame = Instance.new("Frame")
-KeystrokesFrame.Name = "KeystrokesFrame"
-KeystrokesFrame.Size = UDim2.new(0, 110, 0, 80)
-KeystrokesFrame.Position = UDim2.new(0, 20, 1, -120)
-KeystrokesFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-KeystrokesFrame.BackgroundTransparency = 0.4
-KeystrokesFrame.BorderSizePixel = 0
-KeystrokesFrame.Visible = (S.KeystrokesEnabled == true)
-KeystrokesFrame.Parent = OverlayGui
-Instance.new("UICorner", KeystrokesFrame).CornerRadius = UDim.new(0, 6)
-local ksStroke = Instance.new("UIStroke", KeystrokesFrame)
-ksStroke.Color = Color3.fromRGB(45, 45, 55)
-MakeDraggable(KeystrokesFrame, KeystrokesFrame, "KeystrokesPosX", "KeystrokesPosY")
-
-local keyBoxes = {}
-local function createKey(name, text, size, pos)
-    local kf = Instance.new("Frame", KeystrokesFrame)
-    kf.Name = "Key_" .. name
-    kf.Size = size
-    kf.Position = pos
-    kf.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
-    kf.BorderSizePixel = 0
-    Instance.new("UICorner", kf).CornerRadius = UDim.new(0, 4)
-    local kl = Instance.new("TextLabel", kf)
-    kl.Size = UDim2.new(1, 0, 1, 0)
-    kl.BackgroundTransparency = 1
-    kl.Font = Enum.Font.GothamBold
-    kl.TextSize = 10
-    kl.TextColor3 = Color3.fromRGB(200, 200, 210)
-    kl.Text = text
-    keyBoxes[name] = {Frame = kf, Label = kl}
-end
-createKey("W", "W", UDim2.new(0, 30, 0, 22), UDim2.new(0.5, -15, 0, 6))
-createKey("A", "A", UDim2.new(0, 30, 0, 22), UDim2.new(0, 6, 0, 30))
-createKey("S", "S", UDim2.new(0, 30, 0, 22), UDim2.new(0.5, -15, 0, 30))
-createKey("D", "D", UDim2.new(0, 30, 0, 22), UDim2.new(1, -36, 0, 30))
-createKey("LMB", "LMB", UDim2.new(0, 46, 0, 18), UDim2.new(0, 6, 0, 56))
-createKey("RMB", "RMB", UDim2.new(0, 46, 0, 18), UDim2.new(1, -52, 0, 56))
-
-local keyMap = {
-    [Enum.KeyCode.W] = "W",
-    [Enum.KeyCode.A] = "A",
-    [Enum.KeyCode.S] = "S",
-    [Enum.KeyCode.D] = "D",
-    [Enum.UserInputType.MouseButton1] = "LMB",
-    [Enum.UserInputType.MouseButton2] = "RMB",
-}
-UserInputService.InputBegan:Connect(function(input)
-    local targetKey = keyMap[input.KeyCode] or keyMap[input.UserInputType]
-    if targetKey and keyBoxes[targetKey] then
-        local accent = GetThemeAccentColor()
-        keyBoxes[targetKey].Frame.BackgroundColor3 = accent
-        keyBoxes[targetKey].Label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    local targetKey = keyMap[input.KeyCode] or keyMap[input.UserInputType]
-    if targetKey and keyBoxes[targetKey] then
-        keyBoxes[targetKey].Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
-        keyBoxes[targetKey].Label.TextColor3 = Color3.fromRGB(200, 200, 210)
-    end
-end)
-
--- ── 2e. Notification Center Drawer ───────────────────────────────
-local NotificationDrawer = Instance.new("Frame")
-NotificationDrawer.Name = "NotificationDrawer"
-NotificationDrawer.Size = UDim2.new(0, 240, 0, 320)
-NotificationDrawer.Position = UDim2.new(1, -260, 0, 45)  -- default; repositioned on open
-NotificationDrawer.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-NotificationDrawer.BackgroundTransparency = 0.15
-NotificationDrawer.BorderSizePixel = 0
-NotificationDrawer.Visible = false
-NotificationDrawer.ZIndex = 120
-NotificationDrawer.Parent = OverlayGui
-Instance.new("UICorner", NotificationDrawer).CornerRadius = UDim.new(0, 8)
-local ndStroke = Instance.new("UIStroke", NotificationDrawer)
-ndStroke.Color = GetThemeAccentColor()  -- theme-synced, not hardcoded cyan
-ndStroke.Thickness = 1.2
-MakeDraggable(NotificationDrawer, NotificationDrawer, nil, nil)
-
-local ndHeader = Instance.new("Frame", NotificationDrawer)
-ndHeader.Size = UDim2.new(1, 0, 0, 28)
-ndHeader.BackgroundTransparency = 1
-local ndTitle = Instance.new("TextLabel", ndHeader)
-ndTitle.Size = UDim2.new(1, -60, 1, 0)
-ndTitle.Position = UDim2.new(0, 10, 0, 0)
-ndTitle.BackgroundTransparency = 1
-ndTitle.Font = Enum.Font.GothamBold
-ndTitle.TextSize = 11
-ndTitle.TextColor3 = Color3.fromRGB(240, 240, 245)
-ndTitle.TextXAlignment = Enum.TextXAlignment.Left
-ndTitle.Text = "Notification History"
-
-local ndClearBtn = Instance.new("TextButton", ndHeader)
-ndClearBtn.Size = UDim2.new(0, 45, 0, 18)
-ndClearBtn.Position = UDim2.new(1, -52, 0.5, -9)
-ndClearBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-ndClearBtn.Font = Enum.Font.Gotham
-ndClearBtn.TextSize = 10
-ndClearBtn.TextColor3 = Color3.fromRGB(190, 190, 200)
-ndClearBtn.Text = "Clear"
-Instance.new("UICorner", ndClearBtn).CornerRadius = UDim.new(0, 4)
-
-local ndScroller = Instance.new("ScrollingFrame", NotificationDrawer)
-ndScroller.Size = UDim2.new(1, -12, 1, -36)
-ndScroller.Position = UDim2.new(0, 6, 0, 30)
-ndScroller.BackgroundTransparency = 1
-ndScroller.BorderSizePixel = 0
-ndScroller.ScrollBarThickness = 3
-ndScroller.AutomaticCanvasSize = Enum.AutomaticSize.Y
-ndScroller.CanvasSize = UDim2.new(0, 0, 0, 0)
-local ndList = Instance.new("UIListLayout", ndScroller)
-ndList.Padding = UDim.new(0, 4)
-ndList.SortOrder = Enum.SortOrder.LayoutOrder
-
-local function RefreshNotificationDrawer()
-    for _, child in ipairs(ndScroller:GetChildren()) do
-        if child:IsA("GuiObject") and child.Name ~= "UIListLayout" then child:Destroy() end
-    end
-    local hist = S.NotificationHistory or {}
-    if #hist == 0 then
-        local emptyLabel = Instance.new("TextLabel", ndScroller)
-        emptyLabel.Size = UDim2.new(1, 0, 0, 40)
-        emptyLabel.BackgroundTransparency = 1
-        emptyLabel.Font = Enum.Font.Gotham
-        emptyLabel.TextSize = 10
-        emptyLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
-        emptyLabel.Text = "No notifications yet."
-        return
-    end
-    for i = #hist, 1, -1 do
-        local item = hist[i]
-        local card = Instance.new("Frame", ndScroller)
-        card.Size = UDim2.new(1, -6, 0, 44)
-        card.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
-        card.BorderSizePixel = 0
-        Instance.new("UICorner", card).CornerRadius = UDim.new(0, 4)
-        local cardStroke = Instance.new("UIStroke", card)
-        cardStroke.Color = Color3.fromRGB(42, 42, 54)
-        cardStroke.Thickness = 1
-
-        local t1 = Instance.new("TextLabel", card)
-        t1.Size = UDim2.new(1, -8, 0, 14)
-        t1.Position = UDim2.new(0, 6, 0, 4)
-        t1.BackgroundTransparency = 1
-        t1.Font = Enum.Font.GothamBold
-        t1.TextSize = 10
-        t1.TextColor3 = item.Color or GetThemeAccentColor()
-        t1.TextXAlignment = Enum.TextXAlignment.Left
-        t1.Text = string.format("[%s] %s", item.Time or "Now", item.Title or "Notice")
-        local t2 = Instance.new("TextLabel", card)
-        t2.Size = UDim2.new(1, -8, 0, 22)
-        t2.Position = UDim2.new(0, 6, 0, 18)
-        t2.BackgroundTransparency = 1
-        t2.Font = Enum.Font.Gotham
-        t2.TextSize = 9
-        t2.TextColor3 = Color3.fromRGB(210, 210, 220)
-        t2.TextXAlignment = Enum.TextXAlignment.Left
-        t2.TextWrapped = true
-        t2.Text = item.Message or ""
-    end
-end
-ndClearBtn.MouseButton1Click:Connect(function()
-    S.NotificationHistory = {}
-    RefreshNotificationDrawer()
-    PlayUISound("click")
-end)
-
-local function LogNotification(title, msg, color)
-    S.NotificationHistory = S.NotificationHistory or {}
-    local timeStr = os.date("%H:%M:%S")
-    table.insert(S.NotificationHistory, {Title = title, Message = msg, Color = color, Time = timeStr})
-    if #S.NotificationHistory > 50 then table.remove(S.NotificationHistory, 1) end
-
-    -- Trigger unread indicator on bell button
-    pcall(function()
-        local rGui = FindRayfieldGui and FindRayfieldGui()
-        if rGui then
-            local topbar = rGui:FindFirstChild("Topbar", true)
-            local bellBtn = topbar and topbar:FindFirstChild("NotifBellBtn")
-            local bellDot = bellBtn and bellBtn:FindFirstChild("BellDot")
-            if bellDot and not NotificationDrawer.Visible then
-                bellDot.Visible = true
-            end
-        end
-    end)
-
-    if NotificationDrawer.Visible then RefreshNotificationDrawer() end
-end
-TASFFEnv.Theme.LogNotification = LogNotification
-
-local function UpdateDrawerPosition()
-    pcall(function()
-        -- Re-sync stroke color to current theme on every open
-        ndStroke.Color = GetThemeAccentColor()
-
-        local rGui = FindRayfieldGui and FindRayfieldGui()
-        if rGui then
-            local mFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
-            if mFrame then
-                local mPos  = mFrame.AbsolutePosition
-                local mSize = mFrame.AbsoluteSize
-                -- Position the drawer flush against the RIGHT side of the menu, vertically centered-ish
-                local drawerX = mPos.X + mSize.X + 8   -- 8px gap to the right of the menu
-                local drawerY = mPos.Y + 45             -- align with topbar bottom
-                -- Clamp so it stays on screen
-                drawerX = math.clamp(drawerX, 0, math.max(0, workspace.CurrentCamera.ViewportSize.X - 248))
-                drawerY = math.clamp(drawerY, 4, math.max(4, workspace.CurrentCamera.ViewportSize.Y - 324))
-                NotificationDrawer.Position = UDim2.new(0, drawerX, 0, drawerY)
-                return
-            end
-        end
-        NotificationDrawer.Position = UDim2.new(1, -260, 0, 45)
-    end)
-end
-
-TASFFEnv.Theme.ToggleNotificationDrawer = function()
-    NotificationDrawer.Visible = not NotificationDrawer.Visible
-    if NotificationDrawer.Visible then
-        UpdateDrawerPosition()
-        RefreshNotificationDrawer()
+    for _, parent in ipairs(parentsToClean) do
         pcall(function()
-            local rGui = FindRayfieldGui and FindRayfieldGui()
-            if rGui then
-                local topbar = rGui:FindFirstChild("Topbar", true)
-                local bellBtn = topbar and topbar:FindFirstChild("NotifBellBtn")
-                local bellDot = bellBtn and bellBtn:FindFirstChild("BellDot")
-                if bellDot then bellDot.Visible = false end
+            for _, child in ipairs(parent:GetChildren()) do
+                if child.Name:find("TASFF") or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                    pcall(function() child:Destroy() end)
+                end
             end
         end)
     end
-    PlayUISound("click")
+
+    -- Reset shared state so Core rebuilds everything cleanly
+    _G.TASFF_State = nil
+
+    task.wait(0.05)
+    warn("[TASFF] Previous instance cleaned up. Restarting...")
 end
 
-local RadarBlips = {}
-table.insert(Connections, RunService.RenderStepped:Connect(function()
-    RadarFrame.Visible = (S.RadarEnabled == true)
-    if not RadarFrame.Visible then
-        for _, b in pairs(RadarBlips) do b.Visible = false end
-        return
-    end
+-- // ── Initialize Runtime Environment ──────────────────────────── // --
 
-    local char = LocalPlayer and LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-
-    local cam = workspace.CurrentCamera
-    local camCFrame = cam and cam.CFrame or root.CFrame
-    local maxDist = S.AimbotRenderDistance or 300
-    local halfSize = 70
-
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local pRoot = p.Character.HumanoidRootPart
-            local relPos = camCFrame:PointToObjectSpace(pRoot.Position)
-            -- X is right, -Z is forward
-            local mapX = (relPos.X / maxDist) * halfSize
-            local mapY = (-relPos.Z / maxDist) * halfSize
-            local distFromCenter = math.sqrt(mapX*mapX + mapY*mapY)
-
-            local blip = RadarBlips[p]
-            if not blip then
-                blip = Instance.new("Frame", RadarFrame)
-                blip.Size = UDim2.new(0, 5, 0, 5)
-                Instance.new("UICorner", blip).CornerRadius = UDim.new(1, 0)
-                RadarBlips[p] = blip
-            end
-
-            if distFromCenter <= (halfSize - 4) then
-                blip.Position = UDim2.new(0.5, mapX - 2.5, 0.5, mapY - 2.5)
-                blip.Visible = true
-                -- Color coding
-                if S.NemesisMemory and S.NemesisMemory[p.Name] then
-                    blip.BackgroundColor3 = S.NemesisHighlightColor or Color3.fromRGB(180, 100, 255)
-                elseif S.ThreatPlayers and table.find(S.ThreatPlayers, p.Name) then
-                    blip.BackgroundColor3 = S.ThreatHighlightColor or Color3.fromRGB(255, 60, 60)
-                elseif S.PriorityPlayers and table.find(S.PriorityPlayers, p.Name) then
-                    blip.BackgroundColor3 = S.PriorityHighlightColor or Color3.fromRGB(255, 215, 0)
-                else
-                    blip.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
-                end
-            else
-                blip.Visible = false
-            end
-        else
-            if RadarBlips[p] then RadarBlips[p].Visible = false end
-        end
-    end
-end))
-
--- ── 3. Notification Zones (4 screen quadrants — each category gets its own side) ──
--- top-left  : system / initialisation toasts
--- top-right : combat / event toasts
--- bot-left  : fps / performance toasts
--- bot-right : intel / detection toasts
-local function MakeNotifZone(name, anchorX, anchorY, posX, posY, listAlign)
-    local f = Instance.new("Frame")
-    f.Name = name
-    f.Size = UDim2.new(0, 220, 0, 400)
-    f.AnchorPoint = Vector2.new(anchorX, anchorY)
-    f.Position = UDim2.new(posX, 0, posY, 0)
-    f.BackgroundTransparency = 1
-    f.Visible = (S.SidebarEnabled ~= false)
-    f.Parent = OverlayGui
-    local layout = Instance.new("UIListLayout", f)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 5)
-    layout.VerticalAlignment = listAlign
-    return f
-end
-
--- top-left  : system / init
-local ZoneTopLeft    = MakeNotifZone("NZ_TopLeft",    0, 0, 0, 0,    Enum.VerticalAlignment.Top)
--- top-right : combat / event
-local ZoneTopRight   = MakeNotifZone("NZ_TopRight",   1, 0, 1, 0,    Enum.VerticalAlignment.Top)
--- bot-left  : fps / performance
-local ZoneBotLeft    = MakeNotifZone("NZ_BotLeft",    0, 1, 0, 1,    Enum.VerticalAlignment.Bottom)
--- bot-right : intel / detection
-local ZoneBotRight   = MakeNotifZone("NZ_BotRight",   1, 1, 1, 1,    Enum.VerticalAlignment.Bottom)
-
--- SidebarFrame kept as alias to ZoneTopRight so legacy calls still work
-local SidebarFrame = ZoneTopRight
-
-local function ResolveNotifZone(title, msg)
-    local t = (title or ""):lower()
-    local m = (msg  or ""):lower()
-    -- bot-left : fps / performance
-    if t:find("fps") or t:find("perf") or t:find("frame") or m:find("fps") or m:find("ms") then
-        return ZoneBotLeft
-    end
-    -- bot-right : intel / detection / targeting
-    if t:find("intel") or t:find("detect") or t:find("target") or t:find("threat") or t:find("enemy") then
-        return ZoneBotRight
-    end
-    -- top-left : system / init / loader
-    if t:find("tasff") or t:find("init") or t:find("load") or t:find("system") or t:find("theme") or t:find("state") or t:find("module") then
-        return ZoneTopLeft
-    end
-    -- top-right : everything else (combat, event, misc)
-    return ZoneTopRight
-end
-
-local function PushSidebarNotification(title, msg, color, zone)
-    if not (S.SidebarEnabled ~= false) then return end
-    local accent = color or GetThemeAccentColor()
-    local targetZone = zone or ResolveNotifZone(title, msg)
-    local pill = Instance.new("Frame")
-    pill.Size = UDim2.new(1, 0, 0, 36)
-    pill.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-    pill.BackgroundTransparency = 0.2
-    pill.BorderSizePixel = 0
-    pill.Parent = targetZone   -- route to the correct screen quadrant
-
-    Instance.new("UICorner", pill).CornerRadius = UDim.new(0, 6)
-    local stroke = Instance.new("UIStroke", pill)
-    stroke.Color = accent
-    stroke.Thickness = 1
-
-    local tLabel = Instance.new("TextLabel", pill)
-    tLabel.Size = UDim2.new(1, -12, 0, 16)
-    tLabel.Position = UDim2.new(0, 8, 0, 2)
-    tLabel.BackgroundTransparency = 1
-    tLabel.Font = Enum.Font.GothamBold
-    tLabel.TextSize = 11
-    tLabel.TextColor3 = stroke.Color
-    tLabel.TextXAlignment = Enum.TextXAlignment.Left
-    tLabel.Text = title or "TASFF"
-
-    local mLabel = Instance.new("TextLabel", pill)
-    mLabel.Size = UDim2.new(1, -12, 0, 14)
-    mLabel.Position = UDim2.new(0, 8, 0, 18)
-    mLabel.BackgroundTransparency = 1
-    mLabel.Font = Enum.Font.Gotham
-    mLabel.TextSize = 10
-    mLabel.TextColor3 = Color3.fromRGB(215, 215, 220)
-    mLabel.TextXAlignment = Enum.TextXAlignment.Left
-    mLabel.TextTruncate = Enum.TextTruncate.AtEnd
-    mLabel.Text = msg or ""
-
-    task.delay(6, function()
-        TweenService:Create(pill, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
-        TweenService:Create(tLabel, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
-        TweenService:Create(mLabel, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.5), {Transparency = 1}):Play()
-        task.wait(0.5)
-        pill:Destroy()
-    end)
-end
-TASFFEnv.Theme.PushSidebarNotification = PushSidebarNotification
-
--- ── 3b. Keybind Map Widget (bottom-right corner, expandable) ─────
-local KEYBIND_MAP = {
-    { key = "K",          action = "Toggle Menu open / close"          },
-    { key = "RightShift", action = "Master Switch — enable all systems" },
-    { key = "J",          action = "Quick Preset cycle"                },
-    { key = "P",          action = "Rapid Mode cycle (Legit/Blatant)"  },
-    { key = "T",          action = "Click-to-Mark target"              },
-    { key = "M",          action = "Cycle Marking Mode"                },
-    { key = "RMB",        action = "Auto ADS (hold)"                   },
+getgenv().TASFF = {
+    Running              = true,
+    Connections          = {},
+    Drawings             = {},
+    Capabilities         = executorCapabilities,
+    Cleanup              = nil,    -- assigned by Core after hooks are set up
+    ThreatMonitorRunning = false,
+    Rayfield             = nil,    -- assigned below after Rayfield loads
 }
-local KBM_ROW_H  = 24
-local KBM_PAD    = 6
-local KBM_W      = 230
-local KBM_HEADER = 28
-local KBM_FULL_H = KBM_HEADER + #KEYBIND_MAP * (KBM_ROW_H + 2) + KBM_PAD
 
-local KeybindMap = Instance.new("Frame")
-KeybindMap.Name = "TASFF_KeybindMap"
-KeybindMap.Size = UDim2.new(0, KBM_W, 0, KBM_HEADER)   -- collapsed by default
-KeybindMap.AnchorPoint = Vector2.new(1, 1)
-KeybindMap.Position = UDim2.new(1, -10, 1, -40)         -- above the bottom-right corner
-KeybindMap.BackgroundColor3 = Color3.fromRGB(10, 11, 18)
-KeybindMap.BackgroundTransparency = 0.08
-KeybindMap.BorderSizePixel = 0
-KeybindMap.ZIndex = 90
-KeybindMap.Visible = false
-KeybindMap.ClipsDescendants = true
-KeybindMap.Parent = OverlayGui
-Instance.new("UICorner", KeybindMap).CornerRadius = UDim.new(0, 7)
-local kbmStroke = Instance.new("UIStroke", KeybindMap)
-kbmStroke.Color = GetThemeAccentColor()
-kbmStroke.Thickness = 1
-kbmStroke.Transparency = 0.35
-MakeDraggable(KeybindMap, KeybindMap, "KBMPosX", "KBMPosY")
-
--- Header bar
-local kbmHeader = Instance.new("Frame", KeybindMap)
-kbmHeader.Name = "KBMHeader"
-kbmHeader.Size = UDim2.new(1, 0, 0, KBM_HEADER)
-kbmHeader.BackgroundColor3 = Color3.fromRGB(18, 20, 30)
-kbmHeader.BackgroundTransparency = 0
-kbmHeader.BorderSizePixel = 0
-kbmHeader.ZIndex = 91
-Instance.new("UICorner", kbmHeader).CornerRadius = UDim.new(0, 7)
-
-local kbmTitle = Instance.new("TextLabel", kbmHeader)
-kbmTitle.Size = UDim2.new(1, -34, 1, 0)
-kbmTitle.Position = UDim2.new(0, 8, 0, 0)
-kbmTitle.BackgroundTransparency = 1
-kbmTitle.Font = Enum.Font.GothamBold
-kbmTitle.TextSize = 11
-kbmTitle.TextColor3 = GetThemeAccentColor()
-kbmTitle.TextXAlignment = Enum.TextXAlignment.Left
-kbmTitle.Text = "⌨  Keybind Map"
-kbmTitle.ZIndex = 92
-
-local kbmToggle = Instance.new("TextButton", kbmHeader)
-kbmToggle.Name = "KBMToggle"
-kbmToggle.Size = UDim2.new(0, 22, 0, 22)
-kbmToggle.AnchorPoint = Vector2.new(1, 0.5)
-kbmToggle.Position = UDim2.new(1, -4, 0.5, 0)
-kbmToggle.BackgroundColor3 = Color3.fromRGB(28, 30, 42)
-kbmToggle.BackgroundTransparency = 0.2
-kbmToggle.BorderSizePixel = 0
-kbmToggle.Font = Enum.Font.GothamBold
-kbmToggle.TextSize = 12
-kbmToggle.TextColor3 = GetThemeAccentColor()
-kbmToggle.Text = "+"
-kbmToggle.ZIndex = 92
-Instance.new("UICorner", kbmToggle).CornerRadius = UDim.new(0, 4)
-
--- Rows
--- KbmKeycapRefs: direct refs to each keycap TextLabel and its UIStroke so
--- ApplyRayfieldTheme can sync accent colours without fragile DOM traversal.
-local KbmKeycapRefs = {}
-for i, entry in ipairs(KEYBIND_MAP) do
-    local row = Instance.new("Frame", KeybindMap)
-    row.Name = "KBMRow" .. i
-    row.Size = UDim2.new(1, -8, 0, KBM_ROW_H)
-    row.Position = UDim2.new(0, 4, 0, KBM_HEADER + (i - 1) * (KBM_ROW_H + 2) + KBM_PAD)
-    row.BackgroundColor3 = Color3.fromRGB(16, 18, 26)
-    row.BackgroundTransparency = 0.3
-    row.BorderSizePixel = 0
-    row.ZIndex = 91
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
-
-    local keycap = Instance.new("TextLabel", row)
-    keycap.Size = UDim2.new(0, 72, 1, -4)
-    keycap.Position = UDim2.new(0, 4, 0, 2)
-    keycap.BackgroundColor3 = Color3.fromRGB(28, 30, 44)
-    keycap.BackgroundTransparency = 0
-    keycap.BorderSizePixel = 0
-    keycap.Font = Enum.Font.GothamBold
-    keycap.TextSize = 10
-    keycap.TextColor3 = GetThemeAccentColor()
-    keycap.Text = entry.key
-    keycap.ZIndex = 92
-    Instance.new("UICorner", keycap).CornerRadius = UDim.new(0, 3)
-    local kcStroke = Instance.new("UIStroke", keycap)
-    kcStroke.Color = GetThemeAccentColor()
-    kcStroke.Thickness = 1
-    kcStroke.Transparency = 0.5
-    table.insert(KbmKeycapRefs, {cap = keycap, stroke = kcStroke})
-
-    local actionLabel = Instance.new("TextLabel", row)
-    actionLabel.Size = UDim2.new(1, -86, 1, 0)
-    actionLabel.Position = UDim2.new(0, 82, 0, 0)
-    actionLabel.BackgroundTransparency = 1
-    actionLabel.Font = Enum.Font.Gotham
-    actionLabel.TextSize = 10
-    actionLabel.TextColor3 = Color3.fromRGB(205, 210, 225)
-    actionLabel.TextXAlignment = Enum.TextXAlignment.Left
-    actionLabel.TextTruncate = Enum.TextTruncate.AtEnd
-    actionLabel.Text = entry.action
-    actionLabel.ZIndex = 92
-end
-
--- Expand / collapse logic
-local kbmExpanded = false
-local function SetKBMExpanded(expand)
-    kbmExpanded = expand
-    kbmToggle.Text = expand and "-" or "+"
-    local targetH = expand and KBM_FULL_H or KBM_HEADER
-    TweenService:Create(KeybindMap, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, KBM_W, 0, targetH)
-    }):Play()
-end
-kbmToggle.MouseButton1Click:Connect(function()
-    SetKBMExpanded(not kbmExpanded)
-    PlayUISound("click")
-end)
-
-TASFFEnv.Theme.SetKBMExpanded = SetKBMExpanded
-TASFFEnv.Theme.KeybindMap     = KeybindMap
-TASFFEnv.Theme.KbmKeycapRefs  = KbmKeycapRefs
-TASFFEnv.Theme.KbmOuterStroke = kbmStroke
-TASFFEnv.Theme.KbmTitle       = kbmTitle
-TASFFEnv.Theme.KbmToggle      = kbmToggle
-
--- Apply active accent color immediately upon creation so it never starts in cyan
-pcall(function()
-    local acc = GetThemeAccentColor()
-    kbmStroke.Color = acc
-    kbmTitle.TextColor3 = acc
-    kbmToggle.TextColor3 = acc
-    for _, r in ipairs(KbmKeycapRefs) do
-        r.cap.TextColor3 = acc
-        r.stroke.Color = acc
+local function CleanupPartialRuntime()
+    local runtime = getgenv().TASFF
+    if not runtime then return end
+    runtime.Running = false
+    if type(runtime.Cleanup) == "function" then
+        pcall(runtime.Cleanup)
     end
-end)
-
--- ── 4. Floating Hover Tooltips for Controls ──────────────────────
-local TooltipFrame = Instance.new("Frame")
-TooltipFrame.Name = "TooltipFrame"
-TooltipFrame.Size = UDim2.new(0, 240, 0, 50)
-TooltipFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-TooltipFrame.BackgroundTransparency = 0.1
-TooltipFrame.BorderSizePixel = 0
-TooltipFrame.Visible = false
-TooltipFrame.ZIndex = 1000
-TooltipFrame.Parent = OverlayGui
-
-Instance.new("UICorner", TooltipFrame).CornerRadius = UDim.new(0, 6)
-local TooltipStroke = Instance.new("UIStroke", TooltipFrame)
-TooltipStroke.Color = GetThemeAccentColor()
-TooltipStroke.Thickness = 1
-
-local TooltipTitle = Instance.new("TextLabel", TooltipFrame)
-TooltipTitle.Size = UDim2.new(1, -12, 0, 16)
-TooltipTitle.Position = UDim2.new(0, 6, 0, 4)
-TooltipTitle.BackgroundTransparency = 1
-TooltipTitle.Font = Enum.Font.GothamBold
-TooltipTitle.TextSize = 11
-TooltipTitle.TextColor3 = GetThemeAccentColor()
-TooltipTitle.TextXAlignment = Enum.TextXAlignment.Left
-
-local TooltipBody = Instance.new("TextLabel", TooltipFrame)
-TooltipBody.Size = UDim2.new(1, -12, 1, -22)
-TooltipBody.Position = UDim2.new(0, 6, 0, 20)
-TooltipBody.BackgroundTransparency = 1
-TooltipBody.Font = Enum.Font.Gotham
-TooltipBody.TextSize = 10
-TooltipBody.TextColor3 = Color3.fromRGB(220, 220, 225)
-TooltipBody.TextWrapped = true
-TooltipBody.TextXAlignment = Enum.TextXAlignment.Left
-TooltipBody.TextYAlignment = Enum.TextYAlignment.Top
-
-local function ShowTooltip(ctrlName, desc, mousePos)
-    if not (OverlayGui and OverlayGui.Parent) then EnsureOverlayParented() end
-    local accent = GetThemeAccentColor()
-    TooltipStroke.Color = accent
-    TooltipTitle.TextColor3 = accent
-    TooltipTitle.Text = ctrlName
-    TooltipBody.Text = desc
-    local cam = workspace.CurrentCamera
-    local vp = (cam and cam.ViewportSize) or Vector2.new(1920, 1080)
-    local posX = math.clamp(mousePos.X + 15, 10, math.max(10, vp.X - 250))
-    local posY = math.clamp(mousePos.Y + 10, 10, math.max(10, vp.Y - 65))
-    TooltipFrame.Position = UDim2.new(0, posX, 0, posY)
-    TooltipFrame.Visible = true
-end
-local function HideTooltip()
-    TooltipFrame.Visible = false
-end
-
--- ── 5. Rayfield DOM Tree Patch Engine ────────────────────────────
-FindRayfieldGui = function()
-    local containers = {}
-    pcall(function()
-        if typeof(gethui) == "function" then
-            local h = gethui()
-            if h then table.insert(containers, h) end
-        end
-    end)
-    pcall(function()
-        local cg = game:GetService("CoreGui")
-        if cg then
-            table.insert(containers, cg)
-            local rg = cg:FindFirstChild("RobloxGui")
-            if rg then table.insert(containers, rg) end
-        end
-    end)
-    pcall(function()
-        local lp = Players.LocalPlayer or game:GetService("Players").LocalPlayer
-        local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
-        if pg then table.insert(containers, pg) end
-    end)
-
-    local function isRayfieldScreenGui(screenGui)
-        if not screenGui or not screenGui:IsA("ScreenGui") then return false end
-        if screenGui.Name == "TASFF_OverlayGui" or screenGui.Name == "TASFF_Overlay" then return false end
-
-        local main = screenGui:FindFirstChild("Main", true)
-        if not main or not main:IsA("GuiObject") then return false end
-
-        local titleMatch = false
-        for _, label in ipairs(main:GetDescendants()) do
-            if (label:IsA("TextLabel") or label:IsA("TextButton")) and label.Text:find("TASFF", 1, true) then
-                titleMatch = true
-                break
-            end
-        end
-        return titleMatch or main:FindFirstChild("Topbar", true) ~= nil or main:FindFirstChild("Elements", true) ~= nil
-    end
-
-    for _, container in ipairs(containers) do
-        -- Prefer a named Rayfield/Sirius GUI when several ScreenGuis exist.
-        for _, child in ipairs(container:GetChildren()) do
-            if isRayfieldScreenGui(child) then
-                local name = child.Name:lower()
-                if name:find("rayfield") or name:find("sirius") then
-                    return child
-                end
-            end
-        end
-
-        -- Rayfield versions and forks use different internal child layouts.
-        for _, child in ipairs(container:GetChildren()) do
-            if isRayfieldScreenGui(child) then return child end
-        end
-
-        -- Some executors place the ScreenGui below a non-ScreenGui wrapper.
-        for _, descendant in ipairs(container:GetDescendants()) do
-            if isRayfieldScreenGui(descendant) then
-                return descendant
-            end
-        end
-    end
-    return nil
-end
--- Export so TASFF_UI.lua can use it for the loading cover placement
-TASFFEnv.Theme.FindRayfieldGui = function() return FindRayfieldGui() end
-
-local function PulseTopbar(color)
-    local rGui = FindRayfieldGui()
-    if not rGui then return end
-    local topbar = rGui:FindFirstChild("Topbar", true)
-    if topbar and topbar:IsA("GuiObject") then
-        local origColor = topbar.BackgroundColor3
-        local pulseColor = color or Color3.fromRGB(0, 255, 170)
-        TweenService:Create(topbar, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = pulseColor}):Play()
-        task.delay(0.25, function()
-            TweenService:Create(topbar, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundColor3 = origColor}):Play()
-        end)
-    end
-end
-TASFFEnv.Theme.PulseTopbar = PulseTopbar
-
-local function HighlightChangedControls(changedNames)
-    local rGui = FindRayfieldGui()
-    if not rGui or not changedNames then return end
-    for _, name in ipairs(changedNames) do
-        for _, desc in ipairs(rGui:GetDescendants()) do
-            if desc:IsA("TextLabel") and (desc.Text == name or desc.Text:find(name, 1, true)) then
-                local parent = desc.Parent
-                if parent and parent:IsA("GuiObject") then
-                    local stroke = parent:FindFirstChildOfClass("UIStroke")
-                    if stroke then
-                        local origColor = stroke.Color
-                        stroke.Color = Color3.fromRGB(255, 215, 0)
-                        task.delay(1.2, function()
-                            TweenService:Create(stroke, TweenInfo.new(0.5), {Color = origColor}):Play()
-                        end)
-                    end
-                end
-            end
-        end
-    end
-end
-TASFFEnv.Theme.HighlightChangedControls = HighlightChangedControls
-
--- Tab Badge Storage
-local _tabBadges = {}
-local function SetTabBadge(tabName, count)
-    local badge = _tabBadges[tabName]
-    if badge and badge.Parent then
-        if count and count > 0 then
-            badge.Text = tostring(count)
-            badge.Parent.Visible = true
-        else
-            badge.Parent.Visible = false
-        end
-    end
-end
-TASFFEnv.Theme.SetTabBadge = SetTabBadge
-
--- Universal Atmospheric Carbon Weave Texture & Control Hover Glow Helpers
--- Injects a child Frame overlay so the carbon weave is always visible regardless
--- of what Rayfield writes to the parent frame's BackgroundColor3.
-local function AttachCarbonOverlay(targetFrame, _unused)
-    if not targetFrame or targetFrame:FindFirstChild("CarbonOverlay") then return end
-    -- NEVER attach to frames with AutomaticSize or Paragraphs (prevents Roblox cyclic expansion feedback loops)
-    if targetFrame:IsA("GuiObject") and targetFrame.AutomaticSize ~= Enum.AutomaticSize.None then
-        return
-    end
-    if targetFrame:FindFirstChild("Content") and targetFrame:FindFirstChild("Title") then
-        return
-    end
-
-    local marker = Instance.new("BoolValue")
-    marker.Name = "CarbonOverlay"
-    marker.Parent = targetFrame
-
-    -- Overlay frame wrapped in a Folder so UIListLayout ignores it completely
-    local folder = Instance.new("Folder")
-    folder.Name = "CarbonFolder"
-    folder.Parent = targetFrame
-
-    local overlay = Instance.new("Frame")
-    overlay.Name = "CarbonOverlayFrame"
-    overlay.Size = UDim2.new(1, 0, 1, 0)
-    overlay.Position = UDim2.new(0, 0, 0, 0)
-    overlay.BackgroundTransparency = 0.85  -- subtle weave, lets theme card color shine through
-    overlay.BorderSizePixel = 0
-    overlay.ZIndex = (targetFrame.ZIndex or 1) + 1
-    -- Match parent corner radius so overlay doesn't overflow rounded cards
-    local parentCorner = targetFrame:FindFirstChildOfClass("UICorner")
-    if parentCorner then
-        Instance.new("UICorner", overlay).CornerRadius = parentCorner.CornerRadius
-    end
-
-    local acc = GetThemeAccentColor()
-    local grad = Instance.new("UIGradient")
-    grad.Name = "CarbonGradient"
-    grad.Rotation = 45
-    grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,    Color3.fromRGB(15, 15, 20)),
-        ColorSequenceKeypoint.new(0.25, acc:Lerp(Color3.fromRGB(100, 100, 120), 0.5)),
-        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(15, 15, 20)),
-        ColorSequenceKeypoint.new(0.75, acc:Lerp(Color3.fromRGB(100, 100, 120), 0.5)),
-        ColorSequenceKeypoint.new(1,    Color3.fromRGB(15, 15, 20)),
-    })
-    grad.Transparency = NumberSequence.new(0)
-    grad.Parent = overlay
-
-    overlay.Parent = folder
-end
-
-local function AttachHoverGlow(card)
-    if not card or card:FindFirstChild("HoverGlowHooked") then return end
-    local hHook = Instance.new("BoolValue", card)
-    hHook.Name = "HoverGlowHooked"
-    local stroke = card:FindFirstChildOfClass("UIStroke")
-    if stroke then
-        local origColor = stroke.Color
-        card.MouseEnter:Connect(function()
-            local acc = GetThemeAccentColor()
-            TweenService:Create(stroke, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                Color = Color3.fromRGB(
-                    math.clamp(math.floor(origColor.R * 255 * 0.4 + acc.R * 255 * 0.6), 0, 255),
-                    math.clamp(math.floor(origColor.G * 255 * 0.4 + acc.G * 255 * 0.6), 0, 255),
-                    math.clamp(math.floor(origColor.B * 255 * 0.4 + acc.B * 255 * 0.6), 0, 255)
-                )
-            }):Play()
-            -- Soft hover tick (quiet, different pitch from click so it doesn't feel intrusive)
-            task.spawn(function()
-                pcall(function()
-                    local snd = Instance.new("Sound")
-                    snd.SoundId = "rbxassetid://6895079853"
-                    snd.Volume = math.clamp((S.AudioFeedbackVolume or 0.5) * 0.35, 0, 1)
-                    snd.Pitch = 1.6   -- high pitch = light tap
-                    snd.Parent = SoundService
-                    snd:Play()
-                    snd.Ended:Connect(function() snd:Destroy() end)
-                    task.delay(1, function() if snd and snd.Parent then snd:Destroy() end end)
-                end)
-            end)
-        end)
-        card.MouseLeave:Connect(function()
-            TweenService:Create(stroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-                Color = origColor
-            }):Play()
-        end)
-    end
-end
-
--- Patch sections, tooltips, search bar, state dots, tab badges, and resize handle
-local function PatchRayfieldDOM()
-    if S.AdvancedThemePatchEnabled ~= true then
-        local rGui = FindRayfieldGui()
-        local mainFrame = rGui and rGui:FindFirstChild("Main", true)
-        if not mainFrame or not mainFrame.Parent then return false end
-
-        local parent = mainFrame.Parent
-        local tc = TASFFEnv.Theme.ActiveThemeColors or {}
-        local bgColor   = tc.Background or Color3.fromRGB(15, 20, 27)
-        local elemColor = tc.ElementBackground or bgColor:Lerp(Color3.fromRGB(255, 255, 255), 0.06)
-        local textColor = tc.TextColor or Color3.fromRGB(235, 240, 250)
-        local accent    = GetThemeAccentColor()
-        mainFrame.BackgroundColor3 = bgColor
-        mainFrame.BackgroundTransparency = 0.03
-
-        local oldGrid = mainFrame:FindFirstChild("SafeCarbonGrid")
-        if oldGrid then
-            oldGrid:Destroy()
-        end
-
-        local halo = parent:FindFirstChild("TASFF_AmbientHalo")
-        if not halo then
-            halo = Instance.new("Frame")
-            halo.Name = "TASFF_AmbientHalo"
-            halo.BackgroundColor3 = accent
-            halo.BackgroundTransparency = 0.88
-            halo.BorderSizePixel = 0
-            halo.ZIndex = math.max(0, mainFrame.ZIndex - 1)
-            halo.Parent = parent
-            local stroke = Instance.new("UIStroke")
-            stroke.Name = "HaloStroke"
-            stroke.Color = accent
-            stroke.Thickness = 8
-            stroke.Transparency = 0.75
-            stroke.Parent = halo
-            Instance.new("UICorner", halo).CornerRadius = UDim.new(0, 10)
-        else
-            halo.BackgroundColor3 = accent
-            local hs = halo:FindFirstChildOfClass("UIStroke")
-            if hs then hs.Color = accent end
-        end
-
-        mainFrame.ClipsDescendants = false
-        local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar")
-        if not bottomBar then
-            bottomBar = Instance.new("Frame")
-            bottomBar.Name = "TASFF_BottomBar"
-            bottomBar.BackgroundColor3 = elemColor
-            bottomBar.BackgroundTransparency = 0
-            bottomBar.BorderSizePixel = 0
-            bottomBar.ZIndex = math.max(10, mainFrame.ZIndex + 5)
-            bottomBar.Parent = mainFrame
-            bottomBar.AnchorPoint = Vector2.new(0, 0)
-            bottomBar.Position = UDim2.new(0, 0, 1, 4)
-            bottomBar.Size = UDim2.new(1, 0, 0, 26)
-            Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 6)
-            local barStroke = Instance.new("UIStroke", bottomBar)
-            barStroke.Color = accent
-            barStroke.Transparency = 0.10
-            barStroke.Thickness = 1
-
-            local label = Instance.new("TextLabel")
-            label.Name = "SafeStatus"
-            label.BackgroundTransparency = 1
-            label.Size = UDim2.new(1, -220, 1, 0)
-            label.Position = UDim2.fromOffset(32, 0)
-            label.Font = Enum.Font.GothamBold
-            label.TextSize = 11
-            label.TextColor3 = textColor
-            label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-            label.TextStrokeTransparency = 0.55
-            label.TextXAlignment = Enum.TextXAlignment.Left
-            label.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [TASFF]"
-            label.Parent = bottomBar
-
-            local avatar = Instance.new("ImageLabel")
-            avatar.Name = "SafeAvatar"
-            avatar.BackgroundTransparency = 1
-            avatar.Size = UDim2.fromOffset(20, 20)
-            avatar.Position = UDim2.fromOffset(7, 3)
-            avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
-            avatar.ZIndex = bottomBar.ZIndex + 1
-            avatar.Parent = bottomBar
-            Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
-
-            local stats = Instance.new("TextLabel")
-            stats.Name = "SafeStats"
-            stats.BackgroundTransparency = 1
-            stats.Size = UDim2.new(0, 170, 1, 0)
-            stats.Position = UDim2.new(1, -178, 0, 0)
-            stats.Font = Enum.Font.GothamBold
-            stats.TextSize = 10
-            stats.TextColor3 = textColor:Lerp(bgColor, 0.25)
-            stats.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-            stats.TextStrokeTransparency = 0.60
-            stats.TextXAlignment = Enum.TextXAlignment.Right
-            stats.Text = "TASFF  |  READY"
-            stats.Parent = bottomBar
-        end
-        bottomBar.BackgroundColor3 = elemColor
-        bottomBar.BackgroundTransparency = 0.04
-        bottomBar.ZIndex = math.max(bottomBar.ZIndex, mainFrame.ZIndex + 10)
-        local bottomStroke = bottomBar:FindFirstChildOfClass("UIStroke")
-        if bottomStroke then
-            bottomStroke.Color = accent
-            bottomStroke.Transparency = 0.10
-            bottomStroke.Thickness = 1
-        end
-        local statusLabel = bottomBar:FindFirstChild("SafeStatus")
-        if statusLabel then
-            statusLabel.TextColor3 = textColor
-            statusLabel.TextSize = 11
-            statusLabel.TextStrokeTransparency = 0.55
-            statusLabel.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  [TASFF]"
-        end
-        local avatar = bottomBar:FindFirstChild("SafeAvatar")
-        if avatar then
-            avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
-        else
-            avatar = Instance.new("ImageLabel")
-            avatar.Name = "SafeAvatar"
-            avatar.BackgroundTransparency = 1
-            avatar.Size = UDim2.fromOffset(20, 20)
-            avatar.Position = UDim2.fromOffset(7, 3)
-            avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer.UserId) .. "&w=48&h=48"
-            avatar.ZIndex = bottomBar.ZIndex + 1
-            avatar.Parent = bottomBar
-            Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
-        end
-        local stats = bottomBar:FindFirstChild("SafeStats")
-        if not stats then
-            stats = Instance.new("TextLabel")
-            stats.Name = "SafeStats"
-            stats.BackgroundTransparency = 1
-            stats.Size = UDim2.new(0, 170, 1, 0)
-            stats.Position = UDim2.new(1, -178, 0, 0)
-            stats.Font = Enum.Font.GothamBold
-            stats.TextXAlignment = Enum.TextXAlignment.Right
-            stats.Text = "TASFF  |  READY"
-            stats.Parent = bottomBar
-        end
-        if stats then
-            stats.TextSize = 10
-            stats.TextColor3 = textColor:Lerp(bgColor, 0.25)
-            stats.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-            stats.TextStrokeTransparency = 0.60
-        end
-
-        local topbar = mainFrame:FindFirstChild("Topbar", true)
-        if topbar then
-            local accentLine = topbar:FindFirstChild("SafeAccentLine")
-            if not accentLine then
-                accentLine = Instance.new("Frame")
-                accentLine.Name = "SafeAccentLine"
-                accentLine.Size = UDim2.new(1, 0, 0, 1)
-                accentLine.Position = UDim2.new(0, 0, 1, -1)
-                accentLine.BorderSizePixel = 0
-                accentLine.ZIndex = topbar.ZIndex + 1
-                accentLine.Parent = topbar
-            end
-            accentLine.BackgroundColor3 = accent
-
-            local safeBell = topbar:FindFirstChild("SafeNotificationBell")
-            if not safeBell then
-                safeBell = Instance.new("TextButton")
-                safeBell.Name = "SafeNotificationBell"
-                safeBell.Size = UDim2.fromOffset(22, 22)
-                safeBell.AnchorPoint = Vector2.new(1, 0.5)
-                safeBell.Position = UDim2.new(1, -44, 0.5, 0)
-                safeBell.BackgroundColor3 = elemColor
-                safeBell.BackgroundTransparency = 0.1
-                safeBell.BorderSizePixel = 0
-                safeBell.Font = Enum.Font.GothamBold
-                safeBell.TextSize = 10
-                safeBell.TextColor3 = textColor
-                safeBell.Text = "!"
-                safeBell.ZIndex = topbar.ZIndex + 2
-                safeBell.Parent = topbar
-                Instance.new("UICorner", safeBell).CornerRadius = UDim.new(0, 5)
-                local safeBellStroke = Instance.new("UIStroke", safeBell)
-                safeBellStroke.Color = accent
-                safeBellStroke.Thickness = 1
-                safeBell.MouseButton1Click:Connect(function()
-                    if TASFFEnv.Theme.ToggleNotificationDrawer then
-                        TASFFEnv.Theme.ToggleNotificationDrawer()
-                    end
-                end)
-            end
-            safeBell.Position = UDim2.new(1, -44, 0.5, 0)
-            safeBell.BackgroundColor3 = elemColor
-            safeBell.TextColor3 = textColor
-            local safeBellStroke = safeBell:FindFirstChildOfClass("UIStroke")
-            if safeBellStroke then safeBellStroke.Color = accent end
-        end
-
-        -- Add decoration only to direct children of Rayfield's content list.
-        -- No native visibility, size, parent, or layout properties are changed.
-        local elements = mainFrame:FindFirstChild("Elements", true)
-        if elements then
-            for _, desc in ipairs(elements:GetChildren()) do
-                if desc:IsA("Frame") and desc.Name ~= "Template" and
-                    (desc:FindFirstChild("Title") or desc:FindFirstChild("Content") or
-                     desc:FindFirstChild("Interact") or desc:FindFirstChild("Switch")) and
-                    not desc:FindFirstChild("SafeCardDecoration") then
-                local marker = Instance.new("BoolValue")
-                marker.Name = "SafeCardDecoration"
-                marker.Parent = desc
-                local stroke = Instance.new("UIStroke")
-                stroke.Name = "SafeCardStroke"
-                stroke.Color = accent
-                stroke.Thickness = 1
-                stroke.Transparency = 0.45
-                stroke.Parent = desc
-                local gradient = Instance.new("UIGradient")
-                gradient.Name = "SafeCardGradient"
-                gradient.Rotation = 35
-                gradient.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, elemColor:Lerp(accent, 0.10)),
-                    ColorSequenceKeypoint.new(0.5, bgColor),
-                    ColorSequenceKeypoint.new(1, elemColor:Lerp(accent, 0.10)),
-                })
-                gradient.Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 0.35),
-                    NumberSequenceKeypoint.new(0.5, 0.7),
-                    NumberSequenceKeypoint.new(1, 0.35),
-                })
-                gradient.Parent = desc
-                end
-
-            end
-        end
-
-        -- Recolour decorations that already existed from a previous theme.
-        if elements then
-            for _, desc in ipairs(elements:GetChildren()) do
-                local existingStroke = desc:FindFirstChild("SafeCardStroke")
-                local existingGradient = desc:FindFirstChild("SafeCardGradient")
-                if existingStroke then existingStroke.Color = accent end
-                if existingGradient then
-                    existingGradient.Color = ColorSequence.new({
-                        ColorSequenceKeypoint.new(0, elemColor:Lerp(accent, 0.10)),
-                        ColorSequenceKeypoint.new(0.5, bgColor),
-                        ColorSequenceKeypoint.new(1, elemColor:Lerp(accent, 0.10)),
-                    })
-                end
-            end
-        end
-
-        local tracker = mainFrame:FindFirstChild("SafeVisualTracker")
-        if not tracker then
-            tracker = Instance.new("BoolValue")
-            tracker.Name = "SafeVisualTracker"
-            tracker.Parent = mainFrame
-            table.insert(Connections, RunService.RenderStepped:Connect(function()
-                if not mainFrame.Parent or not halo.Parent then return end
-                local parentPosition = parent.AbsolutePosition
-                local absolutePosition = mainFrame.AbsolutePosition
-                local visible = mainFrame.Visible and rGui.Enabled ~= false
-                -- Overlays (HUD strip, radar, notification drawer, toasts) are
-                -- intentionally independent of the Rayfield window's visibility.
-                OverlayGui.Enabled = true
-                HUDStrip.Visible = S.HUDStripEnabled ~= false
-                halo.Visible = visible
-                halo.Position = UDim2.fromOffset(
-                    absolutePosition.X - parentPosition.X - 8,
-                    absolutePosition.Y - parentPosition.Y - 8
-                )
-                halo.Size = UDim2.fromOffset(mainFrame.AbsoluteSize.X + 16, mainFrame.AbsoluteSize.Y + 16)
-                bottomBar.Visible = visible
-                bottomBar.BackgroundTransparency = 0
-                bottomBar.AnchorPoint = Vector2.new(0, 0)
-                bottomBar.Position = UDim2.new(0, 0, 1, 4)
-                bottomBar.Size = UDim2.new(1, 0, 0, 26)
-
-            end))
-        end
-        return true
-    end
-
-    local rGui = FindRayfieldGui()
-    if not rGui then return false end
-
-    local mainFrame = rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame")
-    if not mainFrame then return false end
-
-    -- Loading cover is created by the outer task.spawn (after UIInitialized),
-    -- and removed with a guaranteed fade after both patch passes complete.
-
-    local pal = GlobalThemePalettes[S.ActivePresetName or "Solaris Gold"] or GlobalThemePalettes.Default
-    local curTheme = TASFFEnv.Theme.ActiveThemeColors or {}
-    local menuBg = curTheme.Background or HexToColor3(pal.UIBackground)
-    local menuAccent = GetThemeAccentColor()
-    local menuElem = curTheme.ElementBackground or HexToColor3(pal.UIElement)
-    local menuElemStroke = curTheme.ElementStroke or HexToColor3(pal.Overlay)
-
-    if S.UIOpacity and S.UIOpacity < 1.0 then
-        mainFrame.BackgroundTransparency = 1 - S.UIOpacity
-    else
-        mainFrame.BackgroundTransparency = 0
-    end
-    mainFrame.ClipsDescendants = false
-    mainFrame.BackgroundColor3 = menuBg
-
-    -- 0a. Clean up any residual overlays that would obstruct Rayfield's Elements
-    local oldScanBg = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
-    if oldScanBg then oldScanBg:Destroy() end
-    local existingMesh = mainFrame:FindFirstChild("MainCarbonMesh")
-    if existingMesh then existingMesh:Destroy() end
-    local existingScanGrad = mainFrame:FindFirstChild("MainScanlinesGrad")
-    if existingScanGrad then existingScanGrad:Destroy() end
-    -- Force destroy old carbon bg so new keypoints always apply fresh
-    local oldCarbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
-    if oldCarbonBg then oldCarbonBg:Destroy() end
-
-    -- 0a2. Atmospheric Carbon Diamond-Weave Grid Background (ZIndex 2, behind Elements at 3)
-    do
-        local acc = GetThemeAccentColor()
-        local carbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
-        if not carbonBg then
-            carbonBg = Instance.new("Frame")
-            carbonBg.Name = "TASFF_CarbonBg"
-            carbonBg.Size = UDim2.new(1, 0, 1, 0)
-            carbonBg.Position = UDim2.new(0, 0, 0, 0)
-            carbonBg.BackgroundTransparency = 1
-            carbonBg.BorderSizePixel = 0
-            carbonBg.ZIndex = 1
-            carbonBg.ClipsDescendants = true
-            carbonBg.Interactable = false
-            local cCorner = Instance.new("UICorner", carbonBg)
-            cCorner.CornerRadius = UDim.new(0, 8)
-
-            local stripe = acc:Lerp(Color3.fromRGB(140, 140, 160), 0.5)
-            local dark   = Color3.fromRGB(8, 8, 12)
-            local colorSeq = ColorSequence.new({
-                ColorSequenceKeypoint.new(0,    dark),
-                ColorSequenceKeypoint.new(0.09, stripe),
-                ColorSequenceKeypoint.new(0.17, dark),
-                ColorSequenceKeypoint.new(0.26, stripe),
-                ColorSequenceKeypoint.new(0.34, dark),
-                ColorSequenceKeypoint.new(0.43, stripe),
-                ColorSequenceKeypoint.new(0.5,  dark),
-                ColorSequenceKeypoint.new(0.59, stripe),
-                ColorSequenceKeypoint.new(0.67, dark),
-                ColorSequenceKeypoint.new(0.76, stripe),
-                ColorSequenceKeypoint.new(0.84, dark),
-                ColorSequenceKeypoint.new(0.93, stripe),
-                ColorSequenceKeypoint.new(1,    dark),
-            })
-            local transSeq = NumberSequence.new({
-                NumberSequenceKeypoint.new(0,    0.94),
-                NumberSequenceKeypoint.new(0.09, 0.70),
-                NumberSequenceKeypoint.new(0.17, 0.94),
-                NumberSequenceKeypoint.new(0.26, 0.70),
-                NumberSequenceKeypoint.new(0.34, 0.94),
-                NumberSequenceKeypoint.new(0.43, 0.70),
-                NumberSequenceKeypoint.new(0.5,  0.94),
-                NumberSequenceKeypoint.new(0.59, 0.70),
-                NumberSequenceKeypoint.new(0.67, 0.94),
-                NumberSequenceKeypoint.new(0.76, 0.70),
-                NumberSequenceKeypoint.new(0.84, 0.94),
-                NumberSequenceKeypoint.new(0.93, 0.70),
-                NumberSequenceKeypoint.new(1,    0.94),
-            })
-
-            -- Weave Layer 1 (+45 degrees)
-            local w1 = Instance.new("Frame", carbonBg)
-            w1.Name = "Weave1"
-            w1.Size = UDim2.new(1, 0, 1, 0)
-            w1.Position = UDim2.new(0, 0, 0, 0)
-            w1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            w1.BackgroundTransparency = 0.70
-            w1.BorderSizePixel = 0
-            w1.ZIndex = 1
-            w1.Interactable = false
-            local g1 = Instance.new("UIGradient", w1)
-            g1.Rotation = 45
-            g1.Color = colorSeq
-            g1.Transparency = transSeq
-
-            -- Weave Layer 2 (-45 degrees for cross-hatch carbon weave)
-            local w2 = Instance.new("Frame", carbonBg)
-            w2.Name = "Weave2"
-            w2.Size = UDim2.new(1, 0, 1, 0)
-            w2.Position = UDim2.new(0, 0, 0, 0)
-            w2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            w2.BackgroundTransparency = 0.75
-            w2.BorderSizePixel = 0
-            w2.ZIndex = 1
-            w2.Interactable = false
-            local g2 = Instance.new("UIGradient", w2)
-            g2.Rotation = -45
-            g2.Color = colorSeq
-            g2.Transparency = transSeq
-
-            carbonBg.Parent = mainFrame
-        end
-    end
-
-    -- Ensure Elements container and pages are visible, transparent, and in front (ZIndex 3)
-    local elements = mainFrame:FindFirstChild("Elements", true)
-    if elements and elements:IsA("GuiObject") then
-        elements.Visible = true
-        elements.ZIndex = 3
-        elements.BackgroundTransparency = 1
-        for _, tabPage in ipairs(elements:GetChildren()) do
-            if tabPage:IsA("ScrollingFrame") then
-                tabPage.Visible = true
-                tabPage.ZIndex = 3
-                tabPage.BackgroundTransparency = 1
-            end
-        end
-    end
-
-    -- Ensure Topbar container is strictly above carbon overlay (ZIndex 20)
-    local topbarInst = mainFrame:FindFirstChild("Topbar", true)
-    if topbarInst and topbarInst:IsA("GuiObject") then
-        topbarInst.ZIndex = 20
-        for _, desc in ipairs(topbarInst:GetDescendants()) do
-            if desc:IsA("GuiObject") then
-                desc.ZIndex = math.max(desc.ZIndex or 1, 21)
-            end
-        end
-    end
-
-    -- 0b. Animated Cyber Neon Border with Rotating Gradient
-    local cyberStroke = mainFrame:FindFirstChild("CyberStroke")
-    if not cyberStroke then
-        cyberStroke = Instance.new("UIStroke")
-        cyberStroke.Name = "CyberStroke"
-        cyberStroke.Thickness = 1.5
-        cyberStroke.Color = GetThemeAccentColor()
-        cyberStroke.Parent = mainFrame
-
-        local cyberGrad = Instance.new("UIGradient")
-        cyberGrad.Name = "CyberGrad"
-        cyberGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, GetThemeAccentColor()),
-            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
-            ColorSequenceKeypoint.new(1, GetThemeAccentColor())
-        })
-        cyberGrad.Rotation = 45
-        cyberGrad.Parent = cyberStroke
-
-        task.spawn(function()
-            local rot = 45
-            while cyberGrad and cyberGrad.Parent do
-                rot = (rot + 2) % 360
-                cyberGrad.Rotation = rot
-                task.wait(0.04)
-            end
-        end)
-    else
-        cyberStroke.Color = GetThemeAccentColor()
-    end
-
-    -- 0c. Ambient Bloom Halo — pure Frame layers in dedicated HaloGui (DisplayOrder -100, always behind Rayfield)
-    local legacyShadow = mainFrame:FindFirstChild("GlassShadow")
-    if legacyShadow then legacyShadow:Destroy() end
-    local legacyAuraOverlay = OverlayGui:FindFirstChild("TASFF_AmbientAura")
-    if legacyAuraOverlay then legacyAuraOverlay:Destroy() end
-    if OverlayGui then
-        local oldH = OverlayGui:FindFirstChild("TASFF_AmbientHalo")
-        if oldH then oldH:Destroy() end
-    end
-    if mainFrame.Parent then
-        local legacyAuraParent = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
-        if legacyAuraParent then legacyAuraParent:Destroy() end
-        -- Also destroy any old ImageLabel halo left in mainFrame.Parent from previous patch
-        local oldParentHalo = mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
-        if oldParentHalo then oldParentHalo:Destroy() end
-    end
-
-    -- Build/rebuild halo in HaloGui (always behind Rayfield's ScreenGui via DisplayOrder -100)
-    -- Compact, softer bloom layers: ordered 1 (innermost) to 4 (outermost)
-    local function BuildHaloLayers(container, acc)
-        for _, ch in ipairs(container:GetChildren()) do ch:Destroy() end
-        -- Layers: {extra_px_each_side, base_transparency, corner_radius}
-        local layers = {
-            {8,   0.68, 10},  -- Layer 1: inner snug bloom
-            {18,  0.78, 14},  -- Layer 2: middle halo
-            {32,  0.86, 20},  -- Layer 3: outer aura
-            {48,  0.93, 26},  -- Layer 4: soft outer falloff
-        }
-        for idx, L in ipairs(layers) do
-            local expand, trans, radius = L[1], L[2], L[3]
-            local lf = Instance.new("Frame", container)
-            lf.Name = "HaloLayer"
-            lf.AnchorPoint = Vector2.new(0.5, 0.5)
-            lf.BackgroundColor3 = acc
-            lf.BackgroundTransparency = trans
-            lf.BorderSizePixel = 0
-            lf.ZIndex = 1
-            lf:SetAttribute("HaloExpand", expand)
-            lf:SetAttribute("BaseTrans", trans)
-            lf:SetAttribute("LayerIndex", idx)
-            Instance.new("UICorner", lf).CornerRadius = UDim.new(0, radius)
-        end
-    end
-
-    -- Chained trailing halo positions state
-    local haloPositions = TASFFEnv.Theme._HaloPositions or {}
-    TASFFEnv.Theme._HaloPositions = haloPositions
-
-    -- Computes the true visual bounding box of (mainFrame + TASFF_BottomBar) with inset compensation
-    local function GetMenuVisualBounds()
-        local mAbsPos  = mainFrame.AbsolutePosition
-        local mAbsSize = mainFrame.AbsoluteSize
-        -- 26px bottom bar + 4px gap docked right below mainFrame (+30px total visual height)
-        -- Plus 14px vertical centering bias to match CoreGui topbar inset for 100% symmetric margins
-        local totalH = mAbsSize.Y + 30
-        local targetCenter = Vector2.new(mAbsPos.X + mAbsSize.X * 0.5, mAbsPos.Y + (totalH * 0.5) + 14)
-        return targetCenter, mAbsSize.X, totalH
-    end
-
-    local function ResetHaloPositions()
-        local targetCenter = GetMenuVisualBounds()
-        for i = 1, 4 do haloPositions[i] = targetCenter end
-    end
-
-    local function UpdateHaloPosition(container, acc)
-        local targetCenter, totalW, totalH = GetMenuVisualBounds()
-        if totalW < 20 or totalH < 20 then return end
-        for _, lf in ipairs(container:GetChildren()) do
-            if lf:IsA("Frame") and lf.Name == "HaloLayer" then
-                local idx = lf:GetAttribute("LayerIndex") or 1
-                local exp = lf:GetAttribute("HaloExpand") or 16
-                local pos = haloPositions[idx] or targetCenter
-                lf.Position = UDim2.fromOffset(pos.X, pos.Y)
-                lf.Size = UDim2.fromOffset(totalW + exp * 2, totalH + exp * 2)
-                if acc then lf.BackgroundColor3 = acc end
-            end
-        end
-    end
-
-    -- Retrieve or create the halo container frame inside HaloGui
-    local haloContainer = HaloGui:FindFirstChild("TASFF_AmbientHalo")
-    if not haloContainer then
-        haloContainer = Instance.new("Frame")
-        haloContainer.Name = "TASFF_AmbientHalo"
-        haloContainer.BackgroundTransparency = 1
-        haloContainer.BorderSizePixel = 0
-        haloContainer.Size = UDim2.new(1, 0, 1, 0)
-        haloContainer.Position = UDim2.new(0, 0, 0, 0)
-        haloContainer.ZIndex = 1
-        haloContainer.Parent = HaloGui
-        BuildHaloLayers(haloContainer, GetThemeAccentColor())
-    else
-        -- Rebuild layers to ensure updated compact sizes and BaseTrans attributes
-        BuildHaloLayers(haloContainer, GetThemeAccentColor())
-    end
-    ResetHaloPositions()
-    UpdateHaloPosition(haloContainer, GetThemeAccentColor())
-
-    -- RunService RenderStepped chained trailing loop with subtle breathing pulsation:
-    -- Layer 1 follows Menu -> Layer 2 follows Layer 1 -> Layer 3 follows Layer 2 -> Layer 4 follows Layer 3
-    if TASFFEnv.Theme._HaloLoopConnection then
-        pcall(function() TASFFEnv.Theme._HaloLoopConnection:Disconnect() end)
-        TASFFEnv.Theme._HaloLoopConnection = nil
-    end
-
-    local RunService = game:GetService("RunService")
-    TASFFEnv.Theme._HaloLoopConnection = RunService.RenderStepped:Connect(function(dt)
-        if not HaloGui or not HaloGui.Parent then return end
-        if not haloContainer or not haloContainer.Visible then return end
-        if not mainFrame or not mainFrame.Parent or not mainFrame.Visible then return end
-        if mainFrame.AbsoluteSize.Y < 80 then return end
-
-        local targetCenter, totalW, totalH = GetMenuVisualBounds()
-
-        if #haloPositions == 0 or (haloPositions[1] and (haloPositions[1] - targetCenter).Magnitude > 400) then
-            for i = 1, 4 do haloPositions[i] = targetCenter end
-        end
-
-        local dtClamp = math.clamp(dt or 0.016, 0.001, 0.05)
-        local a1 = 1 - math.exp(-26 * dtClamp)
-        local a2 = 1 - math.exp(-18 * dtClamp)
-        local a3 = 1 - math.exp(-12 * dtClamp)
-        local a4 = 1 - math.exp(-8 * dtClamp)
-
-        -- Chained trailing: each outer layer follows the one inside it
-        haloPositions[1] = haloPositions[1]:Lerp(targetCenter, a1)
-        haloPositions[2] = haloPositions[2]:Lerp(haloPositions[1], a2)
-        haloPositions[3] = haloPositions[3]:Lerp(haloPositions[2], a3)
-        haloPositions[4] = haloPositions[4]:Lerp(haloPositions[3], a4)
-
-        -- Smooth atmospheric breathing pulsation (subtle ~2.5s cycle)
-        local pulseSin = math.sin(tick() * 2.5)
-        local pulseExp = pulseSin * 2.5
-        local pulseTrans = pulseSin * 0.035
-        local mainTrans = mainFrame.BackgroundTransparency
-
-        for _, lf in ipairs(haloContainer:GetChildren()) do
-            if lf:IsA("Frame") and lf.Name == "HaloLayer" then
-                local idx = lf:GetAttribute("LayerIndex") or 1
-                local exp = (lf:GetAttribute("HaloExpand") or 16) + pulseExp
-                local baseTrans = lf:GetAttribute("BaseTrans") or 0.8
-                local pos = haloPositions[idx] or targetCenter
-                lf.Position = UDim2.fromOffset(pos.X, pos.Y)
-                lf.Size = UDim2.fromOffset(totalW + exp * 2, totalH + exp * 2)
-                lf.BackgroundTransparency = math.clamp(baseTrans - pulseTrans + mainTrans * (1 - baseTrans), 0, 1)
-            end
-        end
-    end)
-
-    -- Store helpers on TASFFEnv for SyncRayfieldFade access
-    TASFFEnv.Theme._HaloContainer = haloContainer
-    TASFFEnv.Theme._UpdateHaloPosition = UpdateHaloPosition
-    TASFFEnv.Theme._ResetHaloPositions = ResetHaloPositions
-
-    -- 0d. Topbar Clean Accent Line & Notification Center Bell (Shifted clear of Search)
-    local topbar = mainFrame:FindFirstChild("Topbar", true)
-    if topbar then
-        -- Reset topbar to Rayfield default height once per patch — no lock (lock breaks Rayfield toggle animation)
-        topbar.Size = UDim2.new(1, 0, 0, 45)
-        local topbarLine = topbar:FindFirstChild("TopbarAccentLine")
-        if not topbarLine then
-            topbarLine = Instance.new("Frame", topbar)
-            topbarLine.Name = "TopbarAccentLine"
-            topbarLine.Size = UDim2.new(1, 0, 0, 1.5)
-            topbarLine.Position = UDim2.new(0, 0, 1, -1.5)
-            topbarLine.BorderSizePixel = 0
-            topbarLine.BackgroundColor3 = GetThemeAccentColor()
-            topbarLine.ZIndex = 35
-
-            local lineGrad = Instance.new("UIGradient", topbarLine)
-            lineGrad.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 20, 25)),
-                ColorSequenceKeypoint.new(0.5, GetThemeAccentColor()),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 20, 25))
-            })
-        else
-            topbarLine.BackgroundColor3 = GetThemeAccentColor()
-        end
-
-        -- Clean up topbar: strictly remove StatusPill and UserProfileBanner so Title has 100% unobstructed room
-        local oldPill = topbar:FindFirstChild("StatusPill")
-        if oldPill then oldPill:Destroy() end
-        local oldBanner = topbar:FindFirstChild("UserProfileBanner")
-        if oldBanner then oldBanner:Destroy() end
-
-        -- Sync notification drawer stroke to current theme accent
-        if ndStroke then ndStroke.Color = GetThemeAccentColor() end
-        -- Sync keybind map widget accent colours
-        if kbmStroke then kbmStroke.Color = GetThemeAccentColor() end
-        if kbmTitle  then kbmTitle.TextColor3  = GetThemeAccentColor() end
-        if kbmToggle then kbmToggle.TextColor3 = GetThemeAccentColor() end
-
-        local function GetSearchOffset()
-            for _, desc in ipairs(topbar:GetDescendants()) do
-                if desc:IsA("TextBox") then
-                    local p = desc.Parent
-                    if p and p:IsA("GuiObject") and p ~= topbar and p.Position.X.Offset < -40 then
-                        return p.Position.X.Offset
-                    end
-                elseif (desc:IsA("ImageLabel") or desc:IsA("ImageButton")) and desc.Name:lower():find("search") then
-                    if desc.Position.X.Offset < -40 then
-                        return desc.Position.X.Offset
-                    end
-                end
-            end
-            local s = topbar:FindFirstChild("Search", true) or topbar:FindFirstChild("SearchBtn", true)
-            if s and s:IsA("GuiObject") and s.Position.X.Offset < -40 then
-                return s.Position.X.Offset
-            end
-            return -115
-        end
-
-        local searchX = GetSearchOffset()
-        local bellX = searchX - 28
-
-        local bellBtn = topbar:FindFirstChild("NotifBellBtn")
-        if not bellBtn then
-            bellBtn = Instance.new("TextButton", topbar)
-            bellBtn.Name = "NotifBellBtn"
-            bellBtn.Size = UDim2.new(0, 22, 0, 22)
-            -- Positioned immediately beside (to the left of) the search button
-            bellBtn.AnchorPoint = Vector2.new(1, 0.5)
-            bellBtn.Position = UDim2.new(1, bellX, 0.5, 0)
-            bellBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-            bellBtn.BackgroundTransparency = 0.3
-            bellBtn.BorderSizePixel = 0
-            bellBtn.Font = Enum.Font.GothamBold
-            bellBtn.TextSize = 12
-            bellBtn.TextColor3 = Color3.fromRGB(230, 230, 240)
-            bellBtn.Text = ""
-            bellBtn.ZIndex = 40
-            Instance.new("UICorner", bellBtn).CornerRadius = UDim.new(0, 5)
-            local bellStroke = Instance.new("UIStroke", bellBtn)
-            bellStroke.Color = Color3.fromRGB(50, 50, 65)
-            bellStroke.Thickness = 1
-
-            local bellIcon = Instance.new("ImageLabel", bellBtn)
-            bellIcon.Name = "BellIcon"
-            bellIcon.Size = UDim2.new(0, 14, 0, 14)
-            bellIcon.Position = UDim2.new(0.5, -7, 0.5, -7)
-            bellIcon.BackgroundTransparency = 1
-            bellIcon.Image = "rbxassetid://6031075938"
-            bellIcon.ImageColor3 = Color3.fromRGB(220, 220, 230)
-            bellIcon.ZIndex = 41
-
-            local bellDot = Instance.new("Frame", bellBtn)
-            bellDot.Name = "BellDot"
-            bellDot.Size = UDim2.new(0, 6, 0, 6)
-            bellDot.Position = UDim2.new(1, -3, 0, -3)
-            bellDot.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-            bellDot.BorderSizePixel = 0
-            bellDot.Visible = false
-            bellDot.ZIndex = 42
-            Instance.new("UICorner", bellDot).CornerRadius = UDim.new(1, 0)
-
-            bellBtn.MouseEnter:Connect(function()
-                bellIcon.ImageColor3 = GetThemeAccentColor()
-            end)
-            bellBtn.MouseLeave:Connect(function()
-                bellIcon.ImageColor3 = Color3.fromRGB(220, 220, 230)
-            end)
-
-            bellBtn.MouseButton1Click:Connect(function()
-                bellDot.Visible = false
-                if TASFFEnv.Theme.ToggleNotificationDrawer then
-                    TASFFEnv.Theme.ToggleNotificationDrawer()
-                end
-            end)
-        else
-            bellBtn.AnchorPoint = Vector2.new(1, 0.5)
-            bellBtn.Position = UDim2.new(1, bellX, 0.5, 0)
-        end
-    end
-
-    -- 0e. Global Search Overlay — intercepts Rayfield's topbar TextBox and
-    --     shows results from EVERY tab, not just the currently active one.
-    if topbar and not mainFrame:FindFirstChild("GlobalSearchHooked") then
-        Instance.new("BoolValue", mainFrame).Name = "GlobalSearchHooked"
-        -- Find the first TextBox inside the topbar (Rayfield's search input)
-        local function FindSearchBox()
-            for _, c in ipairs(topbar:GetDescendants()) do
-                if c:IsA("TextBox") then return c end
-            end
-            return nil
-        end
-
-        -- Build the results overlay (hidden by default)
-        local searchOverlay = mainFrame:FindFirstChild("TASFF_SearchOverlay")
-        if not searchOverlay then
-            searchOverlay = Instance.new("Frame", mainFrame)
-            searchOverlay.Name = "TASFF_SearchOverlay"
-            searchOverlay.Size = UDim2.new(1, -20, 0, 300)
-            searchOverlay.Position = UDim2.new(0, 10, 0, 50)
-            searchOverlay.BackgroundColor3 = Color3.fromRGB(12, 13, 20)
-            searchOverlay.BackgroundTransparency = 0.05
-            searchOverlay.BorderSizePixel = 0
-            searchOverlay.ZIndex = 200
-            searchOverlay.Visible = false
-            Instance.new("UICorner", searchOverlay).CornerRadius = UDim.new(0, 8)
-            local soStroke = Instance.new("UIStroke", searchOverlay)
-            soStroke.Color = GetThemeAccentColor()
-            soStroke.Thickness = 1
-            soStroke.Transparency = 0.3
-
-            local soList = Instance.new("ScrollingFrame", searchOverlay)
-            soList.Name = "ResultsList"
-            soList.Size = UDim2.new(1, -8, 1, -8)
-            soList.Position = UDim2.new(0, 4, 0, 4)
-            soList.BackgroundTransparency = 1
-            soList.BorderSizePixel = 0
-            soList.ScrollBarThickness = 3
-            soList.ZIndex = 201
-            Instance.new("UIListLayout", soList).Padding = UDim.new(0, 3)
-        end
-
-        -- Collect all element title labels across the entire main frame (all tabs)
-        local function CollectAllElements()
-            local results = {}
-            for _, desc in ipairs(mainFrame:GetDescendants()) do
-                if desc:IsA("TextLabel") and desc.Name == "Title" and desc.Text ~= "" then
-                    local card = desc.Parent
-                    -- Identify which tab this card belongs to by walking up to find the tab container
-                    if card and card:IsA("GuiObject") then
-                        table.insert(results, {label = desc, card = card})
-                    end
-                end
-            end
-            return results
-        end
-
-        local function RunGlobalSearch(query)
-            local soList = searchOverlay:FindFirstChild("ResultsList")
-            if not soList then return end
-            -- Clear previous results
-            for _, c in ipairs(soList:GetChildren()) do
-                if not c:IsA("UIListLayout") then c:Destroy() end
-            end
-            if query == "" then
-                searchOverlay.Visible = false
-                return
-            end
-            query = query:lower()
-            local allElems = CollectAllElements()
-            local matchCount = 0
-            for _, entry in ipairs(allElems) do
-                if entry.label.Text:lower():find(query, 1, true) then
-                    local row = Instance.new("TextButton", soList)
-                    row.Size = UDim2.new(1, 0, 0, 28)
-                    row.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
-                    row.BackgroundTransparency = 0.3
-                    row.BorderSizePixel = 0
-                    row.Font = Enum.Font.GothamBold
-                    row.TextSize = 11
-                    row.TextColor3 = GetThemeAccentColor()
-                    row.Text = "  " .. entry.label.Text
-                    row.TextXAlignment = Enum.TextXAlignment.Left
-                    row.ZIndex = 202
-                    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
-                    -- Click: scroll the card into view by setting its ScrollingFrame's CanvasPosition
-                    local capturedCard = entry.card
-                    row.MouseButton1Click:Connect(function()
-                        searchOverlay.Visible = false
-                        -- Scroll to the card
-                        pcall(function()
-                            local sf = mainFrame:FindFirstChildOfClass("ScrollingFrame", true)
-                            if sf then
-                                sf.CanvasPosition = Vector2.new(0, math.max(0, capturedCard.AbsolutePosition.Y - sf.AbsolutePosition.Y - 20))
-                            end
-                        end)
-                        -- Brief highlight flash on the card stroke
-                        local cs = capturedCard:FindFirstChildOfClass("UIStroke")
-                        if cs then
-                            local oc = cs.Color
-                            cs.Color = Color3.fromRGB(255, 255, 100)
-                            task.delay(1, function() cs.Color = oc end)
-                        end
-                    end)
-                    matchCount = matchCount + 1
-                    if matchCount >= 20 then break end  -- cap at 20 results
-                end
-            end
-            if matchCount == 0 then
-                local noRes = Instance.new("TextLabel", soList)
-                noRes.Size = UDim2.new(1, 0, 0, 28)
-                noRes.BackgroundTransparency = 1
-                noRes.Font = Enum.Font.Gotham
-                noRes.TextSize = 11
-                noRes.TextColor3 = Color3.fromRGB(140, 145, 160)
-                noRes.Text = "  No results found."
-                noRes.TextXAlignment = Enum.TextXAlignment.Left
-                noRes.ZIndex = 202
-            end
-            -- Resize overlay to fit results (capped at 300 px)
-            local listLayout = soList:FindFirstChildOfClass("UIListLayout")
-            local contentH = listLayout and listLayout.AbsoluteContentSize.Y or (matchCount * 31)
-            soList.CanvasSize = UDim2.new(0, 0, 0, contentH)
-            searchOverlay.Size = UDim2.new(1, -20, 0, math.clamp(contentH + 16, 40, 300))
-            searchOverlay.Visible = true
-        end
-
-        -- Hook into the TextBox when it appears
-        task.spawn(function()
-            local searchBox = nil
-            for _ = 1, 60 do   -- wait up to 3 s for Rayfield to build the topbar
-                searchBox = FindSearchBox()
-                if searchBox then break end
-                task.wait(0.05)
-            end
-            if searchBox and not searchBox:FindFirstChild("GlobalSearchHook") then
-                Instance.new("BoolValue", searchBox).Name = "GlobalSearchHook"
-                searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-                    RunGlobalSearch(searchBox.Text or "")
-                end)
-                searchBox.FocusLost:Connect(function()
-                    task.delay(0.15, function()
-                        searchOverlay.Visible = false
-                    end)
-                end)
-            end
-        end)
-    end
-
-    -- Operator Profile & Live System Monitor: Attached Bottom Bar (parented directly to mainFrame with zero drag lag)
-    mainFrame.ClipsDescendants = false
-    if not mainFrame:FindFirstChild("NoClipEnforcer") then
-        local nc = Instance.new("BoolValue", mainFrame)
-        nc.Name = "NoClipEnforcer"
-        mainFrame:GetPropertyChangedSignal("ClipsDescendants"):Connect(function()
-            if mainFrame.ClipsDescendants then
-                mainFrame.ClipsDescendants = false
-            end
-        end)
-    end
-
-    local parentGui = mainFrame.Parent or (FindRayfieldGui and FindRayfieldGui())
-    if parentGui then
-        local oldParentBB = parentGui:FindFirstChild("TASFF_BottomBar")
-        if oldParentBB then oldParentBB:Destroy() end
-    end
-    if OverlayGui then
-        local oldOverlayBB = OverlayGui:FindFirstChild("TASFF_BottomBar")
-        if oldOverlayBB then oldOverlayBB:Destroy() end
-    end
-    local oldDock = mainFrame:FindFirstChild("BottomDock")
-    if oldDock then oldDock:Destroy() end
-
-    local bottomBar = mainFrame:FindFirstChild("TASFF_BottomBar")
-    if not bottomBar then
-        bottomBar = Instance.new("Frame", mainFrame)
-        bottomBar.Name = "TASFF_BottomBar"
-        bottomBar.AnchorPoint = Vector2.new(0, 0)
-        bottomBar.Position = UDim2.new(0, 0, 1, 4)
-        bottomBar.Size = UDim2.new(1, 0, 0, 26)
-        bottomBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)   -- fully opaque dark so text is readable
-        bottomBar.BackgroundTransparency = 0
-        bottomBar.BorderSizePixel = 0
-        bottomBar.ZIndex = math.max(10, (mainFrame.ZIndex or 1) + 5)
-        Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 6)
-        local barStroke = Instance.new("UIStroke", bottomBar)
-        barStroke.Color = GetThemeAccentColor()
-        barStroke.Thickness = 1.5
-        barStroke.Transparency = 0.25
-
-        -- Carbon texture on bottom bar (procedural diagonal stripe — no rbxassetid)
-        local barCarbon = Instance.new("Frame", bottomBar)
-        barCarbon.Name = "BarCarbon"
-        barCarbon.Size = UDim2.new(1, 0, 1, 0)
-        barCarbon.BackgroundColor3 = Color3.fromRGB(28, 30, 42)
-        barCarbon.BackgroundTransparency = 0.82
-        barCarbon.BorderSizePixel = 0
-        barCarbon.ZIndex = bottomBar.ZIndex + 1
-        Instance.new("UICorner", barCarbon).CornerRadius = UDim.new(0, 6)
-        local barCarbGrad = Instance.new("UIGradient", barCarbon)
-        barCarbGrad.Rotation = 45
-        barCarbGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,    Color3.fromRGB(150, 155, 175)),
-            ColorSequenceKeypoint.new(0.25, Color3.fromRGB(200, 205, 225)),
-            ColorSequenceKeypoint.new(0.5,  Color3.fromRGB(150, 155, 175)),
-            ColorSequenceKeypoint.new(0.75, Color3.fromRGB(200, 205, 225)),
-            ColorSequenceKeypoint.new(1,    Color3.fromRGB(150, 155, 175)),
-        })
-        barCarbGrad.Transparency = NumberSequence.new(0)
-
-        -- Accent separator line at top of bar (mirrors topbar bottom line)
-        local barLine = Instance.new("Frame", bottomBar)
-        barLine.Name = "BarAccentLine"
-        barLine.Size = UDim2.new(1, 0, 0, 1.5)
-        barLine.Position = UDim2.new(0, 0, 0, 0)
-        barLine.BorderSizePixel = 0
-        barLine.BackgroundColor3 = GetThemeAccentColor()
-        barLine.ZIndex = bottomBar.ZIndex + 2
-        local barLineGrad = Instance.new("UIGradient", barLine)
-        barLineGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,   Color3.fromRGB(10, 10, 15)),
-            ColorSequenceKeypoint.new(0.5, GetThemeAccentColor()),
-            ColorSequenceKeypoint.new(1,   Color3.fromRGB(10, 10, 15)),
-        })
-
-        -- Left: Avatar + Player Name + Executor
-        local lp = LocalPlayer or Players.LocalPlayer or (game:GetService("Players").LocalPlayer)
-        local opAvatar = Instance.new("ImageLabel", bottomBar)
-        opAvatar.Name = "OpAvatar"
-        opAvatar.Size = UDim2.new(0, 20, 0, 20)
-        opAvatar.Position = UDim2.new(0, 6, 0.5, -10)
-        opAvatar.BackgroundTransparency = 1
-        local uId = lp and lp.UserId or 0
-        opAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(uId) .. "&w=48&h=48"
-        opAvatar.ZIndex = bottomBar.ZIndex + 3
-        Instance.new("UICorner", opAvatar).CornerRadius = UDim.new(1, 0)
-
-        local opName = Instance.new("TextLabel", bottomBar)
-        opName.Name = "OpName"
-        opName.Size = UDim2.new(0, 240, 1, 0)
-        opName.Position = UDim2.new(0, 32, 0, 0)
-        opName.BackgroundTransparency = 1
-        opName.Font = Enum.Font.GothamBold
-        opName.TextSize = 10
-        opName.TextColor3 = Color3.fromRGB(235, 240, 255)  -- bright white-blue for readability
-        opName.TextTransparency = 0
-        opName.TextXAlignment = Enum.TextXAlignment.Left
-        opName.TextTruncate = Enum.TextTruncate.AtEnd
-        opName.ZIndex = bottomBar.ZIndex + 3
-        local exec = (identifyexecutor and identifyexecutor()) or "Client"
-        local pName = lp and (lp.DisplayName or lp.Name) or "Operator"
-        opName.Text = pName .. "  [" .. tostring(exec) .. "]"
-
-        -- Right: FPS / Ping monitor
-        local statContainer = Instance.new("Frame", bottomBar)
-        statContainer.Name = "StatContainer"
-        statContainer.Size = UDim2.new(0, 130, 1, 0)
-        statContainer.Position = UDim2.new(1, -225, 0, 0)
-        statContainer.BackgroundTransparency = 1
-        statContainer.ZIndex = bottomBar.ZIndex + 3
-
-        local led = Instance.new("Frame", statContainer)
-        led.Name = "LED"
-        led.Size = UDim2.new(0, 7, 0, 7)
-        led.Position = UDim2.new(0, 4, 0.5, -3)
-        led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
-        led.BorderSizePixel = 0
-        led.ZIndex = bottomBar.ZIndex + 4
-        Instance.new("UICorner", led).CornerRadius = UDim.new(1, 0)
-
-        local sText = Instance.new("TextLabel", statContainer)
-        sText.Name = "StatusText"
-        sText.Size = UDim2.new(1, -16, 1, 0)
-        sText.Position = UDim2.new(0, 16, 0, 0)
-        sText.BackgroundTransparency = 1
-        sText.Font = Enum.Font.GothamBold
-        sText.TextSize = 10
-        sText.TextColor3 = Color3.fromRGB(220, 240, 230)   -- bright readable green-tinted white
-        sText.TextXAlignment = Enum.TextXAlignment.Left
-        sText.Text = "60 FPS  |  0ms"
-        sText.ZIndex = bottomBar.ZIndex + 4
-
-        -- Keybind Map toggle button (bottom bar, right of stats)
-        local kbmBarBtn = Instance.new("TextButton", bottomBar)
-        kbmBarBtn.Name = "KBMBarBtn"
-        kbmBarBtn.Size = UDim2.new(0, 68, 0, 18)
-        kbmBarBtn.AnchorPoint = Vector2.new(1, 0.5)
-        kbmBarBtn.Position = UDim2.new(1, -28, 0.5, 0)
-        kbmBarBtn.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
-        kbmBarBtn.BackgroundTransparency = 0.1
-        kbmBarBtn.BorderSizePixel = 0
-        kbmBarBtn.Font = Enum.Font.GothamBold
-        kbmBarBtn.TextSize = 10
-        kbmBarBtn.TextColor3 = GetThemeAccentColor()
-        kbmBarBtn.Text = "⌨ Binds"
-        kbmBarBtn.ZIndex = bottomBar.ZIndex + 5
-        Instance.new("UICorner", kbmBarBtn).CornerRadius = UDim.new(0, 4)
-        local kbmBtnStroke = Instance.new("UIStroke", kbmBarBtn)
-        kbmBtnStroke.Color = GetThemeAccentColor()
-        kbmBtnStroke.Thickness = 1
-        kbmBtnStroke.Transparency = 0.5
-        kbmBarBtn.MouseButton1Click:Connect(function()
-            local kbm = TASFFEnv.Theme.KeybindMap
-            if kbm then
-                kbm.Visible = not kbm.Visible
-                if kbm.Visible and TASFFEnv.Theme.SetKBMExpanded then
-                    TASFFEnv.Theme.SetKBMExpanded(true)
-                end
-                PlayUISound("click")
-            end
-        end)
-        -- Hover tooltip describing the keybind map
-        kbmBarBtn.MouseEnter:Connect(function()
-            ShowTooltip("Keybind Map",
-                "Toggle the on-screen keybind reference panel.\nLists every TASFF hotkey and its function.",
-                UserInputService:GetMouseLocation())
-        end)
-        kbmBarBtn.MouseLeave:Connect(function() HideTooltip() end)
-
-        -- Resize grip at bottom-right corner of the bottom bar
-        local resizeHandle = Instance.new("Frame", bottomBar)
-        resizeHandle.Name = "ResizeHandle"
-        resizeHandle.Size = UDim2.new(0, 22, 0, 22)
-        resizeHandle.Position = UDim2.new(1, -22, 0, 0)
-        resizeHandle.BackgroundTransparency = 1
-        resizeHandle.BorderSizePixel = 0
-        resizeHandle.ZIndex = bottomBar.ZIndex + 5
-
-        local grip1 = Instance.new("Frame", resizeHandle)
-        grip1.Name = "Grip1"
-        grip1.Size = UDim2.new(0, 12, 0, 2)
-        grip1.Position = UDim2.new(0, 5, 0, 12)
-        grip1.Rotation = -45
-        grip1.BackgroundColor3 = Color3.fromRGB(160, 160, 175)
-        grip1.BorderSizePixel = 0
-        grip1.ZIndex = bottomBar.ZIndex + 6
-
-        local grip2 = Instance.new("Frame", resizeHandle)
-        grip2.Name = "Grip2"
-        grip2.Size = UDim2.new(0, 7, 0, 2)
-        grip2.Position = UDim2.new(0, 10, 0, 16)
-        grip2.Rotation = -45
-        grip2.BackgroundColor3 = Color3.fromRGB(160, 160, 175)
-        grip2.BorderSizePixel = 0
-        grip2.ZIndex = bottomBar.ZIndex + 6
-
-        local hitArea = Instance.new("TextButton", resizeHandle)
-        hitArea.Name = "HitArea"
-        hitArea.Size = UDim2.new(1, 0, 1, 0)
-        hitArea.BackgroundTransparency = 1
-        hitArea.Text = ""
-        hitArea.ZIndex = bottomBar.ZIndex + 7
-
-        hitArea.MouseEnter:Connect(function()
-            local accent = GetThemeAccentColor()
-            grip1.BackgroundColor3 = accent
-            grip2.BackgroundColor3 = accent
-        end)
-        hitArea.MouseLeave:Connect(function()
-            grip1.BackgroundColor3 = Color3.fromRGB(160, 160, 175)
-            grip2.BackgroundColor3 = Color3.fromRGB(160, 160, 175)
-        end)
-
-        local _resizing = false
-        local _rStart, _rSizeStart
-        hitArea.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                _resizing = true
-                _rStart = input.Position
-                _rSizeStart = mainFrame.AbsoluteSize
-            end
-        end)
-        hitArea.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                _resizing = false
-            end
-        end)
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                _resizing = false
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(input)
-            if _resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                local delta = input.Position - _rStart
-                local newW = math.clamp(_rSizeStart.X + delta.X, 480, 1000)
-                local newH = math.clamp(_rSizeStart.Y + delta.Y, 340, 850)
-                mainFrame.Size = UDim2.new(0, newW, 0, newH)
-            end
-        end)
-
-        -- Live stats loop
-        task.spawn(function()
-            while bottomBar and bottomBar.Parent do
-                local fps = math.floor(1 / math.max(0.001, RunService.RenderStepped:Wait()))
-                if sText and sText.Parent then
-                    local ping = 0
-                    pcall(function()
-                        ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
-                    end)
-                    sText.Text = tostring(math.clamp(fps, 0, 999)) .. " FPS  |  " .. tostring(ping) .. "ms"
-                    if fps >= 50 then
-                        led.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
-                    elseif fps >= 30 then
-                        led.BackgroundColor3 = Color3.fromRGB(255, 185, 50)
-                    else
-                        led.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-                    end
-                end
-                task.wait(0.5)
-            end
-        end)
-    end
-
-    if bottomBar then
-        if bottomBar.Parent ~= mainFrame then
-            bottomBar.Parent = mainFrame
-        end
-        bottomBar.AnchorPoint = Vector2.new(0, 0)
-        bottomBar.Position = UDim2.new(0, 0, 1, 4)
-        bottomBar.Size = UDim2.new(1, 0, 0, 26)
-        bottomBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)
-        bottomBar.BackgroundTransparency = 0
-        bottomBar.Visible = true
-        bottomBar.ZIndex = math.max(10, (mainFrame.ZIndex or 1) + 5)
-        local barStroke = bottomBar:FindFirstChildOfClass("UIStroke")
-        if barStroke then
-            barStroke.Color = GetThemeAccentColor()
-            barStroke.Thickness = 1.5
-            barStroke.Transparency = 0.25
-            barStroke.Enabled = true
-        end
-        local barLine = bottomBar:FindFirstChild("BarAccentLine")
-        if barLine then
-            barLine.BackgroundColor3 = GetThemeAccentColor()
-            barLine.BackgroundTransparency = 0
-        end
-        local kbmBtn = bottomBar:FindFirstChild("KBMBarBtn")
-        if kbmBtn then
-            kbmBtn.TextColor3 = GetThemeAccentColor()
-            local ks = kbmBtn:FindFirstChildOfClass("UIStroke")
-            if ks then ks.Color = GetThemeAccentColor() end
-        end
-    end
-
-    if S.AdvancedThemeLayoutPatchEnabled ~= true then
-        return true
-    end
-
-    -- 1. Window Resize Handle is now on TASFF_BottomBar (external). Remove any legacy one inside mainFrame.
-    local legacyResize = mainFrame:FindFirstChild("ResizeHandle")
-    if legacyResize then legacyResize:Destroy() end
-
-    -- 2. Inject Tab Notification Badges, Glowing Active Indicator & Tab Feedback
-    -- Elevate tab bar & buttons to ZIndex 10-12 so carbon overlay (ZIndex 1) is strictly behind them
-    local tabList = mainFrame:FindFirstChild("TabList", true)
-    local tabContainer = tabList and tabList.Parent or mainFrame
-    if tabContainer and tabContainer ~= mainFrame then
-        tabContainer.ZIndex = 10
-    end
-    local legacyGlow = tabContainer:FindFirstChild("ActiveTabGlowBar") or (tabList and tabList:FindFirstChild("ActiveTabGlowBar"))
-    if legacyGlow then legacyGlow:Destroy() end
-
-    if tabList then
-        tabList.ZIndex = 10
-        local elementsFrame = mainFrame:FindFirstChild("Elements", true)
-        local pageLayout = elementsFrame and elementsFrame:FindFirstChildOfClass("UIPageLayout")
-
-        local function UpdateTabVisuals(explicitActiveName)
-            if not tabList then return end
-            local curActive = explicitActiveName or (pageLayout and pageLayout.CurrentPage and pageLayout.CurrentPage.Name)
-            if not curActive and elementsFrame then
-                for _, pg in ipairs(elementsFrame:GetChildren()) do
-                    if pg:IsA("ScrollingFrame") and pg.Visible then
-                        curActive = pg.Name
-                        break
-                    end
-                end
-            end
-            local accent = GetThemeAccentColor()
-            for _, tabBtn in ipairs(tabList:GetChildren()) do
-                if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" and tabBtn.Name ~= "Placeholder" then
-                    local isActive = (curActive and tabBtn.Name == curActive)
-                    local st = tabBtn:FindFirstChildOfClass("UIStroke") or tabBtn:FindFirstChild("UIStroke")
-                    local title = tabBtn:FindFirstChild("Title") or tabBtn:FindFirstChildOfClass("TextLabel")
-                    local img = tabBtn:FindFirstChild("Image") or tabBtn:FindFirstChildOfClass("ImageLabel")
-
-                    if isActive then
-                        tabBtn.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
-                        tabBtn.BackgroundTransparency = 0.1
-                        if st then
-                            st.Color = accent
-                            st.Transparency = 0
-                            st.Thickness = 1.5
-                        end
-                        if title then
-                            title.TextColor3 = Color3.fromRGB(255, 255, 255)
-                            title.TextTransparency = 0
-                        end
-                        if img then
-                            img.ImageColor3 = Color3.fromRGB(255, 255, 255)
-                            img.ImageTransparency = 0
-                        end
-                    else
-                        tabBtn.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
-                        tabBtn.BackgroundTransparency = 0.5
-                        if st then
-                            st.Color = Color3.fromRGB(50, 50, 62)
-                            st.Transparency = 0.65
-                            st.Thickness = 1
-                        end
-                        if title then
-                            title.TextColor3 = Color3.fromRGB(225, 225, 235)
-                            title.TextTransparency = 0
-                        end
-                        if img then
-                            img.ImageColor3 = Color3.fromRGB(215, 215, 225)
-                            img.ImageTransparency = 0
-                        end
-                    end
-                end
-            end
-        end
-        TASFFEnv.Theme.UpdateTabVisuals = UpdateTabVisuals
-
-        for _, tabBtn in ipairs(tabList:GetChildren()) do
-            if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" then
-                tabBtn.ZIndex = 11
-                local tName = tabBtn.Name
-
-                if not tabBtn:FindFirstChild("BadgeFrame") then
-                    local bFrame = Instance.new("Frame")
-                    bFrame.Name = "BadgeFrame"
-                    bFrame.Size = UDim2.new(0, 14, 0, 14)
-                    bFrame.AnchorPoint = Vector2.new(1, 0)
-                    bFrame.Position = UDim2.new(1, -2, 0, 2)
-                    bFrame.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-                    bFrame.BorderSizePixel = 0
-                    bFrame.Visible = false
-                    bFrame.ZIndex = 25
-                    bFrame.Parent = tabBtn
-
-                    Instance.new("UICorner", bFrame).CornerRadius = UDim.new(1, 0)
-                    local bLabel = Instance.new("TextLabel", bFrame)
-                    bLabel.Size = UDim2.new(1, 0, 1, 0)
-                    bLabel.BackgroundTransparency = 1
-                    bLabel.Font = Enum.Font.GothamBold
-                    bLabel.TextSize = 8
-                    bLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    bLabel.Text = "0"
-                    _tabBadges[tName] = bLabel
-                end
-
-                local interact = tabBtn:FindFirstChild("Interact") or tabBtn
-                local btn = interact:IsA("GuiButton") and interact or tabBtn:FindFirstChildOfClass("GuiButton") or tabBtn
-                if not tabBtn:GetAttribute("TASFF_TabHooked") then
-                    tabBtn:SetAttribute("TASFF_TabHooked", true)
-                    local function onActivated()
-                        local bFrame = tabBtn:FindFirstChild("BadgeFrame")
-                        if bFrame then bFrame.Visible = false end
-                        PlayUISound("tab")
-                        UpdateTabVisuals(tabBtn.Name)
-                        task.delay(0.05, function() UpdateTabVisuals(tabBtn.Name) end)
-                        task.delay(0.35, function() UpdateTabVisuals(tabBtn.Name) end)
-                        task.delay(0.72, function() UpdateTabVisuals(tabBtn.Name) end)
-                    end
-                    if btn:IsA("GuiButton") then
-                        btn.MouseButton1Click:Connect(onActivated)
-                    end
-                    tabBtn.InputBegan:Connect(function(inp)
-                        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-                            onActivated()
-                        end
-                    end)
-                end
-            end
-        end
-
-        if pageLayout and not pageLayout:GetAttribute("TASFF_PageHooked") then
-            pageLayout:SetAttribute("TASFF_PageHooked", true)
-            pageLayout:GetPropertyChangedSignal("CurrentPage"):Connect(function()
-                local cp = pageLayout.CurrentPage
-                if cp then
-                    UpdateTabVisuals(cp.Name)
-                end
-            end)
-        end
-
-        UpdateTabVisuals()
-    end
-
-    -- Centralized Full Fading & Window State Synchronizer
-    local function SyncRayfieldFade()
-        local topTrans = (topbar and topbar.BackgroundTransparency) or mainFrame.BackgroundTransparency
-        local mainTrans = mainFrame.BackgroundTransparency
-        local isVis = ((not rGui or rGui.Enabled) and mainFrame.Visible)
-        local isExpanded = isVis and (mainFrame.AbsoluteSize.Y >= 100 or mainFrame.Size.Y.Offset >= 100)
-        local isClosing = (not isVis) or (mainFrame.AbsoluteSize.Y > 0 and mainFrame.AbsoluteSize.Y < 80 and mainFrame.Size.Y.Offset < 80)
-
-        -- CyberStroke
-        local cStroke = mainFrame:FindFirstChild("CyberStroke")
-        if cStroke then
-            cStroke.Transparency = math.clamp(mainTrans, 0, 1)
-            cStroke.Enabled = (isVis and isExpanded and not isClosing)
-        end
-
-        -- Topbar Accent Line sync (no orphan lines when minimized or closed)
-        local topbarLine = topbar and topbar:FindFirstChild("TopbarAccentLine")
-        if topbarLine then
-            topbarLine.Visible = (isVis and isExpanded and not isClosing)
-            topbarLine.BackgroundTransparency = mainTrans
-        end
-
-        -- Ambient Halo Sync — pure Frame layers in HaloGui (behind all Rayfield UI via DisplayOrder -100)
-        local haloContainer = TASFFEnv.Theme._HaloContainer or (HaloGui and HaloGui:FindFirstChild("TASFF_AmbientHalo"))
-        if haloContainer then
-            local shouldShow = (isVis and isExpanded and not isClosing)
-            haloContainer.Visible = shouldShow
-            if shouldShow then
-                local acc = GetThemeAccentColor()
-                -- When reopening or expanding, re-align trailing positions to menu center
-                if not haloContainer.Visible or mainTrans < 0.05 then
-                    local resetFn = TASFFEnv.Theme._ResetHaloPositions
-                    if resetFn then resetFn() end
-                end
-                -- Fade layers with mainTrans without permanently overwriting BaseTrans
-                for _, lf in ipairs(haloContainer:GetChildren()) do
-                    if lf:IsA("Frame") and lf.Name == "HaloLayer" then
-                        local baseTrans = lf:GetAttribute("BaseTrans") or 0.8
-                        lf.BackgroundTransparency = math.clamp(baseTrans + mainTrans * (1 - baseTrans), 0, 1)
-                        lf.BackgroundColor3 = acc
-                    end
-                end
-                local updateFn = TASFFEnv.Theme._UpdateHaloPosition
-                if updateFn then updateFn(haloContainer, acc) end
-            end
-        end
-
-        -- Keep native shadow disabled so it NEVER obstructs text or controls
-        local nativeShadow = mainFrame:FindFirstChild("Shadow")
-        if nativeShadow then
-            nativeShadow.Visible = false
-        end
-
-        -- Clean up any residual scanline frame
-        local mMesh = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
-        if mMesh then mMesh:Destroy() end
-
-        -- Sync carbon weave visibility and fade with menu
-        local cBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
-        if cBg then
-            cBg.Visible = (isVis and isExpanded and not isClosing)
-            local w1 = cBg:FindFirstChild("Weave1")
-            local w2 = cBg:FindFirstChild("Weave2")
-            if w1 then w1.BackgroundTransparency = math.clamp(0.70 + mainTrans * 0.30, 0, 1) end
-            if w2 then w2.BackgroundTransparency = math.clamp(0.75 + mainTrans * 0.25, 0, 1) end
-        end
-
-        -- Attached TASFF_BottomBar sync (parented directly to mainFrame with zero drag lag)
-        local bBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
-        if bBar then
-            local shouldBeVis = (isVis and isExpanded and not isClosing)
-            bBar.Visible = shouldBeVis
-            if shouldBeVis then
-                if bBar.Parent ~= mainFrame then
-                    bBar.Parent = mainFrame
-                end
-                bBar.AnchorPoint = Vector2.new(0, 0)
-                bBar.Position = UDim2.new(0, 0, 1, 4)
-                bBar.Size = UDim2.new(1, 0, 0, 26)
-                bBar.BackgroundColor3 = Color3.fromRGB(8, 8, 14)
-                bBar.BackgroundTransparency = 0
-                bBar.ZIndex = math.max(10, (mainFrame.ZIndex or 1) + 5)
-                local bStroke2 = bBar:FindFirstChildOfClass("UIStroke")
-                if bStroke2 then
-                    bStroke2.Color = GetThemeAccentColor()
-                    bStroke2.Transparency = 0.25
-                    bStroke2.Enabled = true
-                end
-                local barLine2 = bBar:FindFirstChild("BarAccentLine")
-                if barLine2 then
-                    barLine2.BackgroundColor3 = GetThemeAccentColor()
-                    barLine2.BackgroundTransparency = 0
-                end
-                local kbmBtn2 = bBar:FindFirstChild("KBMBarBtn")
-                if kbmBtn2 then
-                    kbmBtn2.TextColor3 = GetThemeAccentColor()
-                    local ks2 = kbmBtn2:FindFirstChildOfClass("UIStroke")
-                    if ks2 then ks2.Color = GetThemeAccentColor() end
-                end
-                local opA = bBar:FindFirstChild("OpAvatar")
-                if opA then opA.ImageTransparency = 0 end
-                local opN = bBar:FindFirstChild("OpName")
-                if opN then opN.TextTransparency = 0 end
-                local sCont = bBar:FindFirstChild("StatContainer")
-                if sCont then
-                    local led = sCont:FindFirstChild("LED")
-                    if led then led.BackgroundTransparency = 0 end
-                    local st = sCont:FindFirstChild("StatusText")
-                    if st then st.TextTransparency = 0 end
-                end
-                local rh = bBar:FindFirstChild("ResizeHandle")
-                if rh then
-                    rh.Visible = true
-                    local g1 = rh:FindFirstChild("Grip1")
-                    local g2 = rh:FindFirstChild("Grip2")
-                    if g1 then g1.BackgroundTransparency = 0 end
-                    if g2 then g2.BackgroundTransparency = 0 end
-                end
-            end
-        end
-
-        -- Hide injected section decors during close so no orphaned lines/buttons remain visible
-        for _, desc in ipairs(mainFrame:GetDescendants()) do
-            if desc.Name == "SectionLeftBar" or desc.Name == "CollapseToggle" or desc.Name == "CollapsedBar" then
-                if desc:IsA("GuiObject") then
-                    if isClosing then
-                        desc.Visible = false
-                    elseif desc.Name == "SectionLeftBar" or desc.Name == "CollapseToggle" then
-                        desc.Visible = true
-                    end
-                end
-            end
-        end
-
-        -- Topbar Bell Button
-        local bBtn = topbar and topbar:FindFirstChild("NotifBellBtn")
-        if bBtn then
-            bBtn.Visible = (isVis and not isClosing)
-            bBtn.BackgroundTransparency = math.clamp(0.3 + topTrans * 0.7, 0, 1)
-            local bStroke = bBtn:FindFirstChildOfClass("UIStroke")
-            if bStroke then bStroke.Transparency = topTrans end
-            local bIcon = bBtn:FindFirstChild("BellIcon")
-            if bIcon then bIcon.ImageTransparency = topTrans end
-            local bDot = bBtn:FindFirstChild("BellDot")
-            if bDot then bDot.BackgroundTransparency = topTrans end
-        end
-
-        -- Keep NotificationDrawer attached to the right of the menu when visible
-        if isVis and isExpanded and not isClosing and NotificationDrawer and NotificationDrawer.Visible then
-            UpdateDrawerPosition()
-        end
-
-        -- Only menu-bound tooltips hide with the window. The notification
-        -- history drawer is a detached overlay and must stay visible.
-        if not isVis or not isExpanded or isClosing then
-            if TooltipFrame then TooltipFrame.Visible = false end
-        end
-    end
-
-    if not mainFrame:FindFirstChild("MasterFadeSyncHooked") then
-        local fHook = Instance.new("BoolValue", mainFrame)
-        fHook.Name = "MasterFadeSyncHooked"
-        mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
-        mainFrame:GetPropertyChangedSignal("Position"):Connect(function()
-            -- Re-position halo layers on drag (uses SyncRayfieldFade which calls UpdateHaloPosition)
-            local haloContainer = TASFFEnv.Theme._HaloContainer or (HaloGui and HaloGui:FindFirstChild("TASFF_AmbientHalo"))
-            if haloContainer and haloContainer.Visible then
-                local updateFn = TASFFEnv.Theme._UpdateHaloPosition
-                if updateFn then updateFn(haloContainer, GetThemeAccentColor()) end
-            end
-            if NotificationDrawer and NotificationDrawer.Visible then UpdateDrawerPosition() end
-        end)
-        mainFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(SyncRayfieldFade)
-        mainFrame:GetPropertyChangedSignal("Size"):Connect(SyncRayfieldFade)
-        if rGui then
-            rGui:GetPropertyChangedSignal("Enabled"):Connect(SyncRayfieldFade)
-        end
-    end
-    local oldBBSync = mainFrame:FindFirstChild("BottomBarSteppedHook")
-    if oldBBSync then oldBBSync:Destroy() end
-    SyncRayfieldFade()
-
-    -- 3. Walk Elements and inject Section collapse, Stepper Buttons, Keycaps, Definition Badges, and Live Dots
-    local hotkeyNames = {
-        ["Master Switch"] = "RightShift",
-        ["Quick Preset Switch"] = "J",
-        ["Rapid Mode Cycle"] = "P",
-        ["Click to Mark"] = "T",
-        ["Auto ADS"] = "RMB",
-    }
-
-    local hookedTooltips = 0
-    for _, desc in ipairs(mainFrame:GetDescendants()) do
-        -- STRICT: Skip Rayfield internal templates entirely
-        if desc.Name == "Template" or desc:FindFirstAncestor("Template") then
-            -- Skip uninstantiated template objects
-        else
-        -- Theme signature colors in global preset dropdown list
-        local function DecorateThemeOption(opt)
-            if not opt or not opt:IsA("GuiObject") then return end
-            local tName = opt.Name
-            local pal = GlobalThemePalettes[tName]
-            local title = opt:FindFirstChild("Title") or opt:FindFirstChildOfClass("TextLabel")
-            if not pal and title and GlobalThemePalettes[title.Text] then
-                tName = title.Text
-                pal = GlobalThemePalettes[tName]
-            end
-            if pal then
-                local accCol = HexToColor3(pal.UIAccent or pal.Overlay)
-                local baseCol = HexToColor3(pal.Base or pal.Drawing)
-                local prioCol = HexToColor3(pal.Priority or "#FF5555")
-
-                if title then
-                    title.TextColor3 = accCol
-                    title.Font = Enum.Font.GothamBold
-                    if not title:FindFirstChild("ColorSyncHooked") then
-                        Instance.new("BoolValue", title).Name = "ColorSyncHooked"
-                        title:GetPropertyChangedSignal("TextColor3"):Connect(function()
-                            if title.TextColor3 ~= accCol then
-                                title.TextColor3 = accCol
-                            end
-                        end)
-                    end
-                elseif opt:IsA("TextLabel") or opt:IsA("TextButton") then
-                    opt.TextColor3 = accCol
-                    opt.Font = Enum.Font.GothamBold
-                end
-
-                local leftBar = opt:FindFirstChild("ThemeLeftBar")
-                if not leftBar then
-                    leftBar = Instance.new("Frame", opt)
-                    leftBar.Name = "ThemeLeftBar"
-                    leftBar.Size = UDim2.new(0, 3, 0.7, 0)
-                    leftBar.Position = UDim2.new(0, 4, 0.15, 0)
-                    leftBar.BackgroundColor3 = accCol
-                    leftBar.BorderSizePixel = 0
-                    leftBar.ZIndex = 65
-                    Instance.new("UICorner", leftBar).CornerRadius = UDim.new(1, 0)
-                else
-                    leftBar.BackgroundColor3 = accCol
-                end
-
-                local swatch = opt:FindFirstChild("ThemeSwatch")
-                if not swatch then
-                    swatch = Instance.new("Frame", opt)
-                    swatch.Name = "ThemeSwatch"
-                    swatch.Size = UDim2.new(0, 38, 0, 14)
-                    swatch.Position = UDim2.new(1, -44, 0.5, -7)
-                    swatch.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-                    swatch.BackgroundTransparency = 0.2
-                    swatch.BorderSizePixel = 0
-                    swatch.ZIndex = 65
-                    Instance.new("UICorner", swatch).CornerRadius = UDim.new(1, 0)
-                    local sStroke = Instance.new("UIStroke", swatch)
-                    sStroke.Color = Color3.fromRGB(50, 50, 65)
-                    sStroke.Thickness = 1
-
-                    local d1 = Instance.new("Frame", swatch)
-                    d1.Size = UDim2.new(0, 8, 0, 8)
-                    d1.Position = UDim2.new(0, 3, 0.5, -4)
-                    d1.BackgroundColor3 = accCol
-                    d1.BorderSizePixel = 0
-                    d1.ZIndex = 66
-                    Instance.new("UICorner", d1).CornerRadius = UDim.new(1, 0)
-
-                    local d2 = Instance.new("Frame", swatch)
-                    d2.Size = UDim2.new(0, 8, 0, 8)
-                    d2.Position = UDim2.new(0, 15, 0.5, -4)
-                    d2.BackgroundColor3 = baseCol
-                    d2.BorderSizePixel = 0
-                    d2.ZIndex = 66
-                    Instance.new("UICorner", d2).CornerRadius = UDim.new(1, 0)
-
-                    local d3 = Instance.new("Frame", swatch)
-                    d3.Size = UDim2.new(0, 8, 0, 8)
-                    d3.Position = UDim2.new(0, 27, 0.5, -4)
-                    d3.BackgroundColor3 = prioCol
-                    d3.BorderSizePixel = 0
-                    d3.ZIndex = 66
-                    Instance.new("UICorner", d3).CornerRadius = UDim.new(1, 0)
-                end
-            end
-        end
-
-        if GlobalThemePalettes[desc.Name] then
-            DecorateThemeOption(desc)
-        end
-
-        if desc:IsA("GuiObject") and (desc.Name == "Dropdown" or desc:FindFirstChild("Dropdown") or desc.Name == "List" or desc:FindFirstChild("List")) then
-            local listObj = (desc.Name == "List" and desc) or desc:FindFirstChild("List")
-            if listObj then
-                for _, opt in ipairs(listObj:GetChildren()) do
-                    DecorateThemeOption(opt)
-                end
-                if not listObj:FindFirstChild("ThemeWatcherHooked") then
-                    local wHook = Instance.new("BoolValue", listObj)
-                    wHook.Name = "ThemeWatcherHooked"
-                    listObj.ChildAdded:Connect(function(child)
-                        task.wait(0.02)
-                        DecorateThemeOption(child)
-                    end)
-                end
-            end
-            for _, opt in ipairs(desc:GetDescendants()) do
-                if GlobalThemePalettes[opt.Name] then
-                    DecorateThemeOption(opt)
-                end
-            end
-            -- Tint the currently selected label to the theme's signature color
-            local selLabel = desc:FindFirstChild("Selected")
-            if selLabel and selLabel:IsA("TextLabel") and not selLabel:FindFirstChild("ThemeSyncHooked") then
-                Instance.new("BoolValue", selLabel).Name = "ThemeSyncHooked"
-                local function syncSelectedColor()
-                    local tName = selLabel.Text
-                    local pal = GlobalThemePalettes[tName]
-                    if pal then
-                        selLabel.TextColor3 = HexToColor3(pal.UIAccent or pal.Overlay)
-                        selLabel.Font = Enum.Font.GothamBold
-                    end
-                end
-                syncSelectedColor()
-                selLabel:GetPropertyChangedSignal("Text"):Connect(syncSelectedColor)
-            end
-        end
-
-        -- Section Header Collapse/Expand Injection. Native Rayfield owns layout
-        -- and visibility by default; this opt-in path is intentionally isolated.
-        if S.AdvancedThemeLayoutPatchEnabled == true and desc:IsA("GuiObject") and desc.Name == "SectionTitle" then
-            local secFrame = desc
-            -- Ensure the section frame doesn't clip the toggle button which may extend slightly
-            secFrame.ClipsDescendants = false
-            if not secFrame:FindFirstChild("CollapseToggle") then
-                local toggleBtn = Instance.new("TextButton")
-                toggleBtn.Name = "CollapseToggle"
-                toggleBtn.Size = UDim2.new(0, 26, 0, 20)
-                toggleBtn.AnchorPoint = Vector2.new(1, 0.5)
-                toggleBtn.Position = UDim2.new(1, -6, 0.5, 0)
-                toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-                toggleBtn.BackgroundTransparency = 0.3
-                toggleBtn.BorderSizePixel = 0
-                toggleBtn.Text = "" -- NO TEXT, 100% immune to character encoding corruption
-                toggleBtn.ZIndex = 30  -- high enough to be above section backgrounds
-                Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 4)
-                local btnStroke = Instance.new("UIStroke", toggleBtn)
-                btnStroke.Color = GetThemeAccentColor()
-                btnStroke.Thickness = 1
-                btnStroke.Transparency = 0.4
-
-                -- Use TextLabel with Unicode chevron — no rbxassetid dependency
-                local arrowIcon = Instance.new("TextLabel", toggleBtn)
-                arrowIcon.Name = "ArrowIcon"
-                arrowIcon.Size = UDim2.new(1, 0, 1, 0)
-                arrowIcon.Position = UDim2.new(0, 0, 0, 0)
-                arrowIcon.BackgroundTransparency = 1
-                arrowIcon.Font = Enum.Font.GothamBold
-                arrowIcon.TextSize = 11
-                arrowIcon.Text = "v"   -- simple downward chevron; rotated by Rotation property when collapsed
-                arrowIcon.TextColor3 = Color3.fromRGB(200, 205, 220)
-                arrowIcon.ZIndex = 31
-
-                toggleBtn.Parent = secFrame
-
-                secFrame:SetAttribute("IsCollapsed", false)
-                local _tDebounce = false
-                local function toggleCollapse()
-                    if _tDebounce then return end
-                    _tDebounce = true
-                    task.delay(0.15, function() _tDebounce = false end)
-
-                    local isCol = not (secFrame:GetAttribute("IsCollapsed") == true)
-                    secFrame:SetAttribute("IsCollapsed", isCol)
-                    local targetRot = isCol and -90 or 0
-                    local targetCol = isCol and GetThemeAccentColor() or Color3.fromRGB(200, 205, 220)
-                    TweenService:Create(arrowIcon, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                        Rotation = targetRot,
-                        TextColor3 = targetCol  -- TextLabel uses TextColor3, not ImageColor3
-                    }):Play()
-                    PlayUISound(isCol and "toggle_off" or "toggle_on")
-
-                    -- Collapsed rectangle indicator directly under the section header
-                    local colRect = secFrame:FindFirstChild("CollapsedBar")
-                    if not colRect then
-                        colRect = Instance.new("Frame", secFrame)
-                        colRect.Name = "CollapsedBar"
-                        colRect.Size = UDim2.new(1, 0, 0, 8)
-                        colRect.Position = UDim2.new(0, 0, 1, 3)
-                        colRect.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-                        colRect.BorderSizePixel = 0
-                        Instance.new("UICorner", colRect).CornerRadius = UDim.new(0, 4)
-                        local crSt = Instance.new("UIStroke", colRect)
-                        crSt.Color = Color3.fromRGB(0, 0, 0)
-                        crSt.Thickness = 1.5
-                    end
-                    colRect.Visible = isCol
-
-                    local container = secFrame.Parent
-                    if container then
-                        local pastSec = false
-                        for _, child in ipairs(container:GetChildren()) do
-                            if child == secFrame then
-                                pastSec = true
-                            elseif pastSec then
-                                if child.Name == "SectionTitle" then break end
-                                if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
-                                    child.Visible = not isCol
-                                end
-                            end
-                        end
-                    end
-                end
-
-                toggleBtn.MouseButton1Click:Connect(toggleCollapse)
-
-                -- Section Element Box: dark fill + black outline wrapping all elements in the section
-                task.defer(function()
-                    if not (secFrame and secFrame.Parent) then return end
-                    local boxContainer = secFrame.Parent
-                    if not boxContainer then return end
-
-                    -- Clean up any residual CollapsedBar and hide native dividers cleanly without touching strokes on elements
-                    for _, child in ipairs(boxContainer:GetChildren()) do
-                        if child.Name == "Divider" or child.Name == "SectionSpacing" then
-                            child.BackgroundTransparency = 1
-                            child.Visible = false
-                        end
-                        -- Ensure every element in the container has a valid UIStroke so Rayfield dot-indexing never errors
-                        if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" and not child:FindFirstChild("UIStroke") then
-                            local stFix = Instance.new("UIStroke", child)
-                            stFix.Name = "UIStroke"
-                            stFix.Color = Color3.fromRGB(40, 42, 55)
-                            stFix.Thickness = 1
-                            stFix.Transparency = 0.5
-                        end
-                    end
-
-                    -- Inject a thin left accent bar on the secFrame
-                    if not secFrame:FindFirstChild("SectionLeftBar") then
-                        local leftBar = Instance.new("Frame", secFrame)
-                        leftBar.Name = "SectionLeftBar"
-                        leftBar.Size = UDim2.new(0, 2, 1, 0)
-                        leftBar.Position = UDim2.new(0, 0, 0, 0)
-                        leftBar.BackgroundColor3 = GetThemeAccentColor()
-                        leftBar.BorderSizePixel = 0
-                        leftBar.ZIndex = secFrame.ZIndex + 1
-                        Instance.new("UICorner", leftBar).CornerRadius = UDim.new(0, 2)
-                    end
-
-                    -- Apply theme palette colors to configuration elements in section
-                    local pastSec2 = false
-                    for _, child in ipairs(boxContainer:GetChildren()) do
-                        if child == secFrame then
-                            pastSec2 = true
-                        elseif pastSec2 then
-                            if child.Name == "SectionTitle" then break end
-                            if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
-                                local isCard = child:FindFirstChild("Title") or child:FindFirstChild("Content") or child:FindFirstChild("Interact") or child:FindFirstChild("Switch") or child:FindFirstChild("Slider") or child:FindFirstChild("SliderBar")
-                                if isCard then
-                                    -- Remove any hardcoded pitch-black overlay stroke that erases the theme palette
-                                    local oldBlackStroke = child:FindFirstChild("SectionBoxStroke")
-                                    if oldBlackStroke then oldBlackStroke:Destroy() end
-
-                                    -- Retain the theme's element colors from ActiveThemeColors or GlobalThemePalettes
-                                    local curPal = GlobalThemePalettes[S.ActivePresetName or "Solaris Gold"] or GlobalThemePalettes.Default
-                                    local curTc = TASFFEnv.Theme.ActiveThemeColors or {}
-                                    local cardBg = curTc.ElementBackground or HexToColor3(curPal.UIElement)
-                                    local cardStroke = curTc.ElementStroke or HexToColor3(curPal.Overlay)
-
-                                    -- Ensure section title itself is crisp and in front
-                                    local secTitle = secFrame:FindFirstChild("Title")
-                                    if secTitle and secTitle:IsA("TextLabel") then
-                                        secTitle.TextColor3 = curTc.TextColor or Color3.fromRGB(240, 240, 240)
-                                        secTitle.TextTransparency = 0
-                                        secTitle.ZIndex = 5
-                                        secTitle.Visible = true
-                                    end
-
-                                    child.Visible = true
-                                    child.ZIndex = 4
-                                    child.BackgroundTransparency = 0
-
-                                    if not child:FindFirstChild("Content") or child:FindFirstChild("Switch") or child:FindFirstChild("Interact") then
-                                        child.BackgroundColor3 = cardBg
-                                    else
-                                        child.BackgroundColor3 = curTc.SecondaryElementBackground or cardBg
-                                    end
-
-                                    local existingSt = child:FindFirstChildOfClass("UIStroke")
-                                    if existingSt then
-                                        existingSt.Color = cardStroke
-                                    end
-
-                                    for _, descChild in ipairs(child:GetDescendants()) do
-                                        if descChild:IsA("GuiObject") then
-                                            descChild.Visible = true
-                                            descChild.ZIndex = math.max(descChild.ZIndex, 5)
-                                            if descChild:IsA("TextLabel") or descChild:IsA("TextBox") then
-                                                descChild.TextTransparency = 0
-                                                if descChild.Name == "Title" then
-                                                    descChild.TextColor3 = curTc.TextColor or Color3.fromRGB(240, 240, 240)
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end)
-
-                -- Ensure all elements under this section start 100% visible and expanded upon initial load
-                secFrame:SetAttribute("IsCollapsed", false)
-                arrowIcon.Rotation = 0
-                arrowIcon.TextColor3 = Color3.fromRGB(200, 205, 220)  -- TextLabel uses TextColor3
-                local container = secFrame.Parent
-                if container then
-                    local pastSec = false
-                    for _, child in ipairs(container:GetChildren()) do
-                        if child == secFrame then
-                            pastSec = true
-                        elseif pastSec then
-                            if child.Name == "SectionTitle" then break end
-                            if child:IsA("GuiObject") and child.Name ~= "UIListLayout" and child.Name ~= "UIPadding" then
-                                child.Visible = true
-                            end
-                        end
-                    end
-                end
-
-                local function syncCollapseFade()
-                    local t = secFrame.BackgroundTransparency
-                    toggleBtn.BackgroundTransparency = math.clamp(0.3 + t * 0.7, 0, 1)
-                    arrowIcon.TextTransparency = t   -- TextLabel uses TextTransparency
-                    btnStroke.Transparency = t
-                end
-                secFrame:GetPropertyChangedSignal("BackgroundTransparency"):Connect(syncCollapseFade)
-            end
-        end
-
-        -- Slider Precision Stepper Buttons & Live Value Enhancement
-        -- Correct detection: Rayfield slider cards have a child "Main" that has children "Progress" and "Information"
-        local sliderMainChild = desc:FindFirstChild("Main")
-        local isSliderCard = desc:IsA("GuiObject") and (
-            desc.Name == "Slider" or
-            desc:FindFirstChild("SliderBar") or
-            (sliderMainChild and sliderMainChild:IsA("GuiObject") and sliderMainChild:FindFirstChild("Progress") and sliderMainChild:FindFirstChild("Information"))
-        )
-        if isSliderCard and not desc:FindFirstChild("StepperHooked") then
-            local sHook = Instance.new("BoolValue", desc)
-            sHook.Name = "StepperHooked"
-            -- Allow stepper buttons to extend outside card bounds
-            desc.ClipsDescendants = false
-
-            -- Position steppers at the right end of the card, vertically centered
-            -- Using AnchorPoint(1,0.5) so they anchor to the right edge
-            local stepMinus = Instance.new("TextButton", desc)
-            stepMinus.Name = "StepMinus"
-            stepMinus.Size = UDim2.new(0, 22, 0, 22)
-            stepMinus.AnchorPoint = Vector2.new(1, 0.5)
-            stepMinus.Position = UDim2.new(1, -28, 0.5, 0)
-            stepMinus.BackgroundColor3 = Color3.fromRGB(22, 24, 36)
-            stepMinus.BorderSizePixel = 0
-            stepMinus.Font = Enum.Font.GothamBold
-            stepMinus.TextSize = 15
-            stepMinus.TextColor3 = GetThemeAccentColor()
-            stepMinus.Text = "-"
-            stepMinus.ZIndex = 50
-            Instance.new("UICorner", stepMinus).CornerRadius = UDim.new(0, 4)
-            local smStroke = Instance.new("UIStroke", stepMinus)
-            smStroke.Color = GetThemeAccentColor()
-            smStroke.Thickness = 1
-            smStroke.Transparency = 0.5
-
-            local stepPlus = Instance.new("TextButton", desc)
-            stepPlus.Name = "StepPlus"
-            stepPlus.Size = UDim2.new(0, 22, 0, 22)
-            stepPlus.AnchorPoint = Vector2.new(1, 0.5)
-            stepPlus.Position = UDim2.new(1, -2, 0.5, 0)
-            stepPlus.BackgroundColor3 = Color3.fromRGB(22, 24, 36)
-            stepPlus.BorderSizePixel = 0
-            stepPlus.Font = Enum.Font.GothamBold
-            stepPlus.TextSize = 15
-            stepPlus.TextColor3 = GetThemeAccentColor()
-            stepPlus.Text = "+"
-            stepPlus.ZIndex = 50
-            Instance.new("UICorner", stepPlus).CornerRadius = UDim.new(0, 4)
-            local spStroke = Instance.new("UIStroke", stepPlus)
-            spStroke.Color = Color3.fromRGB(65, 70, 90)
-            spStroke.Thickness = 1
-
-            local function AdjustSlider(delta)
-                PlayUISound("stepper")
-                local titleLabel = desc:FindFirstChild("Title")
-                local sliderTitle = (titleLabel and titleLabel.Text) or desc.Name
-
-                -- Try to find matching flag in Rayfield.Flags
-                local matchedFlagObj = nil
-                local rLibrary = (TASFFEnv and TASFFEnv.Rayfield) or (getgenv and getgenv().Rayfield)
-                if rLibrary and rLibrary.Flags then
-                    for _, flagObj in pairs(rLibrary.Flags) do
-                        if type(flagObj) == "table" and (flagObj.Name == sliderTitle or flagObj.Name == desc.Name) and flagObj.Set then
-                            matchedFlagObj = flagObj
-                            break
-                        end
-                    end
-                end
-
-                if matchedFlagObj then
-                    local inc = matchedFlagObj.Increment or 1
-                    local cur = matchedFlagObj.CurrentValue or 0
-                    local min = (matchedFlagObj.Range and matchedFlagObj.Range[1]) or -math.huge
-                    local max = (matchedFlagObj.Range and matchedFlagObj.Range[2]) or math.huge
-                    local target = math.clamp(cur + delta * inc, min, max)
-                    pcall(function() matchedFlagObj:Set(target) end)
-                else
-                    local mainBar = desc:FindFirstChild("Main")
-                    local infoLabel = mainBar and mainBar:FindFirstChild("Information")
-                    if infoLabel and infoLabel:IsA("TextLabel") then
-                        local curNum = tonumber(infoLabel.Text:match("[%-%d%.]+"))
-                        if curNum then
-                            local target = curNum + delta * 1
-                            infoLabel.Text = tostring(target)
-                        end
-                    end
-                end
-            end
-
-            stepMinus.MouseButton1Click:Connect(function()
-                AdjustSlider(-1)
-            end)
-            stepPlus.MouseButton1Click:Connect(function()
-                AdjustSlider(1)
-            end)
-        end
-
-        -- 1-Click Color Preset Swatches on ColorPickers (Strictly exclude Templates)
-        if desc:IsA("GuiObject") and desc.Name ~= "Template" and not desc:FindFirstAncestor("Template") and desc:FindFirstChild("ColorPicker") and not desc:FindFirstChild("QuickSwatchesHooked") then
-            local swHook = Instance.new("BoolValue", desc)
-            swHook.Name = "QuickSwatchesHooked"
-            local swRow = Instance.new("Frame", desc)
-            swRow.Name = "QuickSwatches"
-            swRow.Size = UDim2.new(0, 120, 0, 14)
-            swRow.Position = UDim2.new(1, -130, 0, 4)
-            swRow.BackgroundTransparency = 1
-
-            local quickPal = {"#00F5FF", "#FF2A8A", "#39FF88", "#FFD400", "#BD93F9", "#FF304A", "#FFFFFF", "#86C4E0"}
-            for i, hex in ipairs(quickPal) do
-                local swDot = Instance.new("TextButton", swRow)
-                swDot.Size = UDim2.new(0, 11, 0, 11)
-                swDot.Position = UDim2.new(0, (i - 1) * 15, 0, 1)
-                swDot.BackgroundColor3 = HexToColor3(hex)
-                swDot.BorderSizePixel = 0
-                swDot.Text = ""
-                Instance.new("UICorner", swDot).CornerRadius = UDim.new(1, 0)
-                swDot.MouseButton1Click:Connect(function()
-                    PlayUISound("click")
-                end)
-            end
-        end
-
-        -- 3D Physical Keycap Styling on Keybinds
-        if desc:IsA("GuiObject") and desc.Name ~= "Template" and not desc:FindFirstAncestor("Template") and desc:FindFirstChild("Keybind") and not desc:FindFirstChild("Keycap3DHooked") then
-            local kbHook = Instance.new("BoolValue", desc)
-            kbHook.Name = "Keycap3DHooked"
-            local kbBtn = desc:FindFirstChild("Keybind")
-            if kbBtn:IsA("GuiObject") then
-                kbBtn.BackgroundColor3 = Color3.fromRGB(32, 34, 44)
-                Instance.new("UICorner", kbBtn).CornerRadius = UDim.new(0, 4)
-                local kbStroke = Instance.new("UIStroke", kbBtn)
-                kbStroke.Color = Color3.fromRGB(60, 62, 75)
-                kbStroke.Thickness = 1
-            end
-        end
-
-        -- Tooltip & Definition attachment on interactive elements
-        local titleLabel = desc:FindFirstChild("Title", true)
-        if titleLabel and titleLabel:IsA("TextLabel") and titleLabel.Text ~= "" then
-            local cleanName = titleLabel.Text:gsub("^%[KEY%]%s*", ""):gsub("^[^%a%d]+%s*", ""):gsub(":%s*$", ""):gsub("^%s+", ""):gsub("%s+$", "")
-            local def = ControlTooltips[cleanName] or ControlTooltips[desc.Name]
-            if def and not desc:FindFirstChild("TooltipHooked") then
-                local hookTag = Instance.new("BoolValue")
-                hookTag.Name = "TooltipHooked"
-                hookTag.Parent = desc
-                hookedTooltips = hookedTooltips + 1
-
-                if not titleLabel:FindFirstChild("DefBadge") then
-                    local qBadge = Instance.new("TextLabel")
-                    qBadge.Name = "DefBadge"
-                    qBadge.Size = UDim2.new(0, 15, 0, 15)
-                    local tw = TextService:GetTextSize(titleLabel.Text, titleLabel.TextSize, titleLabel.Font, Vector2.new(1000, 50)).X
-                    qBadge.Position = UDim2.new(0, math.floor(tw + 8), 0.5, -7)
-                    qBadge.BackgroundColor3 = Color3.fromRGB(35, 36, 45)
-                    qBadge.BackgroundTransparency = 0.2
-                    qBadge.Font = Enum.Font.GothamBold
-                    qBadge.TextSize = 10
-                    qBadge.TextColor3 = GetThemeAccentColor()
-                    qBadge.Text = "?"
-                    qBadge.ZIndex = 15
-                    Instance.new("UICorner", qBadge).CornerRadius = UDim.new(1, 0)
-                    local qStroke = Instance.new("UIStroke", qBadge)
-                    qStroke.Color = GetThemeAccentColor()
-                    qStroke.Thickness = 1
-                    qStroke.Transparency = 0.4
-                    qBadge.Parent = titleLabel
-
-                    titleLabel:GetPropertyChangedSignal("Text"):Connect(function()
-                        local ntw = TextService:GetTextSize(titleLabel.Text, titleLabel.TextSize, titleLabel.Font, Vector2.new(1000, 50)).X
-                        qBadge.Position = UDim2.new(0, math.floor(ntw + 8), 0.5, -7)
-                    end)
-                end
-
-                if hotkeyNames[cleanName] and not titleLabel:FindFirstChild("HotkeyBadge") then
-                    local kBadge = Instance.new("TextLabel", titleLabel)
-                    kBadge.Name = "HotkeyBadge"
-                    kBadge.Size = UDim2.new(0, 36, 0, 15)
-                    local tw = TextService:GetTextSize(titleLabel.Text, titleLabel.TextSize, titleLabel.Font, Vector2.new(1000, 50)).X
-                    kBadge.Position = UDim2.new(0, math.floor(tw + 26), 0.5, -7)
-                    kBadge.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
-                    kBadge.Font = Enum.Font.GothamBold
-                    kBadge.TextSize = 9
-                    kBadge.TextColor3 = Color3.fromRGB(235, 205, 120)
-                    kBadge.Text = "[" .. hotkeyNames[cleanName] .. "]"
-                    Instance.new("UICorner", kBadge).CornerRadius = UDim.new(0, 3)
-                    local kbStroke = Instance.new("UIStroke", kBadge)
-                    kbStroke.Color = Color3.fromRGB(55, 55, 70)
-                end
-
-                local function onHoverEnter()
-                    local mPos = UserInputService:GetMouseLocation()
-                    ShowTooltip(cleanName, def, mPos)
-                    S.LastTouchedDef = cleanName
-                    S.LastTouchedDefText = def
-                    if S.DefinitionsParagraph and S.DefinitionsParagraph.Set then
-                        pcall(function()
-                            S.DefinitionsParagraph:Set({
-                                Title = "Definition: " .. cleanName,
-                                Content = def
-                            })
-                        end)
-                    end
-                end
-                local function onHoverLeave()
-                    HideTooltip()
-                end
-
-                if not desc:FindFirstChild("DefTooltipHooked") then
-                    Instance.new("BoolValue", desc).Name = "DefTooltipHooked"
-                    desc.MouseEnter:Connect(onHoverEnter)
-                    desc.MouseLeave:Connect(onHoverLeave)
-                end
-            end
-        end
-
-        -- 3b. Atmospheric Carbon Weave & Card Hover Glow Injection
-        -- Helper: identify a Rayfield Paragraph frame (has Title+Content, no interactive children)
-        local function IsParagraphFrame(f)
-            if not f or not f:IsA("Frame") then return false end
-            if not f:FindFirstChild("Content") or not f:FindFirstChild("Title") then return false end
-            if f:FindFirstChild("Switch") or f:FindFirstChild("Slider") or
-               f:FindFirstChild("ColorPicker") or f:FindFirstChild("Keybind") or
-               f:FindFirstChild("Dropdown") then return false end
-            return true
-        end
-
-        if desc:IsA("GuiObject") and desc.Name ~= "Template" and not desc:FindFirstAncestor("Template") and desc.Parent and (desc.Parent.Name == "Elements" or desc.Parent:FindFirstChild("UIListLayout")) then
-            AttachHoverGlow(desc)
-
-            -- Clean and native Paragraph refinement
-            if IsParagraphFrame(desc) then
-                local oldBar = desc:FindFirstChild("ParaAccentBar")
-                if oldBar then oldBar:Destroy() end
-                -- Remove any residual CarbonOverlay frames that cause AutomaticSize height explosion
-                local oldCarbon = desc:FindFirstChild("CarbonOverlayFrame", true)
-                if oldCarbon then oldCarbon:Destroy() end
-                local oldFolder = desc:FindFirstChild("CarbonFolder")
-                if oldFolder then oldFolder:Destroy() end
-                local oldMarker = desc:FindFirstChild("CarbonOverlay")
-                if oldMarker then oldMarker:Destroy() end
-
-                local curPal = GlobalThemePalettes[S.ActivePresetName or "Solaris Gold"] or GlobalThemePalettes.Default
-                local curTc = TASFFEnv.Theme.ActiveThemeColors or {}
-                desc.BackgroundColor3 = curTc.SecondaryElementBackground or HexToColor3(curPal.UIElement)
-
-                local pStroke = desc:FindFirstChild("ParaBoxStroke")
-                if not pStroke then
-                    pStroke = Instance.new("UIStroke", desc)
-                    pStroke.Name = "ParaBoxStroke"
-                    pStroke.Thickness = 1
-                    pStroke.Transparency = 0.55
-                end
-                pStroke.Color = curTc.SecondaryElementStroke or GetThemeAccentColor()
-
-                local title = desc:FindFirstChild("Title")
-                local content = desc:FindFirstChild("Content")
-                if title and content and title:IsA("TextLabel") and content:IsA("TextLabel") then
-                    title.TextColor3 = GetThemeAccentColor()
-                    title.Font = Enum.Font.GothamBold
-                    content.TextColor3 = curTc.TextColor or HexToColor3(curPal.UIText)
-                    content.Font = Enum.Font.GothamMedium
-                end
-
-                -- Integrated palette preview card: injected into "Preset Preview" paragraph frames
-                if title and title:IsA("TextLabel") and title.Text:find("Preset Preview", 1, true) then
-                    local rawThemeName = title.Text:match("Preset Preview[%s%-—]+(.+)$")
-                        or (S.ActivePresetName)
-                        or "Solaris Gold"
-                    local existingPreview = desc:FindFirstChild("ThemePreviewCard")
-                    if not existingPreview or desc:GetAttribute("RenderedTheme") ~= rawThemeName then
-                        desc:SetAttribute("RenderedTheme", rawThemeName)
-                        task.spawn(function()
-                            pcall(function()
-                                RenderThemePreviewCard(desc, rawThemeName)
-                            end)
-                        end)
-                    end
-                end
-            -- Attach universal carbon overlay to non-paragraph interactive elements
-            elseif not IsParagraphFrame(desc.Parent) then
-                if desc:FindFirstChild("Switch") or (desc:FindFirstChild("Interact") and not desc:FindFirstChild("Slider")) or desc:FindFirstChild("Dropdown") or desc:FindFirstChild("Slider") or desc:FindFirstChild("Keybind") or desc:FindFirstChild("ColorPicker") then
-                    AttachCarbonOverlay(desc, 0.38)
-                end
-            end
-        end
-
-        -- Live State Dot on Toggles & Neon Glow Switch Track
-        if desc:IsA("GuiObject") and desc:FindFirstChild("Switch") and not desc:FindFirstChild("LiveDot") then
-            local dot = Instance.new("Frame")
-            dot.Name = "LiveDot"
-            dot.Size = UDim2.new(0, 6, 0, 6)
-            dot.Position = UDim2.new(0, 5, 0.5, -3)
-            dot.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
-            dot.BorderSizePixel = 0
-            Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-            dot.Parent = desc
-
-            local switch = desc:FindFirstChild("Switch")
-            local function updateDot()
-                local ind = switch and switch:FindFirstChild("Indicator")
-                local isNowOn = ind and (ind.Position.X.Offset > -30)
-                if isNowOn then
-                    dot.BackgroundColor3 = Color3.fromRGB(0, 240, 130)
-                    if switch then
-                        switch.BackgroundColor3 = GetThemeAccentColor()
-                        switch.BackgroundTransparency = 0.25
-                    end
-                else
-                    dot.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
-                    if switch then
-                        switch.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
-                        switch.BackgroundTransparency = 0
-                    end
-                end
-            end
-            task.delay(0.2, updateDot)
-            local interact = desc:FindFirstChild("Interact")
-            if interact and interact:IsA("GuiObject") then
-                interact.InputEnded:Connect(function()
-                    task.delay(0.1, function()
-                        updateDot()
-                        local ind = switch and switch:FindFirstChild("Indicator")
-                        local isNowOn = ind and (ind.Position.X.Offset > -30)
-                        PlayUISound(isNowOn and "toggle_on" or "toggle_off")
-                    end)
-                end)
-            end
-        end
-        end
-    end
-
-    -- DescendantAdded watcher: inject collapse buttons and stepper buttons into
-    -- elements that Rayfield adds AFTER the initial DOM walk (e.g. during scrolling or tab switching)
-    if not mainFrame:FindFirstChild("TASFF_DescWatcher") then
-        local dwHook = Instance.new("BoolValue", mainFrame)
-        dwHook.Name = "TASFF_DescWatcher"
-        mainFrame.DescendantAdded:Connect(function(newDesc)
-            task.wait(0.05) -- let Rayfield finish building the subtree
-            pcall(function()
-                -- Late section collapse injection
-                if S.AdvancedThemeLayoutPatchEnabled == true and newDesc:IsA("GuiObject") and newDesc.Name == "SectionTitle" and not newDesc:FindFirstChild("CollapseToggle") then
-                    newDesc.ClipsDescendants = false
-                    local lateBtn = Instance.new("TextButton")
-                    lateBtn.Name = "CollapseToggle"
-                    lateBtn.Size = UDim2.new(0, 26, 0, 20)
-                    lateBtn.AnchorPoint = Vector2.new(1, 0.5)
-                    lateBtn.Position = UDim2.new(1, -6, 0.5, 0)
-                    lateBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-                    lateBtn.BackgroundTransparency = 0.3
-                    lateBtn.BorderSizePixel = 0
-                    lateBtn.Text = ""
-                    lateBtn.ZIndex = 30
-                    Instance.new("UICorner", lateBtn).CornerRadius = UDim.new(0, 4)
-                    local lateBtnStroke = Instance.new("UIStroke", lateBtn)
-                    lateBtnStroke.Color = GetThemeAccentColor()
-                    lateBtnStroke.Thickness = 1
-                    lateBtnStroke.Transparency = 0.4
-                    -- Use TextLabel with Unicode chevron — no rbxassetid dependency
-                    local lateArrow = Instance.new("TextLabel", lateBtn)
-                    lateArrow.Name = "ArrowIcon"
-                    lateArrow.Size = UDim2.new(1, 0, 1, 0)
-                    lateArrow.Position = UDim2.new(0, 0, 0, 0)
-                    lateArrow.BackgroundTransparency = 1
-                    lateArrow.Font = Enum.Font.GothamBold
-                    lateArrow.TextSize = 11
-                    lateArrow.Text = "v"
-                    lateArrow.TextColor3 = Color3.fromRGB(200, 205, 220)
-                    lateArrow.ZIndex = 31
-                    lateBtn.Parent = newDesc
-                end
-
-                -- Late slider stepper injection
-                local lateSliderMain = newDesc:FindFirstChild("Main")
-                local isLateSlider = newDesc:IsA("GuiObject") and
-                    lateSliderMain and lateSliderMain:IsA("GuiObject") and
-                    lateSliderMain:FindFirstChild("Progress") and
-                    lateSliderMain:FindFirstChild("Information") and
-                    not newDesc:FindFirstChild("StepperHooked")
-                if isLateSlider then
-                    newDesc.ClipsDescendants = false
-                    local lHook = Instance.new("BoolValue", newDesc)
-                    lHook.Name = "StepperHooked"
-                    local lMinus = Instance.new("TextButton", newDesc)
-                    lMinus.Name = "StepMinus"
-                    lMinus.Size = UDim2.new(0, 22, 0, 22)
-                    lMinus.AnchorPoint = Vector2.new(1, 0.5)
-                    lMinus.Position = UDim2.new(1, -28, 0.5, 0)
-                    lMinus.BackgroundColor3 = Color3.fromRGB(22, 24, 36)
-                    lMinus.BorderSizePixel = 0
-                    lMinus.Font = Enum.Font.GothamBold
-                    lMinus.TextSize = 15
-                    lMinus.TextColor3 = GetThemeAccentColor()
-                    lMinus.Text = "-"
-                    lMinus.ZIndex = 50
-                    Instance.new("UICorner", lMinus).CornerRadius = UDim.new(0, 4)
-                    local lPlus = Instance.new("TextButton", newDesc)
-                    lPlus.Name = "StepPlus"
-                    lPlus.Size = UDim2.new(0, 22, 0, 22)
-                    lPlus.AnchorPoint = Vector2.new(1, 0.5)
-                    lPlus.Position = UDim2.new(1, -2, 0.5, 0)
-                    lPlus.BackgroundColor3 = Color3.fromRGB(22, 24, 36)
-                    lPlus.BorderSizePixel = 0
-                    lPlus.Font = Enum.Font.GothamBold
-                    lPlus.TextSize = 15
-                    lPlus.TextColor3 = GetThemeAccentColor()
-                    lPlus.Text = "+"
-                    lPlus.ZIndex = 50
-                    Instance.new("UICorner", lPlus).CornerRadius = UDim.new(0, 4)
-                end
-            end)
-        end)
-    end
-
-    -- Fade out and destroy the loading cover now that all patches are applied
-    local coverToFade = mainFrame:FindFirstChild("TASFF_LoadCover")
-    if coverToFade then
-        for _, child in ipairs(coverToFade:GetDescendants()) do
-            if child:IsA("TextLabel") or child:IsA("TextButton") then
-                TweenService:Create(child, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
-            elseif child:IsA("UIStroke") then
-                TweenService:Create(child, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
-            elseif child:IsA("GuiObject") then
-                TweenService:Create(child, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
-            end
-        end
-        TweenService:Create(coverToFade, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
-        task.delay(0.45, function()
-            if coverToFade and coverToFade.Parent then
-                coverToFade:Destroy()
-            end
-        end)
-    end
-
-    -- Update the Feature Overview paragraph with element counts pulled directly from TASFF_Lists.lua
-    if S.FeatureOverviewParagraph and S.FeatureOverviewParagraph.Set then
-        pcall(function()
-            S.FeatureOverviewParagraph:Set({
-                Title   = "UI Element Breakdown",
-                Content = string.format(
-                    "Toggles: %d  |  Buttons: %d  |  Sliders: %d\nDropdowns: %d  |  Keybinds: %d  |  Color Pickers: %d  |  Paragraphs: %d",
-                    S.ToggleCount or 109,
-                    S.ButtonCount or 36,
-                    S.SliderCount or 40,
-                    S.DropdownCount or 44,
-                    S.KeybindCount or 6,
-                    S.ColorPickerCount or 16,
-                    S.ParagraphCount or 73
-                )
-            })
-        end)
-    end
-
-    return true
-end
--- Keyboard Navigation Hook
-local _navElements = {}
-local _currentNavIndex = 1
-local function RefreshNavElements()
-    _navElements = {}
-    local rGui = FindRayfieldGui()
-    if not rGui then return end
-    for _, d in ipairs(rGui:GetDescendants()) do
-        if d:IsA("TextButton") or d:IsA("TextBox") then
-            if d.Visible and d.AbsolutePosition.Y > 0 then
-                table.insert(_navElements, d)
-            end
-        end
-    end
-end
-
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if not (S.KeyboardNavEnabled ~= false) then return end
-    if input.KeyCode == Enum.KeyCode.Down then
-        RefreshNavElements()
-        if #_navElements > 0 then
-            _currentNavIndex = (_currentNavIndex % #_navElements) + 1
-            local elem = _navElements[_currentNavIndex]
-            if elem then
-                local s = elem:FindFirstChildOfClass("UIStroke")
-                if s then
-                    local oc = s.Color
-                    s.Color = Color3.fromRGB(0, 255, 200)
-                    task.delay(0.5, function() s.Color = oc end)
-                end
-            end
-        end
-    elseif input.KeyCode == Enum.KeyCode.Up then
-        RefreshNavElements()
-        if #_navElements > 0 then
-            _currentNavIndex = _currentNavIndex - 1
-            if _currentNavIndex < 1 then _currentNavIndex = #_navElements end
-            local elem = _navElements[_currentNavIndex]
-            if elem then
-                local s = elem:FindFirstChildOfClass("UIStroke")
-                if s then
-                    local oc = s.Color
-                    s.Color = Color3.fromRGB(0, 255, 200)
-                    task.delay(0.5, function() s.Color = oc end)
-                end
-            end
-        end
-    elseif input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter then
-        if #_navElements > 0 and _navElements[_currentNavIndex] then
-            local elem = _navElements[_currentNavIndex]
-            if elem:IsA("TextButton") then
-                pcall(function() elem.MouseButton1Click:Fire() end)
-            end
-        end
-    end
-end)
-
-
-
-local RayfieldVisibilityConnections = {}
-local RayfieldVisibilityBound = false
-
-local function SyncRayfieldVisibility()
-    local rGui = FindRayfieldGui and FindRayfieldGui()
-    local mainFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
-    if not rGui or not mainFrame then return end
-    local isVisible = rGui.Enabled ~= false and mainFrame.Visible ~= false
-
-    -- Overlay HUD/notification history must stay on screen even when the menu
-    -- is closed. Only the menu-attached decorations below follow visibility.
-    if OverlayGui then
-        OverlayGui.Enabled = true
-    end
-
-    local bb = mainFrame:FindFirstChild("TASFF_BottomBar")
-    if bb then bb.Visible = isVisible end
-    local cs = mainFrame:FindFirstChild("CyberStroke")
-    if cs then cs.Enabled = isVisible end
-
-    local parent = mainFrame.Parent
-    if parent then
-        for _, name in ipairs({"TASFF_BottomBar"}) do
-            local external = parent:FindFirstChild(name)
-            if external and external:IsA("GuiObject") then
-                external.Visible = isVisible
-            end
-        end
-    end
-    -- Sync halo container visibility
-    local haloContainer = TASFFEnv.Theme._HaloContainer or (HaloGui and HaloGui:FindFirstChild("TASFF_AmbientHalo"))
-    if haloContainer then haloContainer.Visible = isVisible end
-end
-
-local function BindRayfieldVisibility()
-    if RayfieldVisibilityBound then
-        SyncRayfieldVisibility()
-        return
-    end
-
-    local rGui = FindRayfieldGui and FindRayfieldGui()
-    local mainFrame = rGui and (rGui:FindFirstChild("Main", true) or rGui:FindFirstChildOfClass("Frame"))
-    if not rGui or not mainFrame then
-        return false
-    end
-
-    RayfieldVisibilityBound = true
-    table.insert(RayfieldVisibilityConnections, rGui:GetPropertyChangedSignal("Enabled"):Connect(SyncRayfieldVisibility))
-    table.insert(RayfieldVisibilityConnections, mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldVisibility))
-    table.insert(Connections, RayfieldVisibilityConnections[#RayfieldVisibilityConnections])
-    table.insert(Connections, RayfieldVisibilityConnections[#RayfieldVisibilityConnections - 1])
-    SyncRayfieldVisibility()
-    return true
-end
-
-local function DestroyTheme()
-    for _, conn in ipairs(RayfieldVisibilityConnections) do
+    for _, conn in pairs(runtime.Connections or {}) do
         pcall(function() conn:Disconnect() end)
     end
-    table.clear(RayfieldVisibilityConnections)
-    RayfieldVisibilityBound = false
-
-    if OverlayGui then
-        OverlayGui.Enabled = false
-        pcall(function() OverlayGui:Destroy() end)
+    pcall(function()
+        if runtime.Connections then table.clear(runtime.Connections) end
+    end)
+    for _, drawing in pairs(runtime.Drawings or {}) do
+        pcall(function()
+            if drawing and drawing.Frame then drawing.Frame:Destroy()
+            elseif drawing and drawing.Remove then drawing:Remove()
+            elseif drawing and drawing.Destroy then drawing:Destroy() end
+        end)
     end
-    if HaloGui then
-        HaloGui.Enabled = false
-        pcall(function() HaloGui:Destroy() end)
+    pcall(function()
+        if runtime.Drawings then table.clear(runtime.Drawings) end
+    end)
+    if runtime.Rayfield and runtime.Rayfield.Destroy then
+        pcall(function() runtime.Rayfield:Destroy() end)
     end
-    if TASFFEnv.Theme._HaloLoopConnection then
-        pcall(function() TASFFEnv.Theme._HaloLoopConnection:Disconnect() end)
-        TASFFEnv.Theme._HaloLoopConnection = nil
-    end
-    TASFFEnv.Theme._HaloContainer = nil
-    TASFFEnv.Theme._UpdateHaloPosition = nil
-    TASFFEnv.Theme._ResetHaloPositions = nil
-    TASFFEnv.Theme._HaloPositions = nil
-
-    local parents = {}
+    local parentsToClean = {}
     pcall(function()
         if typeof(gethui) == "function" then
             local h = gethui()
-            if h then table.insert(parents, h) end
+            if h then table.insert(parentsToClean, h) end
         end
     end)
-    pcall(function() table.insert(parents, game:GetService("CoreGui")) end)
-    pcall(function()
-        local pg = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-        if pg then table.insert(parents, pg) end
-    end)
-    for _, parent in ipairs(parents) do
-        for _, name in ipairs({
-            "TASFF_AmbientHalo",
-            "TASFF_BottomBar",
-            "TASFF_AmbientAura",
-        }) do
-            local child = parent:FindFirstChild(name)
-            if child then
-                pcall(function() child:Destroy() end)
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then table.insert(parentsToClean, cg) end
+    local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if pg then table.insert(parentsToClean, pg) end
+
+    for _, parent in ipairs(parentsToClean) do
+        pcall(function()
+            for _, child in ipairs(parent:GetChildren()) do
+                if child.Name:find("TASFF") or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                    pcall(function() child:Destroy() end)
+                end
             end
-        end
+        end)
     end
 end
 
-TASFFEnv.Theme.BindRayfieldVisibility = BindRayfieldVisibility
-TASFFEnv.Theme.SyncRayfieldVisibility = SyncRayfieldVisibility
-TASFFEnv.Theme.Destroy = DestroyTheme
+-- // ── Load Rayfield (once) ────────────────────────────────────── // --
+-- Rayfield is loaded here and stored in getgenv().TASFF.Rayfield.
+-- Core reads it as: local Rayfield = getgenv().TASFF.Rayfield
+-- UI reads it the same way. This ensures only ONE Rayfield instance exists.
 
--- Defer full DOM patch until TASFF_UI.lua has finished building all tabs.
--- Cover is placed synchronously by TASFF_UI.lua right after CreateWindow returns
--- (animation already done at that point). This spawn only runs patches and
--- guarantees the cover fades regardless of any error inside PatchRayfieldDOM.
-task.spawn(function()
-    while not (S.UIInitialized or S.ScriptInitialized) do
-        task.wait(0.2)
+print("[TASFF Loader] Loading Rayfield...")
+if not executorCapabilities.LoadString then
+    CleanupPartialRuntime()
+    error("[TASFF Loader] This executor does not provide loadstring; modules cannot be compiled.")
+end
+local cachedRayfieldFactory = nil
+
+local function PlainReplaceFirst(src, target, repl)
+    local s, e = string.find(src, target, 1, true)
+    if s then
+        return string.sub(src, 1, s - 1) .. repl .. string.sub(src, e + 1)
     end
-    task.wait(0.1)
+    return src
+end
 
-    -- Run both patch passes; cover stays up regardless of errors inside
-    for i = 1, 2 do
-        task.wait(0.4)
-        local ok, res = pcall(PatchRayfieldDOM)
-        if ok and res then
-            S.ThemePatchDone = true
-        elseif not ok then
-            warn("[TASFF Theme] PatchRayfieldDOM error on pass " .. i .. ": " .. tostring(res))
+local function PlainReplaceAll(src, target, repl)
+    local pos = 1
+    while true do
+        local s, e = string.find(src, target, pos, true)
+        if not s then break end
+        src = string.sub(src, 1, s - 1) .. repl .. string.sub(src, e + 1)
+        pos = s + #repl
+    end
+    return src
+end
+
+local function PatchRayfieldSource(src)
+    if type(src) ~= "string" then return src end
+    -- 1. Guard setElementsVisible against missing UIStroke or Title so Hide/Unhide NEVER crashes (Line 1768-1769)
+    local t1 = "TweenService:Create(element.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = show and strokeTarget or 1}):Play()"
+    local r1 = "local _elStroke = element:FindFirstChildOfClass('UIStroke') or element:FindFirstChild('UIStroke'); if _elStroke then TweenService:Create(_elStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = show and strokeTarget or 1}):Play() end"
+    src = PlainReplaceFirst(src, t1, r1)
+
+    local t1_title = "TweenService:Create(element.Title, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = show and titleTarget or 1}):Play()"
+    local r1_title = "local _elTitle = element:FindFirstChild('Title') or element:FindFirstChildOfClass('TextLabel'); if _elTitle then TweenService:Create(_elTitle, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = show and titleTarget or 1}):Play() end"
+    src = PlainReplaceFirst(src, t1_title, r1_title)
+
+    -- 2. Guard element stroke update on theme switch (Line 1355)
+    local t2 = "Element.UIStroke.Color = SelectedTheme.ElementStroke"
+    local r2 = "local _elSt2 = Element:FindFirstChildOfClass('UIStroke') or Element:FindFirstChild('UIStroke'); if _elSt2 then _elSt2.Color = SelectedTheme.ElementStroke end"
+    src = PlainReplaceFirst(src, t2, r2)
+
+    -- 3. Guard dropdown option stroke updates on theme change when options have been refreshed (Line 3452)
+    local t3 = "DropdownOption.UIStroke.Color = SelectedTheme.ElementStroke"
+    local r3 = "if DropdownOption and DropdownOption.Parent then local _dSt = DropdownOption:FindFirstChildOfClass('UIStroke') or DropdownOption:FindFirstChild('UIStroke'); if _dSt then _dSt.Color = SelectedTheme.ElementStroke end end"
+    src = PlainReplaceFirst(src, t3, r3)
+
+    -- 4. Expose Object/Paragraph reference from CreateParagraph so modules can style preview cards
+    src = PlainReplaceFirst(src, "return ParagraphValue", "ParagraphValue.Object = Paragraph; ParagraphValue.Paragraph = Paragraph; return ParagraphValue")
+
+    -- 5. Guard notification Icon so missing or cleaned up notifications never throw (Line 1670)
+    local t5 = "newNotification.Icon.Visible = false"
+    local r5 = "if newNotification and newNotification.Parent then local _nIcon = newNotification:FindFirstChild('Icon') or newNotification:FindFirstChildOfClass('ImageLabel'); if _nIcon then _nIcon.Visible = false end end"
+    src = PlainReplaceFirst(src, t5, r5)
+
+    -- 6. Guard setElementsVisible invocations across Hide, Unhide, Minimise, Maximise with pcall so that
+    -- even if any rogue element throws, Debounce and Visible state are 100% guaranteed to reset cleanly.
+    src = PlainReplaceAll(src, "setElementsVisible(false)", "pcall(function() setElementsVisible(false) end)")
+    src = PlainReplaceAll(src, "setElementsVisible(true)", "pcall(function() setElementsVisible(true) end)")
+
+    -- 7. Patch Tab active & inactive styling so tabs never blackout, active tab borders light up with the active theme accent, and unselected tabs stay bright and readable
+    local t7_act_stroke = "TweenService:Create(TabButton.UIStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 1}):Play()"
+    local r7_act_stroke = "local _tabAcc = SelectedTheme.SliderProgress or SelectedTheme.ToggleEnabled or SelectedTheme.TabStroke or Color3.fromRGB(240, 175, 50); TabButton.UIStroke.Color = _tabAcc; TabButton.UIStroke.Thickness = 1.5; TweenService:Create(TabButton.UIStroke, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {Transparency = 0, Color = _tabAcc}):Play()"
+    src = PlainReplaceFirst(src, t7_act_stroke, r7_act_stroke)
+
+    local t7_act_txt = "TweenService:Create(TabButton.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextColor3 = SelectedTheme.SelectedTabTextColor}):Play()"
+    local r7_act_txt = "TweenService:Create(TabButton.Title, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {TextColor3 = Color3.fromRGB(255, 255, 255), TextTransparency = 0}):Play()"
+    src = PlainReplaceFirst(src, t7_act_txt, r7_act_txt)
+
+    local t7_act_img = "TweenService:Create(TabButton.Image, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {ImageColor3 = SelectedTheme.SelectedTabTextColor}):Play()"
+    local r7_act_img = "TweenService:Create(TabButton.Image, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {ImageColor3 = Color3.fromRGB(255, 255, 255), ImageTransparency = 0}):Play()"
+    src = PlainReplaceFirst(src, t7_act_img, r7_act_img)
+
+    local t7_oth_txt = "TweenService:Create(OtherTabButton.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0.2}):Play()"
+    local r7_oth_txt = "TweenService:Create(OtherTabButton.Title, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t7_oth_txt, r7_oth_txt)
+
+    local t7_oth_img = "TweenService:Create(OtherTabButton.Image, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {ImageTransparency = 0.2}):Play()"
+    local r7_oth_img = "TweenService:Create(OtherTabButton.Image, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {ImageTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t7_oth_img, r7_oth_img)
+
+    local t7_oth_st = "TweenService:Create(OtherTabButton.UIStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 0.5}):Play()"
+    local r7_oth_st = "OtherTabButton.UIStroke.Thickness = 1; TweenService:Create(OtherTabButton.UIStroke, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {Transparency = 0.65, Color = Color3.fromRGB(50, 50, 62)}):Play()"
+    src = PlainReplaceAll(src, t7_oth_st, r7_oth_st)
+
+    local t7_tab_txt = "TweenService:Create(TabButton.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0.2}):Play()"
+    local r7_tab_txt = "TweenService:Create(TabButton.Title, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t7_tab_txt, r7_tab_txt)
+
+    local t7_tab_img = "TweenService:Create(TabButton.Image, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {ImageTransparency = 0.2}):Play()"
+    local r7_tab_img = "TweenService:Create(TabButton.Image, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {ImageTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t7_tab_img, r7_tab_img)
+
+    -- Force SelectedTabTextColor across all internal Rayfield theme definitions to pure white
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(50, 50, 50)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(20, 50, 50)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(50, 30, 10)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(0, 0, 0)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(50, 20, 50)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(20, 60, 20)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(50, 30, 50)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(30, 35, 40)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+
+    return src
+end
+
+local rayfieldOk, RayfieldOrError = pcall(function()
+    local cacheBust = "?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
+    local rayfieldSource = SafeHttpGet("https://sirius.menu/rayfield" .. cacheBust, "Rayfield")
+    rayfieldSource = PatchRayfieldSource(rayfieldSource)
+    local rayfieldFactory, compileError = loadstring(rayfieldSource)
+    if type(rayfieldFactory) ~= "function" then
+        error("[TASFF Loader] Failed to compile Rayfield bootstrap: " .. tostring(compileError))
+    end
+    cachedRayfieldFactory = rayfieldFactory
+    local instance = rayfieldFactory()
+    if type(instance) ~= "table" then
+        error("[TASFF Loader] Rayfield bootstrap returned an invalid instance.")
+    end
+    return instance
+end)
+if not rayfieldOk then
+    CleanupPartialRuntime()
+    error("[TASFF Loader] Rayfield initialization failed:\n" .. tostring(RayfieldOrError))
+end
+local Rayfield = RayfieldOrError
+getgenv().TASFF.Rayfield = Rayfield
+print("[TASFF Loader] Rayfield loaded.")
+
+-- // ── Module Loader Helper ────────────────────────────────────── // --
+
+local function LoadModule(filename)
+    local source
+    if USE_HTTP then
+        local sep = filename:find("%?") and "&" or "?"
+        local cacheBust = sep .. "t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
+        local url = BASE_URL .. filename .. cacheBust
+        source = SafeHttpGet(url, filename)
+    else
+        -- Method B: load from executor filesystem
+        if not isfile(filename) then
+            error("[TASFF Loader] File not found: " .. filename .. " — place all TASFF .lua files in your executor workspace folder.")
         end
+        source = readfile(filename)
     end
 
-    -- Guaranteed fade — runs even if PatchRayfieldDOM errored mid-way
-    task.wait(0.05)
-    local _rGui2 = FindRayfieldGui()
-    local _main2 = _rGui2 and (_rGui2:FindFirstChild("Main", true) or _rGui2:FindFirstChildOfClass("Frame"))
-    local _cov2 = _main2 and _main2:FindFirstChild("TASFF_LoadCover")
-    if _cov2 then
-        for _, child in ipairs(_cov2:GetDescendants()) do
-            if child:IsA("TextLabel") or child:IsA("TextButton") then
-                TweenService:Create(child, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
-            elseif child:IsA("UIStroke") then
-                TweenService:Create(child, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
-            elseif child:IsA("GuiObject") then
-                TweenService:Create(child, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
+    -- Strip UTF-8 BOM (\xEF\xBB\xBF) — common when files are saved on Windows.
+    -- If present it causes "Expected ident" on line 1 since Lua sees garbage bytes first.
+    if source:sub(1, 3) == "\239\187\191" then
+        source = source:sub(4)
+        warn("[TASFF Loader] Stripped UTF-8 BOM from " .. filename)
+    end
+
+    -- Guard: if the URL was wrong we might have received an HTML error page.
+    local peek = source:sub(1, 20):lower()
+    if peek:find("<!doctype") or peek:find("<html") or peek:find("404") then
+        error("[TASFF Loader] " .. filename .. " returned an HTML/error page. Check BASE_URL is correct and the repo is Public.")
+    end
+
+    -- Note: second arg (chunk name) intentionally omitted — some executors
+    -- mishandle it and append the level number to error messages.
+    local fn, compileErr = loadstring(source)
+    if not fn then
+        error("[TASFF Loader] Compile error in " .. filename .. ":\n" .. tostring(compileErr))
+    end
+
+    local ok2, runErr = pcall(fn)
+    if not ok2 then
+        error("[TASFF Loader] Runtime error in " .. filename .. ":\n" .. tostring(runErr))
+    end
+
+    print("[TASFF Loader] OK: " .. filename)
+end
+
+-- // ── Load Modules in Order ───────────────────────────────────── // --
+-- Order is critical:
+--   1. State  — defines _G.TASFF_State (all other modules depend on this)
+--   2. Lists  — keyword classifiers, feature list, game configs (depends on State)
+--   3. Core   — reads S, defines all logic functions and starts loops
+--   4. UI     — reads S, builds Rayfield window, sets S.ThreatListLabel etc.,
+--               calls Rayfield:LoadConfiguration() at the very end
+
+-- Helper notification for early stages before S.Notify is bound
+local function SendLoaderNotify(title, message, icon, duration)
+    pcall(function()
+        if Rayfield and Rayfield.Notify then
+            Rayfield:Notify({
+                Title = title or "TASFF Loader",
+                Content = message or "",
+                Duration = duration or 2.5,
+                Image = icon or "info"
+            })
+        end
+    end)
+end
+
+local function StartLoadingSequence()
+    print("[TASFF Loader] Starting staged initialization sequence...")
+    SendLoaderNotify("TASFF Initializing", "Step 1/4: Loading Core State & Classifiers...", "layers", 2)
+
+    local loadOk, loadError = pcall(function()
+        -- Stage 1: State & Classifiers
+        LoadModule("TASFF_State.lua")   -- _G.TASFF_State = {...}
+        LoadModule("TASFF_Lists.lua")   -- classifiers, feature list, game configs
+        task.wait(0.08)
+
+        -- Stage 2: Core targeting engine & background workers
+        SendLoaderNotify("TASFF Initializing", "Step 2/4: Initializing Targeting Engine & Core...", "cpu", 2)
+        LoadModule("TASFF_Core.lua")    -- S.FunctionSlots = ..., registers loops
+        task.wait(0.08)
+
+        -- Stage 3: User Interface — theme module first, then controls
+        SendLoaderNotify("TASFF Initializing", "Step 3/4: Building Interface Elements...", "layout-grid", 2)
+        LoadModule("TASFF_Theme.lua")   -- theme config, window config, palette data
+        task.wait(0.03)
+        LoadModule("TASFF_UI.lua")      -- Window created, controls rendered, LoadConfiguration() completed
+        task.wait(0.1)
+    end)
+    if not loadOk then
+        CleanupPartialRuntime()
+        _G.TASFF_State = nil
+        SendLoaderNotify("TASFF Error", "Initialization aborted: see console.", "alert-triangle", 5)
+        error("[TASFF Loader] Startup aborted and partial runtime was cleaned up:\n" .. tostring(loadError))
+    end
+
+    local S = _G.TASFF_State
+    S.ScriptInitialized = true
+
+    -- Stage 4: Ready notification
+    -- Version is read exclusively from TASFF_State (single source of truth); never hardcoded here.
+    task.delay(0.2, function()
+        local ver = (S and S.CurrentVersion) or "?"
+        if S and S.Notify then
+            S.Notify({
+                Title    = "TASFF v" .. ver .. " Ready",
+                Content  = "All modules loaded stably! Master Switch to begin.",
+                Duration = 4,
+                Image    = "shield-check",
+                BypassThrottle = true,
+                Important      = true
+            })
+        elseif Rayfield and Rayfield.Notify then
+            Rayfield:Notify({
+                Title    = "TASFF v" .. ver .. " Ready",
+                Content  = "All modules loaded stably! Master Switch to begin.",
+                Duration = 4,
+                Image    = "shield-check"
+            })
+        end
+    end)
+
+    -- Wire restart function
+    local function RestartScript()
+        if S and S.Notify then
+            S.Notify({Title="TASFF System", Content="Restarting script & reloading UI...", Duration=2, Image="refresh-cw"})
+        elseif Rayfield and Rayfield.Notify then
+            pcall(function() Rayfield:Notify({Title="TASFF System", Content="Restarting script & reloading UI...", Duration=2, Image="refresh-cw"}) end)
+        end
+
+        task.delay(0.2, function()
+            -- Step 1: Fully unload previous running instance
+            if S and S.UnloadScript then
+                pcall(function() S.UnloadScript(true) end)
+            else
+                CleanupPartialRuntime()
             end
-        end
-        TweenService:Create(_cov2, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
-        task.delay(0.6, function()
-            if _cov2 and _cov2.Parent then _cov2:Destroy() end
+
+            -- Step 2: Ensure old Rayfield window is destroyed
+            pcall(function()
+                if Rayfield and Rayfield.Destroy then Rayfield:Destroy() end
+            end)
+
+            local parentsToClean = {}
+            pcall(function()
+                if typeof(gethui) == "function" then
+                    local h = gethui()
+                    if h then table.insert(parentsToClean, h) end
+                end
+            end)
+            local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+            if ok and cg then table.insert(parentsToClean, cg) end
+            local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+            if pg then table.insert(parentsToClean, pg) end
+
+            for _, parent in ipairs(parentsToClean) do
+                pcall(function()
+                    for _, child in ipairs(parent:GetChildren()) do
+                        if child.Name:find("TASFF") or child.Name:find("Rayfield") or child.Name:find("Sirius") then
+                            pcall(function() child:Destroy() end)
+                        end
+                    end
+                end)
+            end
+
+            _G.TASFF_State = nil
+            task.wait(0.25)
+
+            -- Step 3: Re-instantiate Rayfield.
+            -- Try the cached factory first (instant, no HTTP round-trip) so that
+            -- restarting is offline-safe and near-instantaneous. Only fall back to a
+            -- fresh HTTP download if the cached factory itself fails.
+            local freshRayfield = nil
+            if cachedRayfieldFactory then
+                local ok, inst = pcall(cachedRayfieldFactory)
+                if ok and type(inst) == "table" then
+                    freshRayfield = inst
+                end
+            end
+            if not freshRayfield then
+                pcall(function()
+                    local cacheBust = "?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(100000, 999999))
+                    local rfSource = SafeHttpGet("https://sirius.menu/rayfield" .. cacheBust, "Rayfield")
+                    rfSource = PatchRayfieldSource(rfSource)
+                    local fac = loadstring(rfSource)
+                    if type(fac) == "function" then
+                        cachedRayfieldFactory = fac
+                        freshRayfield = fac()
+                    end
+                end)
+            end
+
+            Rayfield = freshRayfield
+            getgenv().TASFF = {
+                Running              = true,
+                Connections          = {},
+                Drawings             = {},
+                Capabilities         = executorCapabilities,
+                Cleanup              = nil,
+                ThreatMonitorRunning = false,
+                Rayfield             = Rayfield,
+                RestartScript        = nil,
+            }
+
+            -- Step 4: Re-run staged loading sequence
+            StartLoadingSequence()
+        end)
+    end
+    getgenv().TASFF.RestartScript = RestartScript
+    S.RestartScript = RestartScript
+end
+
+StartLoadingSequence()
+
+local S = _G.TASFF_State
+
+-- Feature 24: Auto-Update Version Checker
+task.spawn(function()
+    task.wait(2)  -- let game fully settle
+    if S and S.CheckForUpdates then
+        pcall(function()
+            S.CheckForUpdates(false)
         end)
     end
 end)
 
-TASFFEnv.Theme.PatchRayfieldDOM = PatchRayfieldDOM
-
-print("[TASFF Theme v" .. (S.CurrentVersion or "2.3.0") .. "] Theme module and extensions fully loaded.")
+print("[TASFF Loader] ══ All modules loaded. TASFF v" .. tostring(S and S.CurrentVersion or "?") .. " is running. ══")

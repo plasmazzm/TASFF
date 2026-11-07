@@ -616,26 +616,30 @@ local function ApplyRayfieldTheme(themeColors)
 
     -- Recolor carbon weave gradient stripes to new accent
     local carbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
-    local cGrad = carbonBg and carbonBg:FindFirstChild("CarbonWeaveGrad")
-    if cGrad then
-        local stripe = accentColor:Lerp(Color3.fromRGB(80, 80, 95), 0.20)
-        local dark   = Color3.fromRGB(10, 10, 15)
-        local mid    = Color3.fromRGB(16, 16, 22)
-        cGrad.Color = ColorSequence.new({
+    if carbonBg then
+        local w1 = carbonBg:FindFirstChild("Weave1")
+        local w2 = carbonBg:FindFirstChild("Weave2")
+        local g1 = w1 and w1:FindFirstChildOfClass("UIGradient")
+        local g2 = w2 and w2:FindFirstChildOfClass("UIGradient")
+        local stripe = accentColor:Lerp(Color3.fromRGB(220, 220, 240), 0.25)
+        local dark   = Color3.fromRGB(8, 8, 12)
+        local colorSeq = ColorSequence.new({
             ColorSequenceKeypoint.new(0,    dark),
             ColorSequenceKeypoint.new(0.09, stripe),
             ColorSequenceKeypoint.new(0.17, dark),
             ColorSequenceKeypoint.new(0.26, stripe),
-            ColorSequenceKeypoint.new(0.34, mid),
+            ColorSequenceKeypoint.new(0.34, dark),
             ColorSequenceKeypoint.new(0.43, stripe),
             ColorSequenceKeypoint.new(0.5,  dark),
             ColorSequenceKeypoint.new(0.59, stripe),
-            ColorSequenceKeypoint.new(0.67, mid),
+            ColorSequenceKeypoint.new(0.67, dark),
             ColorSequenceKeypoint.new(0.76, stripe),
             ColorSequenceKeypoint.new(0.84, dark),
             ColorSequenceKeypoint.new(0.93, stripe),
             ColorSequenceKeypoint.new(1,    dark),
         })
+        if g1 then g1.Color = colorSeq end
+        if g2 then g2.Color = colorSeq end
     end
 
     -- Recolor ambient halo layers to new accent
@@ -2411,7 +2415,7 @@ local function PatchRayfieldDOM()
     local oldCarbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
     if oldCarbonBg then oldCarbonBg:Destroy() end
 
-    -- 0a2. Atmospheric Carbon Weave Scanline Background (ZIndex 2, behind Elements at 3)
+    -- 0a2. Atmospheric Carbon Diamond-Weave Grid Background (ZIndex 2, behind Elements at 3)
     do
         local acc = GetThemeAccentColor()
         local carbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
@@ -2423,54 +2427,75 @@ local function PatchRayfieldDOM()
             carbonBg.BackgroundTransparency = 1
             carbonBg.BorderSizePixel = 0
             carbonBg.ZIndex = 2
+            carbonBg.ClipsDescendants = true
             carbonBg.Interactable = false
             local cCorner = Instance.new("UICorner", carbonBg)
             cCorner.CornerRadius = UDim.new(0, 8)
-            -- Primary diagonal stripe layer
-            local cGrad = Instance.new("UIGradient", carbonBg)
-            cGrad.Name = "CarbonWeaveGrad"
-            cGrad.Rotation = 45
-            carbonBg.Parent = mainFrame
-        end
-        -- Update / build gradient keypoints with current accent
-        -- High-contrast weave: accent stripe barely lerped, tight dark gaps
-        local cGrad = carbonBg:FindFirstChild("CarbonWeaveGrad")
-        if cGrad then
-            -- stripe = mostly the accent color (only 20% lerp toward gray)
-            local stripe = acc:Lerp(Color3.fromRGB(80, 80, 95), 0.20)
-            local dark   = Color3.fromRGB(10, 10, 15)
-            local mid    = Color3.fromRGB(16, 16, 22)
-            cGrad.Color = ColorSequence.new({
+
+            local stripe = acc:Lerp(Color3.fromRGB(220, 220, 240), 0.25)
+            local dark   = Color3.fromRGB(8, 8, 12)
+            local colorSeq = ColorSequence.new({
                 ColorSequenceKeypoint.new(0,    dark),
                 ColorSequenceKeypoint.new(0.09, stripe),
                 ColorSequenceKeypoint.new(0.17, dark),
                 ColorSequenceKeypoint.new(0.26, stripe),
-                ColorSequenceKeypoint.new(0.34, mid),
+                ColorSequenceKeypoint.new(0.34, dark),
                 ColorSequenceKeypoint.new(0.43, stripe),
                 ColorSequenceKeypoint.new(0.5,  dark),
                 ColorSequenceKeypoint.new(0.59, stripe),
-                ColorSequenceKeypoint.new(0.67, mid),
+                ColorSequenceKeypoint.new(0.67, dark),
                 ColorSequenceKeypoint.new(0.76, stripe),
                 ColorSequenceKeypoint.new(0.84, dark),
                 ColorSequenceKeypoint.new(0.93, stripe),
                 ColorSequenceKeypoint.new(1,    dark),
             })
-            -- Stripe bands: 0.55 (clearly visible), gap bands: 0.88 (nearly invisible)
-            cGrad.Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0,    0.88),
-                NumberSequenceKeypoint.new(0.09, 0.55),
-                NumberSequenceKeypoint.new(0.17, 0.88),
-                NumberSequenceKeypoint.new(0.26, 0.55),
-                NumberSequenceKeypoint.new(0.34, 0.88),
-                NumberSequenceKeypoint.new(0.43, 0.55),
-                NumberSequenceKeypoint.new(0.5,  0.88),
-                NumberSequenceKeypoint.new(0.59, 0.55),
-                NumberSequenceKeypoint.new(0.67, 0.88),
-                NumberSequenceKeypoint.new(0.76, 0.55),
-                NumberSequenceKeypoint.new(0.84, 0.88),
-                NumberSequenceKeypoint.new(0.93, 0.55),
-                NumberSequenceKeypoint.new(1,    0.88),
+            local transSeq = NumberSequence.new({
+                NumberSequenceKeypoint.new(0,    0.85),
+                NumberSequenceKeypoint.new(0.09, 0.20),
+                NumberSequenceKeypoint.new(0.17, 0.85),
+                NumberSequenceKeypoint.new(0.26, 0.20),
+                NumberSequenceKeypoint.new(0.34, 0.85),
+                NumberSequenceKeypoint.new(0.43, 0.20),
+                NumberSequenceKeypoint.new(0.5,  0.85),
+                NumberSequenceKeypoint.new(0.59, 0.20),
+                NumberSequenceKeypoint.new(0.67, 0.85),
+                NumberSequenceKeypoint.new(0.76, 0.20),
+                NumberSequenceKeypoint.new(0.84, 0.85),
+                NumberSequenceKeypoint.new(0.93, 0.20),
+                NumberSequenceKeypoint.new(1,    0.85),
             })
+
+            -- Weave Layer 1 (+45 degrees)
+            local w1 = Instance.new("Frame", carbonBg)
+            w1.Name = "Weave1"
+            w1.Size = UDim2.new(1, 0, 1, 0)
+            w1.Position = UDim2.new(0, 0, 0, 0)
+            w1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            w1.BackgroundTransparency = 0.55
+            w1.BorderSizePixel = 0
+            w1.ZIndex = 2
+            w1.Interactable = false
+            local g1 = Instance.new("UIGradient", w1)
+            g1.Rotation = 45
+            g1.Color = colorSeq
+            g1.Transparency = transSeq
+
+            -- Weave Layer 2 (-45 degrees for cross-hatch carbon weave)
+            local w2 = Instance.new("Frame", carbonBg)
+            w2.Name = "Weave2"
+            w2.Size = UDim2.new(1, 0, 1, 0)
+            w2.Position = UDim2.new(0, 0, 0, 0)
+            w2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            w2.BackgroundTransparency = 0.60
+            w2.BorderSizePixel = 0
+            w2.ZIndex = 2
+            w2.Interactable = false
+            local g2 = Instance.new("UIGradient", w2)
+            g2.Rotation = -45
+            g2.Color = colorSeq
+            g2.Transparency = transSeq
+
+            carbonBg.Parent = mainFrame
         end
     end
 
@@ -2538,18 +2563,17 @@ local function PatchRayfieldDOM()
     end
 
     -- Build/rebuild halo in HaloGui (always behind Rayfield's ScreenGui via DisplayOrder -100)
-    -- The halo is a stack of concentric rounded frames that fade outward — no image asset needed
+    -- Compact, softer bloom layers: ordered 1 (innermost) to 4 (outermost)
     local function BuildHaloLayers(container, acc)
-        -- Clear old layers
         for _, ch in ipairs(container:GetChildren()) do ch:Destroy() end
-        -- Layers: {extra_px_each_side, transparency, corner_radius}
+        -- Layers: {extra_px_each_side, base_transparency, corner_radius}
         local layers = {
-            {160, 0.93, 60},
-            {100, 0.87, 45},
-            {55,  0.78, 30},
-            {22,  0.65, 18},
+            {8,   0.68, 10},  -- Layer 1: inner snug bloom
+            {18,  0.78, 14},  -- Layer 2: middle halo
+            {32,  0.86, 20},  -- Layer 3: outer aura
+            {48,  0.93, 26},  -- Layer 4: soft outer falloff
         }
-        for _, L in ipairs(layers) do
+        for idx, L in ipairs(layers) do
             local expand, trans, radius = L[1], L[2], L[3]
             local lf = Instance.new("Frame", container)
             lf.Name = "HaloLayer"
@@ -2558,22 +2582,39 @@ local function PatchRayfieldDOM()
             lf.BackgroundTransparency = trans
             lf.BorderSizePixel = 0
             lf.ZIndex = 1
-            -- Size/position are set by UpdateHaloPosition; store expand as a tag
             lf:SetAttribute("HaloExpand", expand)
+            lf:SetAttribute("BaseTrans", trans)
+            lf:SetAttribute("LayerIndex", idx)
             Instance.new("UICorner", lf).CornerRadius = UDim.new(0, radius)
         end
+    end
+
+    -- Chained trailing halo positions state
+    local haloPositions = TASFFEnv.Theme._HaloPositions or {}
+    TASFFEnv.Theme._HaloPositions = haloPositions
+
+    local function ResetHaloPositions()
+        local mAbsPos  = mainFrame.AbsolutePosition
+        local mAbsSize = mainFrame.AbsoluteSize
+        local cx = mAbsPos.X + mAbsSize.X * 0.5
+        local cy = mAbsPos.Y + mAbsSize.Y * 0.5
+        local center = Vector2.new(cx, cy)
+        for i = 1, 4 do haloPositions[i] = center end
     end
 
     local function UpdateHaloPosition(container, acc)
         local mAbsPos  = mainFrame.AbsolutePosition
         local mAbsSize = mainFrame.AbsoluteSize
-        if mAbsSize.X < 20 or mAbsSize.Y < 20 then return end -- not laid out yet
+        if mAbsSize.X < 20 or mAbsSize.Y < 20 then return end
         local cx = mAbsPos.X + mAbsSize.X * 0.5
         local cy = mAbsPos.Y + mAbsSize.Y * 0.5
+        local center = Vector2.new(cx, cy)
         for _, lf in ipairs(container:GetChildren()) do
             if lf:IsA("Frame") and lf.Name == "HaloLayer" then
-                local exp = lf:GetAttribute("HaloExpand") or 80
-                lf.Position = UDim2.fromOffset(cx, cy)
+                local idx = lf:GetAttribute("LayerIndex") or 1
+                local exp = lf:GetAttribute("HaloExpand") or 16
+                local pos = haloPositions[idx] or center
+                lf.Position = UDim2.fromOffset(pos.X, pos.Y)
                 lf.Size = UDim2.fromOffset(mAbsSize.X + exp * 2, mAbsSize.Y + exp * 2)
                 if acc then lf.BackgroundColor3 = acc end
             end
@@ -2593,19 +2634,61 @@ local function PatchRayfieldDOM()
         haloContainer.Parent = HaloGui
         BuildHaloLayers(haloContainer, GetThemeAccentColor())
     else
-        -- Recolor existing layers
-        local acc = GetThemeAccentColor()
+        -- Rebuild layers to ensure updated compact sizes and BaseTrans attributes
+        BuildHaloLayers(haloContainer, GetThemeAccentColor())
+    end
+    ResetHaloPositions()
+    UpdateHaloPosition(haloContainer, GetThemeAccentColor())
+
+    -- RunService RenderStepped chained trailing loop:
+    -- Layer 1 follows Menu -> Layer 2 follows Layer 1 -> Layer 3 follows Layer 2 -> Layer 4 follows Layer 3
+    if TASFFEnv.Theme._HaloLoopConnection then
+        pcall(function() TASFFEnv.Theme._HaloLoopConnection:Disconnect() end)
+        TASFFEnv.Theme._HaloLoopConnection = nil
+    end
+
+    local RunService = game:GetService("RunService")
+    TASFFEnv.Theme._HaloLoopConnection = RunService.RenderStepped:Connect(function(dt)
+        if not HaloGui or not HaloGui.Parent then return end
+        if not haloContainer or not haloContainer.Visible then return end
+        if not mainFrame or not mainFrame.Parent or not mainFrame.Visible then return end
+        if mainFrame.AbsoluteSize.Y < 80 then return end
+
+        local mAbsPos  = mainFrame.AbsolutePosition
+        local mAbsSize = mainFrame.AbsoluteSize
+        local targetCenter = Vector2.new(mAbsPos.X + mAbsSize.X * 0.5, mAbsPos.Y + mAbsSize.Y * 0.5)
+
+        if #haloPositions == 0 or (haloPositions[1] and (haloPositions[1] - targetCenter).Magnitude > 400) then
+            for i = 1, 4 do haloPositions[i] = targetCenter end
+        end
+
+        local dtClamp = math.clamp(dt or 0.016, 0.001, 0.05)
+        local a1 = 1 - math.exp(-26 * dtClamp)
+        local a2 = 1 - math.exp(-18 * dtClamp)
+        local a3 = 1 - math.exp(-12 * dtClamp)
+        local a4 = 1 - math.exp(-8 * dtClamp)
+
+        -- Chained trailing: each outer layer follows the one inside it
+        haloPositions[1] = haloPositions[1]:Lerp(targetCenter, a1)
+        haloPositions[2] = haloPositions[2]:Lerp(haloPositions[1], a2)
+        haloPositions[3] = haloPositions[3]:Lerp(haloPositions[2], a3)
+        haloPositions[4] = haloPositions[4]:Lerp(haloPositions[3], a4)
+
         for _, lf in ipairs(haloContainer:GetChildren()) do
             if lf:IsA("Frame") and lf.Name == "HaloLayer" then
-                lf.BackgroundColor3 = acc
+                local idx = lf:GetAttribute("LayerIndex") or 1
+                local exp = lf:GetAttribute("HaloExpand") or 16
+                local pos = haloPositions[idx] or targetCenter
+                lf.Position = UDim2.fromOffset(pos.X, pos.Y)
+                lf.Size = UDim2.fromOffset(mAbsSize.X + exp * 2, mAbsSize.Y + exp * 2)
             end
         end
-    end
-    UpdateHaloPosition(haloContainer, GetThemeAccentColor())
+    end)
 
     -- Store helpers on TASFFEnv for SyncRayfieldFade access
     TASFFEnv.Theme._HaloContainer = haloContainer
     TASFFEnv.Theme._UpdateHaloPosition = UpdateHaloPosition
+    TASFFEnv.Theme._ResetHaloPositions = ResetHaloPositions
 
     -- 0d. Topbar Clean Accent Line & Notification Center Bell (Shifted clear of Search)
     local topbar = mainFrame:FindFirstChild("Topbar", true)
@@ -3251,11 +3334,15 @@ local function PatchRayfieldDOM()
             haloContainer.Visible = shouldShow
             if shouldShow then
                 local acc = GetThemeAccentColor()
-                -- Fade layers with mainTrans so bloom disappears as menu fades
+                -- When reopening or expanding, re-align trailing positions to menu center
+                if not haloContainer.Visible or mainTrans < 0.05 then
+                    local resetFn = TASFFEnv.Theme._ResetHaloPositions
+                    if resetFn then resetFn() end
+                end
+                -- Fade layers with mainTrans without permanently overwriting BaseTrans
                 for _, lf in ipairs(haloContainer:GetChildren()) do
                     if lf:IsA("Frame") and lf.Name == "HaloLayer" then
-                        local baseTrans = lf.BackgroundTransparency
-                        -- keep existing trans but push toward 1 as menu fades
+                        local baseTrans = lf:GetAttribute("BaseTrans") or 0.8
                         lf.BackgroundTransparency = math.clamp(baseTrans + mainTrans * (1 - baseTrans), 0, 1)
                         lf.BackgroundColor3 = acc
                     end
@@ -3275,9 +3362,15 @@ local function PatchRayfieldDOM()
         local mMesh = mainFrame:FindFirstChild("TASFF_ScanlinesBg")
         if mMesh then mMesh:Destroy() end
 
-        -- Sync carbon weave visibility
+        -- Sync carbon weave visibility and fade with menu
         local cBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
-        if cBg then cBg.Visible = (isVis and isExpanded and not isClosing) end
+        if cBg then
+            cBg.Visible = (isVis and isExpanded and not isClosing)
+            local w1 = cBg:FindFirstChild("Weave1")
+            local w2 = cBg:FindFirstChild("Weave2")
+            if w1 then w1.BackgroundTransparency = math.clamp(0.55 + mainTrans * 0.45, 0, 1) end
+            if w2 then w2.BackgroundTransparency = math.clamp(0.60 + mainTrans * 0.40, 0, 1) end
+        end
 
         -- Attached TASFF_BottomBar sync (parented directly to mainFrame with zero drag lag)
         local bBar = mainFrame:FindFirstChild("TASFF_BottomBar") or (mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_BottomBar"))
@@ -4332,8 +4425,14 @@ local function DestroyTheme()
         HaloGui.Enabled = false
         pcall(function() HaloGui:Destroy() end)
     end
+    if TASFFEnv.Theme._HaloLoopConnection then
+        pcall(function() TASFFEnv.Theme._HaloLoopConnection:Disconnect() end)
+        TASFFEnv.Theme._HaloLoopConnection = nil
+    end
     TASFFEnv.Theme._HaloContainer = nil
     TASFFEnv.Theme._UpdateHaloPosition = nil
+    TASFFEnv.Theme._ResetHaloPositions = nil
+    TASFFEnv.Theme._HaloPositions = nil
 
     local parents = {}
     pcall(function()

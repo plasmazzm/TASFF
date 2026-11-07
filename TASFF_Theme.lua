@@ -4087,7 +4087,7 @@ local function PatchRayfieldDOM()
             stepMinus.Name = "StepMinus"
             stepMinus.Size = UDim2.new(0, 16, 0, 16)
             stepMinus.AnchorPoint = Vector2.new(1, 0.5)
-            stepMinus.Position = UDim2.new(1, -26, 0.5, 0)
+            stepMinus.Position = UDim2.new(1, -38, 0.5, 0)
             stepMinus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
             stepMinus.BorderSizePixel = 0
             stepMinus.Font = Enum.Font.GothamBold
@@ -4105,7 +4105,7 @@ local function PatchRayfieldDOM()
             stepPlus.Name = "StepPlus"
             stepPlus.Size = UDim2.new(0, 16, 0, 16)
             stepPlus.AnchorPoint = Vector2.new(1, 0.5)
-            stepPlus.Position = UDim2.new(1, -6, 0.5, 0)
+            stepPlus.Position = UDim2.new(1, -18, 0.5, 0)
             stepPlus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
             stepPlus.BorderSizePixel = 0
             stepPlus.Font = Enum.Font.GothamBold
@@ -4453,7 +4453,7 @@ local function PatchRayfieldDOM()
                     lMinus.Name = "StepMinus"
                     lMinus.Size = UDim2.new(0, 16, 0, 16)
                     lMinus.AnchorPoint = Vector2.new(1, 0.5)
-                    lMinus.Position = UDim2.new(1, -26, 0.5, 0)
+                    lMinus.Position = UDim2.new(1, -38, 0.5, 0)
                     lMinus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
                     lMinus.BorderSizePixel = 0
                     lMinus.Font = Enum.Font.GothamBold
@@ -4471,7 +4471,7 @@ local function PatchRayfieldDOM()
                     lPlus.Name = "StepPlus"
                     lPlus.Size = UDim2.new(0, 16, 0, 16)
                     lPlus.AnchorPoint = Vector2.new(1, 0.5)
-                    lPlus.Position = UDim2.new(1, -6, 0.5, 0)
+                    lPlus.Position = UDim2.new(1, -18, 0.5, 0)
                     lPlus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
                     lPlus.BorderSizePixel = 0
                     lPlus.Font = Enum.Font.GothamBold

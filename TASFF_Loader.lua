@@ -313,6 +313,16 @@ local function PatchRayfieldSource(src)
     local r7_tab_img = "TweenService:Create(TabButton.Image, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {ImageTransparency = 0}):Play()"
     src = PlainReplaceAll(src, t7_tab_img, r7_tab_img)
 
+    -- Force SelectedTabTextColor across all internal Rayfield theme definitions to pure white
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(50, 50, 50)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(20, 50, 50)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(50, 30, 10)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(0, 0, 0)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(50, 20, 50)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(20, 60, 20)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(50, 30, 50)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+    src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(30, 35, 40)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
+
     return src
 end
 

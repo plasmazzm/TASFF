@@ -227,38 +227,91 @@ if not executorCapabilities.LoadString then
 end
 local cachedRayfieldFactory = nil
 
+local function PlainReplaceFirst(src, target, repl)
+    local s, e = string.find(src, target, 1, true)
+    if s then
+        return string.sub(src, 1, s - 1) .. repl .. string.sub(src, e + 1)
+    end
+    return src
+end
+
+local function PlainReplaceAll(src, target, repl)
+    local pos = 1
+    while true do
+        local s, e = string.find(src, target, pos, true)
+        if not s then break end
+        src = string.sub(src, 1, s - 1) .. repl .. string.sub(src, e + 1)
+        pos = s + #repl
+    end
+    return src
+end
+
 local function PatchRayfieldSource(src)
     if type(src) ~= "string" then return src end
-    -- 1. Guard setElementsVisible against missing UIStroke so Hide/Unhide NEVER crashes (Line 1768)
+    -- 1. Guard setElementsVisible against missing UIStroke or Title so Hide/Unhide NEVER crashes (Line 1768-1769)
     local t1 = "TweenService:Create(element.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = show and strokeTarget or 1}):Play()"
     local r1 = "local _elStroke = element:FindFirstChildOfClass('UIStroke') or element:FindFirstChild('UIStroke'); if _elStroke then TweenService:Create(_elStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = show and strokeTarget or 1}):Play() end"
-    if src:find(t1, 1, true) then
-        src = src:gsub(t1, r1, 1)
-    end
+    src = PlainReplaceFirst(src, t1, r1)
+
+    local t1_title = "TweenService:Create(element.Title, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = show and titleTarget or 1}):Play()"
+    local r1_title = "local _elTitle = element:FindFirstChild('Title') or element:FindFirstChildOfClass('TextLabel'); if _elTitle then TweenService:Create(_elTitle, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = show and titleTarget or 1}):Play() end"
+    src = PlainReplaceFirst(src, t1_title, r1_title)
 
     -- 2. Guard element stroke update on theme switch (Line 1355)
     local t2 = "Element.UIStroke.Color = SelectedTheme.ElementStroke"
     local r2 = "local _elSt2 = Element:FindFirstChildOfClass('UIStroke') or Element:FindFirstChild('UIStroke'); if _elSt2 then _elSt2.Color = SelectedTheme.ElementStroke end"
-    if src:find(t2, 1, true) then
-        src = src:gsub(t2, r2, 1)
-    end
+    src = PlainReplaceFirst(src, t2, r2)
 
     -- 3. Guard dropdown option stroke updates on theme change when options have been refreshed (Line 3452)
     local t3 = "DropdownOption.UIStroke.Color = SelectedTheme.ElementStroke"
-    local r3 = "if DropdownOption and DropdownOption.Parent and (DropdownOption:FindFirstChildOfClass('UIStroke') or DropdownOption:FindFirstChild('UIStroke')) then (DropdownOption:FindFirstChildOfClass('UIStroke') or DropdownOption.UIStroke).Color = SelectedTheme.ElementStroke end"
-    if src:find(t3, 1, true) then
-        src = src:gsub(t3, r3, 1)
-    end
+    local r3 = "if DropdownOption and DropdownOption.Parent then local _dSt = DropdownOption:FindFirstChildOfClass('UIStroke') or DropdownOption:FindFirstChild('UIStroke'); if _dSt then _dSt.Color = SelectedTheme.ElementStroke end end"
+    src = PlainReplaceFirst(src, t3, r3)
 
     -- 4. Expose Object/Paragraph reference from CreateParagraph so modules can style preview cards
-    src = src:gsub("return ParagraphValue", "ParagraphValue.Object = Paragraph; ParagraphValue.Paragraph = Paragraph; return ParagraphValue", 1)
+    src = PlainReplaceFirst(src, "return ParagraphValue", "ParagraphValue.Object = Paragraph; ParagraphValue.Paragraph = Paragraph; return ParagraphValue")
 
     -- 5. Guard notification Icon so missing or cleaned up notifications never throw (Line 1670)
     local t5 = "newNotification.Icon.Visible = false"
-    local r5 = "if newNotification and newNotification.Parent and (newNotification:FindFirstChild('Icon') or newNotification:FindFirstChildOfClass('ImageLabel')) then (newNotification:FindFirstChild('Icon') or newNotification:FindFirstChildOfClass('ImageLabel')).Visible = false else return end"
-    if src:find(t5, 1, true) then
-        src = src:gsub(t5, r5, 1)
-    end
+    local r5 = "if newNotification and newNotification.Parent then local _nIcon = newNotification:FindFirstChild('Icon') or newNotification:FindFirstChildOfClass('ImageLabel'); if _nIcon then _nIcon.Visible = false end end"
+    src = PlainReplaceFirst(src, t5, r5)
+
+    -- 6. Guard setElementsVisible invocations across Hide, Unhide, Minimise, Maximise with pcall so that
+    -- even if any rogue element throws, Debounce and Visible state are 100% guaranteed to reset cleanly.
+    src = PlainReplaceAll(src, "setElementsVisible(false)", "pcall(function() setElementsVisible(false) end)")
+    src = PlainReplaceAll(src, "setElementsVisible(true)", "pcall(function() setElementsVisible(true) end)")
+
+    -- 7. Patch Tab active & inactive styling so tabs never blackout, active tab borders light up with the active theme accent, and unselected tabs stay bright and readable
+    local t7_act_stroke = "TweenService:Create(TabButton.UIStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 1}):Play()"
+    local r7_act_stroke = "local _tabAcc = SelectedTheme.SliderProgress or SelectedTheme.ToggleEnabled or SelectedTheme.TabStroke or Color3.fromRGB(240, 175, 50); TabButton.UIStroke.Color = _tabAcc; TabButton.UIStroke.Thickness = 1.5; TweenService:Create(TabButton.UIStroke, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {Transparency = 0, Color = _tabAcc}):Play()"
+    src = PlainReplaceFirst(src, t7_act_stroke, r7_act_stroke)
+
+    local t7_act_txt = "TweenService:Create(TabButton.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextColor3 = SelectedTheme.SelectedTabTextColor}):Play()"
+    local r7_act_txt = "TweenService:Create(TabButton.Title, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {TextColor3 = Color3.fromRGB(255, 255, 255), TextTransparency = 0}):Play()"
+    src = PlainReplaceFirst(src, t7_act_txt, r7_act_txt)
+
+    local t7_act_img = "TweenService:Create(TabButton.Image, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {ImageColor3 = SelectedTheme.SelectedTabTextColor}):Play()"
+    local r7_act_img = "TweenService:Create(TabButton.Image, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {ImageColor3 = Color3.fromRGB(255, 255, 255), ImageTransparency = 0}):Play()"
+    src = PlainReplaceFirst(src, t7_act_img, r7_act_img)
+
+    local t7_oth_txt = "TweenService:Create(OtherTabButton.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0.2}):Play()"
+    local r7_oth_txt = "TweenService:Create(OtherTabButton.Title, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t7_oth_txt, r7_oth_txt)
+
+    local t7_oth_img = "TweenService:Create(OtherTabButton.Image, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {ImageTransparency = 0.2}):Play()"
+    local r7_oth_img = "TweenService:Create(OtherTabButton.Image, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {ImageTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t7_oth_img, r7_oth_img)
+
+    local t7_oth_st = "TweenService:Create(OtherTabButton.UIStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 0.5}):Play()"
+    local r7_oth_st = "OtherTabButton.UIStroke.Thickness = 1; TweenService:Create(OtherTabButton.UIStroke, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {Transparency = 0.65, Color = Color3.fromRGB(50, 50, 62)}):Play()"
+    src = PlainReplaceAll(src, t7_oth_st, r7_oth_st)
+
+    local t7_tab_txt = "TweenService:Create(TabButton.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0.2}):Play()"
+    local r7_tab_txt = "TweenService:Create(TabButton.Title, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t7_tab_txt, r7_tab_txt)
+
+    local t7_tab_img = "TweenService:Create(TabButton.Image, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {ImageTransparency = 0.2}):Play()"
+    local r7_tab_img = "TweenService:Create(TabButton.Image, TweenInfo.new(0.35, Enum.EasingStyle.Exponential), {ImageTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t7_tab_img, r7_tab_img)
 
     return src
 end

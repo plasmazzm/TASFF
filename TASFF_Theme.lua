@@ -621,7 +621,7 @@ local function ApplyRayfieldTheme(themeColors)
         local w2 = carbonBg:FindFirstChild("Weave2")
         local g1 = w1 and w1:FindFirstChildOfClass("UIGradient")
         local g2 = w2 and w2:FindFirstChildOfClass("UIGradient")
-        local stripe = accentColor:Lerp(Color3.fromRGB(220, 220, 240), 0.25)
+        local stripe = accentColor:Lerp(Color3.fromRGB(140, 140, 160), 0.5)
         local dark   = Color3.fromRGB(8, 8, 12)
         local colorSeq = ColorSequence.new({
             ColorSequenceKeypoint.new(0,    dark),
@@ -2426,13 +2426,13 @@ local function PatchRayfieldDOM()
             carbonBg.Position = UDim2.new(0, 0, 0, 0)
             carbonBg.BackgroundTransparency = 1
             carbonBg.BorderSizePixel = 0
-            carbonBg.ZIndex = 2
+            carbonBg.ZIndex = 1
             carbonBg.ClipsDescendants = true
             carbonBg.Interactable = false
             local cCorner = Instance.new("UICorner", carbonBg)
             cCorner.CornerRadius = UDim.new(0, 8)
 
-            local stripe = acc:Lerp(Color3.fromRGB(220, 220, 240), 0.25)
+            local stripe = acc:Lerp(Color3.fromRGB(140, 140, 160), 0.5)
             local dark   = Color3.fromRGB(8, 8, 12)
             local colorSeq = ColorSequence.new({
                 ColorSequenceKeypoint.new(0,    dark),
@@ -2450,19 +2450,19 @@ local function PatchRayfieldDOM()
                 ColorSequenceKeypoint.new(1,    dark),
             })
             local transSeq = NumberSequence.new({
-                NumberSequenceKeypoint.new(0,    0.85),
-                NumberSequenceKeypoint.new(0.09, 0.20),
-                NumberSequenceKeypoint.new(0.17, 0.85),
-                NumberSequenceKeypoint.new(0.26, 0.20),
-                NumberSequenceKeypoint.new(0.34, 0.85),
-                NumberSequenceKeypoint.new(0.43, 0.20),
-                NumberSequenceKeypoint.new(0.5,  0.85),
-                NumberSequenceKeypoint.new(0.59, 0.20),
-                NumberSequenceKeypoint.new(0.67, 0.85),
-                NumberSequenceKeypoint.new(0.76, 0.20),
-                NumberSequenceKeypoint.new(0.84, 0.85),
-                NumberSequenceKeypoint.new(0.93, 0.20),
-                NumberSequenceKeypoint.new(1,    0.85),
+                NumberSequenceKeypoint.new(0,    0.94),
+                NumberSequenceKeypoint.new(0.09, 0.70),
+                NumberSequenceKeypoint.new(0.17, 0.94),
+                NumberSequenceKeypoint.new(0.26, 0.70),
+                NumberSequenceKeypoint.new(0.34, 0.94),
+                NumberSequenceKeypoint.new(0.43, 0.70),
+                NumberSequenceKeypoint.new(0.5,  0.94),
+                NumberSequenceKeypoint.new(0.59, 0.70),
+                NumberSequenceKeypoint.new(0.67, 0.94),
+                NumberSequenceKeypoint.new(0.76, 0.70),
+                NumberSequenceKeypoint.new(0.84, 0.94),
+                NumberSequenceKeypoint.new(0.93, 0.70),
+                NumberSequenceKeypoint.new(1,    0.94),
             })
 
             -- Weave Layer 1 (+45 degrees)
@@ -2471,9 +2471,9 @@ local function PatchRayfieldDOM()
             w1.Size = UDim2.new(1, 0, 1, 0)
             w1.Position = UDim2.new(0, 0, 0, 0)
             w1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            w1.BackgroundTransparency = 0.55
+            w1.BackgroundTransparency = 0.70
             w1.BorderSizePixel = 0
-            w1.ZIndex = 2
+            w1.ZIndex = 1
             w1.Interactable = false
             local g1 = Instance.new("UIGradient", w1)
             g1.Rotation = 45
@@ -2486,9 +2486,9 @@ local function PatchRayfieldDOM()
             w2.Size = UDim2.new(1, 0, 1, 0)
             w2.Position = UDim2.new(0, 0, 0, 0)
             w2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            w2.BackgroundTransparency = 0.60
+            w2.BackgroundTransparency = 0.75
             w2.BorderSizePixel = 0
-            w2.ZIndex = 2
+            w2.ZIndex = 1
             w2.Interactable = false
             local g2 = Instance.new("UIGradient", w2)
             g2.Rotation = -45
@@ -2499,7 +2499,7 @@ local function PatchRayfieldDOM()
         end
     end
 
-    -- Ensure Elements container and pages are visible, transparent, and in front
+    -- Ensure Elements container and pages are visible, transparent, and in front (ZIndex 3)
     local elements = mainFrame:FindFirstChild("Elements", true)
     if elements and elements:IsA("GuiObject") then
         elements.Visible = true
@@ -2510,6 +2510,17 @@ local function PatchRayfieldDOM()
                 tabPage.Visible = true
                 tabPage.ZIndex = 3
                 tabPage.BackgroundTransparency = 1
+            end
+        end
+    end
+
+    -- Ensure Topbar container is strictly above carbon overlay (ZIndex 20)
+    local topbarInst = mainFrame:FindFirstChild("Topbar", true)
+    if topbarInst and topbarInst:IsA("GuiObject") then
+        topbarInst.ZIndex = 20
+        for _, desc in ipairs(topbarInst:GetDescendants()) do
+            if desc:IsA("GuiObject") then
+                desc.ZIndex = math.max(desc.ZIndex or 1, 21)
             end
         end
     end
@@ -2593,29 +2604,32 @@ local function PatchRayfieldDOM()
     local haloPositions = TASFFEnv.Theme._HaloPositions or {}
     TASFFEnv.Theme._HaloPositions = haloPositions
 
-    local function ResetHaloPositions()
+    -- Computes the true visual bounding box of (mainFrame + TASFF_BottomBar) with inset compensation
+    local function GetMenuVisualBounds()
         local mAbsPos  = mainFrame.AbsolutePosition
         local mAbsSize = mainFrame.AbsoluteSize
-        local cx = mAbsPos.X + mAbsSize.X * 0.5
-        local cy = mAbsPos.Y + mAbsSize.Y * 0.5
-        local center = Vector2.new(cx, cy)
-        for i = 1, 4 do haloPositions[i] = center end
+        -- 26px bottom bar + 4px gap docked right below mainFrame (+30px total visual height)
+        -- Plus 14px vertical centering bias to match CoreGui topbar inset for 100% symmetric margins
+        local totalH = mAbsSize.Y + 30
+        local targetCenter = Vector2.new(mAbsPos.X + mAbsSize.X * 0.5, mAbsPos.Y + (totalH * 0.5) + 14)
+        return targetCenter, mAbsSize.X, totalH
+    end
+
+    local function ResetHaloPositions()
+        local targetCenter = GetMenuVisualBounds()
+        for i = 1, 4 do haloPositions[i] = targetCenter end
     end
 
     local function UpdateHaloPosition(container, acc)
-        local mAbsPos  = mainFrame.AbsolutePosition
-        local mAbsSize = mainFrame.AbsoluteSize
-        if mAbsSize.X < 20 or mAbsSize.Y < 20 then return end
-        local cx = mAbsPos.X + mAbsSize.X * 0.5
-        local cy = mAbsPos.Y + mAbsSize.Y * 0.5
-        local center = Vector2.new(cx, cy)
+        local targetCenter, totalW, totalH = GetMenuVisualBounds()
+        if totalW < 20 or totalH < 20 then return end
         for _, lf in ipairs(container:GetChildren()) do
             if lf:IsA("Frame") and lf.Name == "HaloLayer" then
                 local idx = lf:GetAttribute("LayerIndex") or 1
                 local exp = lf:GetAttribute("HaloExpand") or 16
-                local pos = haloPositions[idx] or center
+                local pos = haloPositions[idx] or targetCenter
                 lf.Position = UDim2.fromOffset(pos.X, pos.Y)
-                lf.Size = UDim2.fromOffset(mAbsSize.X + exp * 2, mAbsSize.Y + exp * 2)
+                lf.Size = UDim2.fromOffset(totalW + exp * 2, totalH + exp * 2)
                 if acc then lf.BackgroundColor3 = acc end
             end
         end
@@ -2640,7 +2654,7 @@ local function PatchRayfieldDOM()
     ResetHaloPositions()
     UpdateHaloPosition(haloContainer, GetThemeAccentColor())
 
-    -- RunService RenderStepped chained trailing loop:
+    -- RunService RenderStepped chained trailing loop with subtle breathing pulsation:
     -- Layer 1 follows Menu -> Layer 2 follows Layer 1 -> Layer 3 follows Layer 2 -> Layer 4 follows Layer 3
     if TASFFEnv.Theme._HaloLoopConnection then
         pcall(function() TASFFEnv.Theme._HaloLoopConnection:Disconnect() end)
@@ -2654,9 +2668,7 @@ local function PatchRayfieldDOM()
         if not mainFrame or not mainFrame.Parent or not mainFrame.Visible then return end
         if mainFrame.AbsoluteSize.Y < 80 then return end
 
-        local mAbsPos  = mainFrame.AbsolutePosition
-        local mAbsSize = mainFrame.AbsoluteSize
-        local targetCenter = Vector2.new(mAbsPos.X + mAbsSize.X * 0.5, mAbsPos.Y + mAbsSize.Y * 0.5)
+        local targetCenter, totalW, totalH = GetMenuVisualBounds()
 
         if #haloPositions == 0 or (haloPositions[1] and (haloPositions[1] - targetCenter).Magnitude > 400) then
             for i = 1, 4 do haloPositions[i] = targetCenter end
@@ -2674,13 +2686,21 @@ local function PatchRayfieldDOM()
         haloPositions[3] = haloPositions[3]:Lerp(haloPositions[2], a3)
         haloPositions[4] = haloPositions[4]:Lerp(haloPositions[3], a4)
 
+        -- Smooth atmospheric breathing pulsation (subtle ~2.5s cycle)
+        local pulseSin = math.sin(tick() * 2.5)
+        local pulseExp = pulseSin * 2.5
+        local pulseTrans = pulseSin * 0.035
+        local mainTrans = mainFrame.BackgroundTransparency
+
         for _, lf in ipairs(haloContainer:GetChildren()) do
             if lf:IsA("Frame") and lf.Name == "HaloLayer" then
                 local idx = lf:GetAttribute("LayerIndex") or 1
-                local exp = lf:GetAttribute("HaloExpand") or 16
+                local exp = (lf:GetAttribute("HaloExpand") or 16) + pulseExp
+                local baseTrans = lf:GetAttribute("BaseTrans") or 0.8
                 local pos = haloPositions[idx] or targetCenter
                 lf.Position = UDim2.fromOffset(pos.X, pos.Y)
-                lf.Size = UDim2.fromOffset(mAbsSize.X + exp * 2, mAbsSize.Y + exp * 2)
+                lf.Size = UDim2.fromOffset(totalW + exp * 2, totalH + exp * 2)
+                lf.BackgroundTransparency = math.clamp(baseTrans - pulseTrans + mainTrans * (1 - baseTrans), 0, 1)
             end
         end
     end)
@@ -3240,14 +3260,20 @@ local function PatchRayfieldDOM()
     if legacyResize then legacyResize:Destroy() end
 
     -- 2. Inject Tab Notification Badges, Glowing Active Indicator & Tab Feedback
+    -- Elevate tab bar & buttons to ZIndex 10-12 so carbon overlay (ZIndex 1) is strictly behind them
     local tabList = mainFrame:FindFirstChild("TabList", true)
     local tabContainer = tabList and tabList.Parent or mainFrame
+    if tabContainer and tabContainer ~= mainFrame then
+        tabContainer.ZIndex = 10
+    end
     local legacyGlow = tabContainer:FindFirstChild("ActiveTabGlowBar") or (tabList and tabList:FindFirstChild("ActiveTabGlowBar"))
     if legacyGlow then legacyGlow:Destroy() end
 
     if tabList then
+        tabList.ZIndex = 10
         for _, tabBtn in ipairs(tabList:GetChildren()) do
             if tabBtn:IsA("GuiObject") and tabBtn.Name ~= "Template" and tabBtn.Name ~= "UIListLayout" and tabBtn.Name ~= "UIPadding" then
+                tabBtn.ZIndex = 11
                 local tName = tabBtn.Name
                 local tabPod = tabBtn:FindFirstChild("TabGlowPod")
                 if not tabPod then
@@ -3258,7 +3284,7 @@ local function PatchRayfieldDOM()
                     tabPod.BackgroundColor3 = GetThemeAccentColor()
                     tabPod.BackgroundTransparency = 1
                     tabPod.BorderSizePixel = 0
-                    tabPod.ZIndex = tabBtn.ZIndex + 1
+                    tabPod.ZIndex = 12
                     Instance.new("UICorner", tabPod).CornerRadius = UDim.new(1, 0)
                 end
 
@@ -3368,8 +3394,8 @@ local function PatchRayfieldDOM()
             cBg.Visible = (isVis and isExpanded and not isClosing)
             local w1 = cBg:FindFirstChild("Weave1")
             local w2 = cBg:FindFirstChild("Weave2")
-            if w1 then w1.BackgroundTransparency = math.clamp(0.55 + mainTrans * 0.45, 0, 1) end
-            if w2 then w2.BackgroundTransparency = math.clamp(0.60 + mainTrans * 0.40, 0, 1) end
+            if w1 then w1.BackgroundTransparency = math.clamp(0.70 + mainTrans * 0.30, 0, 1) end
+            if w2 then w2.BackgroundTransparency = math.clamp(0.75 + mainTrans * 0.25, 0, 1) end
         end
 
         -- Attached TASFF_BottomBar sync (parented directly to mainFrame with zero drag lag)

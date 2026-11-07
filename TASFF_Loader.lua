@@ -323,6 +323,33 @@ local function PatchRayfieldSource(src)
     src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(50, 30, 50)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
     src = PlainReplaceAll(src, "SelectedTabTextColor = Color3.fromRGB(30, 35, 40)", "SelectedTabTextColor = Color3.fromRGB(255, 255, 255)")
 
+    -- 8. Patch setTabButtonsVisible (tabbtn, 0.3s tweens) so tabs stay bright on Unhide/Maximise/Minimise
+    -- Active tab: UIStroke must light up with accent color (not hide with Transparency=1)
+    -- Use multi-line context to target ONLY the "active tab show" case (preceded by TextTransparency=0)
+    -- and avoid the "hide all" cases (preceded by ImageTransparency=1)
+    local t8_act_stroke = "TweenService:Create(tabbtn.Title, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()\n\t\t\t\tTweenService:Create(tabbtn.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = 1}):Play()"
+    local r8_act_stroke = "TweenService:Create(tabbtn.Title, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()\n\t\t\t\tdo local _tbAcc = SelectedTheme.SliderProgress or SelectedTheme.ToggleEnabled or SelectedTheme.TabStroke or Color3.fromRGB(240, 175, 50); tabbtn.UIStroke.Color = _tbAcc; tabbtn.UIStroke.Thickness = 1.5; TweenService:Create(tabbtn.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = 0, Color = _tbAcc}):Play() end"
+    src = PlainReplaceFirst(src, t8_act_stroke, r8_act_stroke)
+    -- Second occurrence (setTabButtonsVisible function - uses 5-tab indent)
+    local t8_act_stroke2 = "TweenService:Create(tabbtn.Title, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()\n\t\t\t\t\tTweenService:Create(tabbtn.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = 1}):Play()"
+    local r8_act_stroke2 = "TweenService:Create(tabbtn.Title, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()\n\t\t\t\t\tdo local _tbAcc = SelectedTheme.SliderProgress or SelectedTheme.ToggleEnabled or SelectedTheme.TabStroke or Color3.fromRGB(240, 175, 50); tabbtn.UIStroke.Color = _tbAcc; tabbtn.UIStroke.Thickness = 1.5; TweenService:Create(tabbtn.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = 0, Color = _tbAcc}):Play() end"
+    src = PlainReplaceFirst(src, t8_act_stroke2, r8_act_stroke2)
+
+    -- Inactive tab: image stays fully visible (0 instead of 0.2)
+    local t8_inactive_img = "TweenService:Create(tabbtn.Image, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {ImageTransparency = 0.2}):Play()"
+    local r8_inactive_img = "TweenService:Create(tabbtn.Image, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {ImageTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t8_inactive_img, r8_inactive_img)
+
+    -- Inactive tab: title text stays fully visible (0 instead of 0.2)
+    local t8_inactive_txt = "TweenService:Create(tabbtn.Title, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = 0.2}):Play()"
+    local r8_inactive_txt = "TweenService:Create(tabbtn.Title, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()"
+    src = PlainReplaceAll(src, t8_inactive_txt, r8_inactive_txt)
+
+    -- Inactive tab: UIStroke stays dim but visible (0.65 instead of 0.5, with neutral color)
+    local t8_inactive_stroke = "TweenService:Create(tabbtn.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = 0.5}):Play()"
+    local r8_inactive_stroke = "tabbtn.UIStroke.Thickness = 1; TweenService:Create(tabbtn.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = 0.65, Color = Color3.fromRGB(50, 50, 62)}):Play()"
+    src = PlainReplaceAll(src, t8_inactive_stroke, r8_inactive_stroke)
+
     return src
 end
 

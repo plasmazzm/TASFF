@@ -85,6 +85,8 @@ local GlobalThemeColorNames= TASFFTheme.GlobalThemeColorNames or {}
 local GlobalThemeColorFields=TASFFTheme.GlobalThemeColorFields or {}
 local PersistedColorValues = {}
 local selectedGlobalTheme  = "Default"
+S.GlobalTheme = selectedGlobalTheme
+if TASFFTheme then TASFFTheme.SelectedThemeName = selectedGlobalTheme end
 
 local ColorFields = {
     "HighlightColor",
@@ -170,6 +172,8 @@ local function LoadColorSettings()
     end
     if type(result.GlobalTheme) == "string" and table.find(GlobalThemeOptions, result.GlobalTheme) then
         selectedGlobalTheme = result.GlobalTheme
+        S.GlobalTheme = selectedGlobalTheme
+        if TASFFTheme then TASFFTheme.SelectedThemeName = selectedGlobalTheme end
     end
     if type(result.Theme) == "table" then
         for field in pairs(ThemeColorDefaults) do
@@ -237,6 +241,10 @@ local function ApplyGlobalThemePalette(themeName)
     local palette = GlobalThemePalettes[themeName]
     if not palette then return false end
 
+    selectedGlobalTheme = themeName
+    S.GlobalTheme = themeName
+    if TASFFTheme then TASFFTheme.SelectedThemeName = themeName end
+
     for _, entry in ipairs(GlobalThemeColorFields) do
         local color = ColorFromHex and ColorFromHex(palette[entry.role])
         if not color then
@@ -256,7 +264,7 @@ local function ApplyGlobalThemePalette(themeName)
     end
 
     if TASFFTheme and TASFFTheme.ApplyRayfieldTheme then
-        TASFFTheme.ApplyRayfieldTheme(ThemeColors)
+        TASFFTheme.ApplyRayfieldTheme(nil, themeName, ThemeColors)
     end
     return true
 end
@@ -300,10 +308,10 @@ local Window = Rayfield:CreateWindow(_windowCfg or {
         Shadow                        = Color3.fromRGB(10,  10,  10),
         NotificationBackground        = Color3.fromRGB(15,  15,  15),
         NotificationActionsBackground = Color3.fromRGB(35,  35,  35),
-        TabBackground                 = Color3.fromRGB(25,  25,  25),
-        TabStroke                     = ThemeColors.ElementBackground,
-        TabBackgroundSelected         = ThemeColors.TabBackgroundSelected,
-        TabTextColor                  = ThemeColors.TextColor,
+        TabBackground                 = Color3.fromRGB(16,  16,  22),
+        TabStroke                     = ThemeColors.TabBackgroundSelected or ThemeColors.ElementBackground,
+        TabBackgroundSelected         = Color3.fromRGB(26,  26,  34),
+        TabTextColor                  = Color3.fromRGB(225, 225, 235),
         SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
         ElementBackground             = ThemeColors.ElementBackground,
         ElementBackgroundHover        = Color3.fromRGB(35,  35,  35),
@@ -3255,6 +3263,8 @@ local function ApplyGlobalThemePreset(themeName, silent)
     if not palette then return false end
 
     selectedGlobalTheme = themeName
+    S.GlobalTheme = themeName
+    if TASFFTheme then TASFFTheme.SelectedThemeName = themeName end
 
     local themeFlagMap = {
         Background = "UIThemeBg",
@@ -3284,7 +3294,7 @@ local function ApplyGlobalThemePreset(themeName, silent)
     end
 
     if TASFFTheme and TASFFTheme.ApplyRayfieldTheme then
-        TASFFTheme.ApplyRayfieldTheme(ThemeColors)
+        TASFFTheme.ApplyRayfieldTheme(Window, themeName, ThemeColors)
     end
 
     -- Repaint the whole Rayfield interface in one pass. ModifyTheme is the

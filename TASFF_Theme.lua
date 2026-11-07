@@ -151,7 +151,7 @@ local function BuildRayfieldThemeTable(tc)
         NotificationActionsBackground = lerp(elem, accent, 0.12),
         TabBackground                 = bg,
         TabStroke                     = lerp(elem, accent, 0.25),
-        TabBackgroundSelected         = accent,
+        TabBackgroundSelected         = lerp(elem, text, 0.12),
         TabTextColor                  = text,
         SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
         ElementBackground             = elem,
@@ -465,7 +465,7 @@ local function ApplyRayfieldTheme(themeColors)
     themeColors = fullTheme
     TASFFEnv.Theme.ActiveThemeColors = themeColors
 
-    local accentColor = themeColors.TabBackgroundSelected or Color3.fromRGB(240, 175, 50)
+    local accentColor = themeColors.SliderProgress or themeColors.ToggleEnabled or Color3.fromRGB(240, 175, 50)
     local elemBg = themeColors.ElementBackground or Color3.fromRGB(28, 28, 28)
     local elemStroke = themeColors.ElementStroke or accentColor
     local secBg = themeColors.SecondaryElementBackground or elemBg
@@ -842,8 +842,10 @@ local function GetThemeAccentColor()
         local hex = p.UIAccent or p.Overlay
         if hex then return HexToColor3(hex) end
     end
-    if TASFFEnv.Theme and TASFFEnv.Theme.ActiveThemeColors and TASFFEnv.Theme.ActiveThemeColors.TabBackgroundSelected then
-        return TASFFEnv.Theme.ActiveThemeColors.TabBackgroundSelected
+    if TASFFEnv.Theme and TASFFEnv.Theme.ActiveThemeColors then
+        local tc = TASFFEnv.Theme.ActiveThemeColors
+        if tc.SliderProgress then return tc.SliderProgress end
+        if tc.ToggleEnabled then return tc.ToggleEnabled end
     end
     return Color3.fromRGB(245, 166, 35)
 end
@@ -1709,7 +1711,7 @@ KeybindMap.BackgroundColor3 = Color3.fromRGB(10, 11, 18)
 KeybindMap.BackgroundTransparency = 0.08
 KeybindMap.BorderSizePixel = 0
 KeybindMap.ZIndex = 90
-KeybindMap.Visible = true
+KeybindMap.Visible = false
 KeybindMap.ClipsDescendants = true
 KeybindMap.Parent = OverlayGui
 Instance.new("UICorner", KeybindMap).CornerRadius = UDim.new(0, 7)
@@ -2748,16 +2750,37 @@ local function PatchRayfieldDOM()
         if kbmTitle  then kbmTitle.TextColor3  = GetThemeAccentColor() end
         if kbmToggle then kbmToggle.TextColor3 = GetThemeAccentColor() end
 
+        local function GetSearchOffset()
+            for _, desc in ipairs(topbar:GetDescendants()) do
+                if desc:IsA("TextBox") then
+                    local p = desc.Parent
+                    if p and p:IsA("GuiObject") and p ~= topbar and p.Position.X.Offset < -40 then
+                        return p.Position.X.Offset
+                    end
+                elseif (desc:IsA("ImageLabel") or desc:IsA("ImageButton")) and desc.Name:lower():find("search") then
+                    if desc.Position.X.Offset < -40 then
+                        return desc.Position.X.Offset
+                    end
+                end
+            end
+            local s = topbar:FindFirstChild("Search", true) or topbar:FindFirstChild("SearchBtn", true)
+            if s and s:IsA("GuiObject") and s.Position.X.Offset < -40 then
+                return s.Position.X.Offset
+            end
+            return -115
+        end
+
+        local searchX = GetSearchOffset()
+        local bellX = searchX - 28
+
         local bellBtn = topbar:FindFirstChild("NotifBellBtn")
         if not bellBtn then
             bellBtn = Instance.new("TextButton", topbar)
             bellBtn.Name = "NotifBellBtn"
             bellBtn.Size = UDim2.new(0, 22, 0, 22)
-            -- AnchorPoint right-side: placed immediately to the left of Rayfield's
-            -- Search icon (which uses AnchorPoint(1,0.5) at X offset -30 from right).
-            -- We place bell at -58 (search at ~-30, settings at ~-56 → bell at -84 gives clear room).
+            -- Positioned immediately beside (to the left of) the search button
             bellBtn.AnchorPoint = Vector2.new(1, 0.5)
-            bellBtn.Position = UDim2.new(1, -58, 0.5, 0)
+            bellBtn.Position = UDim2.new(1, bellX, 0.5, 0)
             bellBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
             bellBtn.BackgroundTransparency = 0.3
             bellBtn.BorderSizePixel = 0
@@ -2805,7 +2828,7 @@ local function PatchRayfieldDOM()
             end)
         else
             bellBtn.AnchorPoint = Vector2.new(1, 0.5)
-            bellBtn.Position = UDim2.new(1, -58, 0.5, 0)
+            bellBtn.Position = UDim2.new(1, bellX, 0.5, 0)
         end
     end
 
@@ -3110,10 +3133,12 @@ local function PatchRayfieldDOM()
         kbmBtnStroke.Thickness = 1
         kbmBtnStroke.Transparency = 0.5
         kbmBarBtn.MouseButton1Click:Connect(function()
-            if TASFFEnv.Theme.SetKBMExpanded and TASFFEnv.Theme.KeybindMap then
-                local kbm = TASFFEnv.Theme.KeybindMap
-                local isExpanded = kbm.Size.Y.Offset > 30
-                TASFFEnv.Theme.SetKBMExpanded(not isExpanded)
+            local kbm = TASFFEnv.Theme.KeybindMap
+            if kbm then
+                kbm.Visible = not kbm.Visible
+                if kbm.Visible and TASFFEnv.Theme.SetKBMExpanded then
+                    TASFFEnv.Theme.SetKBMExpanded(true)
+                end
                 PlayUISound("click")
             end
         end)

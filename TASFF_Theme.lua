@@ -11,6 +11,7 @@ local TASFFEnv = (getgenv and getgenv().TASFF) or {}
 local Connections = TASFFEnv.Connections or {}
 local FindRayfieldGui = nil -- declared forward so early functions (e.g. UpdateDrawerPosition) can call it
 local RayfieldWindow = nil
+local HaloGui = nil -- forward-declared; assigned after ScreenGui creation below (~L889)
 
 -- ── Base Theme Defaults ──────────────────────────────────────────
 local ThemeColorDefaults = {
@@ -638,7 +639,7 @@ local function ApplyRayfieldTheme(themeColors)
     end
 
     -- Recolor ambient halo layers to new accent
-    local haloContainer = TASFFEnv.Theme._HaloContainer or HaloGui:FindFirstChild("TASFF_AmbientHalo")
+    local haloContainer = TASFFEnv.Theme._HaloContainer or (HaloGui and HaloGui:FindFirstChild("TASFF_AmbientHalo"))
     if haloContainer then
         for _, lf in ipairs(haloContainer:GetChildren()) do
             if lf:IsA("Frame") and lf.Name == "HaloLayer" then
@@ -886,7 +887,8 @@ OverlayGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 -- Dedicated BEHIND-menu ScreenGui for the ambient halo bloom
 -- DisplayOrder = -100 guarantees it renders under Rayfield's ScreenGui
-local HaloGui = Instance.new("ScreenGui")
+-- Assigned into the upvalue declared at the top of the file (line 14)
+HaloGui = Instance.new("ScreenGui")
 HaloGui.Name = "TASFF_HaloGui"
 HaloGui.ResetOnSpawn = false
 HaloGui.IgnoreGuiInset = true
@@ -3243,7 +3245,7 @@ local function PatchRayfieldDOM()
         end
 
         -- Ambient Halo Sync — pure Frame layers in HaloGui (behind all Rayfield UI via DisplayOrder -100)
-        local haloContainer = TASFFEnv.Theme._HaloContainer or HaloGui:FindFirstChild("TASFF_AmbientHalo")
+        local haloContainer = TASFFEnv.Theme._HaloContainer or (HaloGui and HaloGui:FindFirstChild("TASFF_AmbientHalo"))
         if haloContainer then
             local shouldShow = (isVis and isExpanded and not isClosing)
             haloContainer.Visible = shouldShow
@@ -3375,7 +3377,7 @@ local function PatchRayfieldDOM()
         mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
         mainFrame:GetPropertyChangedSignal("Position"):Connect(function()
             -- Re-position halo layers on drag (uses SyncRayfieldFade which calls UpdateHaloPosition)
-            local haloContainer = TASFFEnv.Theme._HaloContainer or HaloGui:FindFirstChild("TASFF_AmbientHalo")
+            local haloContainer = TASFFEnv.Theme._HaloContainer or (HaloGui and HaloGui:FindFirstChild("TASFF_AmbientHalo"))
             if haloContainer and haloContainer.Visible then
                 local updateFn = TASFFEnv.Theme._UpdateHaloPosition
                 if updateFn then updateFn(haloContainer, GetThemeAccentColor()) end
@@ -4290,7 +4292,7 @@ local function SyncRayfieldVisibility()
         end
     end
     -- Sync halo container visibility
-    local haloContainer = TASFFEnv.Theme._HaloContainer or HaloGui:FindFirstChild("TASFF_AmbientHalo")
+    local haloContainer = TASFFEnv.Theme._HaloContainer or (HaloGui and HaloGui:FindFirstChild("TASFF_AmbientHalo"))
     if haloContainer then haloContainer.Visible = isVisible end
 end
 

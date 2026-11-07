@@ -617,25 +617,35 @@ local function ApplyRayfieldTheme(themeColors)
     local carbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
     local cGrad = carbonBg and carbonBg:FindFirstChild("CarbonWeaveGrad")
     if cGrad then
-        local stripe = accentColor:Lerp(Color3.fromRGB(90, 90, 110), 0.65)
-        local dark   = Color3.fromRGB(14, 14, 20)
-        local mid    = Color3.fromRGB(18, 18, 26)
+        local stripe = accentColor:Lerp(Color3.fromRGB(80, 80, 95), 0.20)
+        local dark   = Color3.fromRGB(10, 10, 15)
+        local mid    = Color3.fromRGB(16, 16, 22)
         cGrad.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0,    dark),
-            ColorSequenceKeypoint.new(0.12, stripe),
-            ColorSequenceKeypoint.new(0.25, mid),
-            ColorSequenceKeypoint.new(0.37, stripe),
+            ColorSequenceKeypoint.new(0.09, stripe),
+            ColorSequenceKeypoint.new(0.17, dark),
+            ColorSequenceKeypoint.new(0.26, stripe),
+            ColorSequenceKeypoint.new(0.34, mid),
+            ColorSequenceKeypoint.new(0.43, stripe),
             ColorSequenceKeypoint.new(0.5,  dark),
-            ColorSequenceKeypoint.new(0.62, stripe),
-            ColorSequenceKeypoint.new(0.75, mid),
-            ColorSequenceKeypoint.new(0.87, stripe),
+            ColorSequenceKeypoint.new(0.59, stripe),
+            ColorSequenceKeypoint.new(0.67, mid),
+            ColorSequenceKeypoint.new(0.76, stripe),
+            ColorSequenceKeypoint.new(0.84, dark),
+            ColorSequenceKeypoint.new(0.93, stripe),
             ColorSequenceKeypoint.new(1,    dark),
         })
     end
 
-    -- Recolor ambient halo to new accent
-    local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
-    if ambientHalo then ambientHalo.ImageColor3 = accentColor end
+    -- Recolor ambient halo layers to new accent
+    local haloContainer = TASFFEnv.Theme._HaloContainer or HaloGui:FindFirstChild("TASFF_AmbientHalo")
+    if haloContainer then
+        for _, lf in ipairs(haloContainer:GetChildren()) do
+            if lf:IsA("Frame") and lf.Name == "HaloLayer" then
+                lf.BackgroundColor3 = accentColor
+            end
+        end
+    end
 
     for _, desc in ipairs(mainFrame:GetDescendants()) do
         if desc.Name == "SectionLeftBar" then
@@ -874,6 +884,15 @@ OverlayGui.IgnoreGuiInset = true
 OverlayGui.DisplayOrder = 999999999
 OverlayGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
+-- Dedicated BEHIND-menu ScreenGui for the ambient halo bloom
+-- DisplayOrder = -100 guarantees it renders under Rayfield's ScreenGui
+local HaloGui = Instance.new("ScreenGui")
+HaloGui.Name = "TASFF_HaloGui"
+HaloGui.ResetOnSpawn = false
+HaloGui.IgnoreGuiInset = true
+HaloGui.DisplayOrder = -100
+HaloGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
 local function EnsureOverlayParented()
     if OverlayGui.Parent and OverlayGui.Parent.Parent then return true end
 
@@ -881,7 +900,7 @@ local function EnsureOverlayParented()
     pcall(function()
         if typeof(gethui) == "function" then
             local h = gethui()
-            if h then OverlayGui.Parent = h end
+            if h then OverlayGui.Parent = h; HaloGui.Parent = h end
         end
     end)
     if OverlayGui.Parent then return true end
@@ -890,7 +909,9 @@ local function EnsureOverlayParented()
     pcall(function()
         if syn and typeof(syn.protect_gui) == "function" then
             syn.protect_gui(OverlayGui)
+            syn.protect_gui(HaloGui)
             OverlayGui.Parent = CoreGui
+            HaloGui.Parent = CoreGui
         end
     end)
     if OverlayGui.Parent then return true end
@@ -898,13 +919,14 @@ local function EnsureOverlayParented()
     -- 3. Try CoreGui directly
     pcall(function()
         OverlayGui.Parent = CoreGui
+        HaloGui.Parent = CoreGui
     end)
     if OverlayGui.Parent then return true end
 
     -- 4. Try CoreGui.RobloxGui
     pcall(function()
         local rg = CoreGui:FindFirstChild("RobloxGui")
-        if rg then OverlayGui.Parent = rg end
+        if rg then OverlayGui.Parent = rg; HaloGui.Parent = rg end
     end)
     if OverlayGui.Parent then return true end
 
@@ -912,7 +934,7 @@ local function EnsureOverlayParented()
     pcall(function()
         local lp = Players.LocalPlayer or game:GetService("Players").LocalPlayer
         local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
-        if pg then OverlayGui.Parent = pg end
+        if pg then OverlayGui.Parent = pg; HaloGui.Parent = pg end
     end)
     return (OverlayGui.Parent ~= nil)
 end
@@ -2383,6 +2405,9 @@ local function PatchRayfieldDOM()
     if existingMesh then existingMesh:Destroy() end
     local existingScanGrad = mainFrame:FindFirstChild("MainScanlinesGrad")
     if existingScanGrad then existingScanGrad:Destroy() end
+    -- Force destroy old carbon bg so new keypoints always apply fresh
+    local oldCarbonBg = mainFrame:FindFirstChild("TASFF_CarbonBg")
+    if oldCarbonBg then oldCarbonBg:Destroy() end
 
     -- 0a2. Atmospheric Carbon Weave Scanline Background (ZIndex 2, behind Elements at 3)
     do
@@ -2406,32 +2431,43 @@ local function PatchRayfieldDOM()
             carbonBg.Parent = mainFrame
         end
         -- Update / build gradient keypoints with current accent
+        -- High-contrast weave: accent stripe barely lerped, tight dark gaps
         local cGrad = carbonBg:FindFirstChild("CarbonWeaveGrad")
         if cGrad then
-            local stripe = acc:Lerp(Color3.fromRGB(90, 90, 110), 0.65)
-            local dark   = Color3.fromRGB(14, 14, 20)
-            local mid    = Color3.fromRGB(18, 18, 26)
+            -- stripe = mostly the accent color (only 20% lerp toward gray)
+            local stripe = acc:Lerp(Color3.fromRGB(80, 80, 95), 0.20)
+            local dark   = Color3.fromRGB(10, 10, 15)
+            local mid    = Color3.fromRGB(16, 16, 22)
             cGrad.Color = ColorSequence.new({
                 ColorSequenceKeypoint.new(0,    dark),
-                ColorSequenceKeypoint.new(0.12, stripe),
-                ColorSequenceKeypoint.new(0.25, mid),
-                ColorSequenceKeypoint.new(0.37, stripe),
+                ColorSequenceKeypoint.new(0.09, stripe),
+                ColorSequenceKeypoint.new(0.17, dark),
+                ColorSequenceKeypoint.new(0.26, stripe),
+                ColorSequenceKeypoint.new(0.34, mid),
+                ColorSequenceKeypoint.new(0.43, stripe),
                 ColorSequenceKeypoint.new(0.5,  dark),
-                ColorSequenceKeypoint.new(0.62, stripe),
-                ColorSequenceKeypoint.new(0.75, mid),
-                ColorSequenceKeypoint.new(0.87, stripe),
+                ColorSequenceKeypoint.new(0.59, stripe),
+                ColorSequenceKeypoint.new(0.67, mid),
+                ColorSequenceKeypoint.new(0.76, stripe),
+                ColorSequenceKeypoint.new(0.84, dark),
+                ColorSequenceKeypoint.new(0.93, stripe),
                 ColorSequenceKeypoint.new(1,    dark),
             })
+            -- Stripe bands: 0.55 (clearly visible), gap bands: 0.88 (nearly invisible)
             cGrad.Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0,    0.90),
-                NumberSequenceKeypoint.new(0.12, 0.72),
-                NumberSequenceKeypoint.new(0.25, 0.90),
-                NumberSequenceKeypoint.new(0.37, 0.72),
-                NumberSequenceKeypoint.new(0.5,  0.90),
-                NumberSequenceKeypoint.new(0.62, 0.72),
-                NumberSequenceKeypoint.new(0.75, 0.90),
-                NumberSequenceKeypoint.new(0.87, 0.72),
-                NumberSequenceKeypoint.new(1,    0.90),
+                NumberSequenceKeypoint.new(0,    0.88),
+                NumberSequenceKeypoint.new(0.09, 0.55),
+                NumberSequenceKeypoint.new(0.17, 0.88),
+                NumberSequenceKeypoint.new(0.26, 0.55),
+                NumberSequenceKeypoint.new(0.34, 0.88),
+                NumberSequenceKeypoint.new(0.43, 0.55),
+                NumberSequenceKeypoint.new(0.5,  0.88),
+                NumberSequenceKeypoint.new(0.59, 0.55),
+                NumberSequenceKeypoint.new(0.67, 0.88),
+                NumberSequenceKeypoint.new(0.76, 0.55),
+                NumberSequenceKeypoint.new(0.84, 0.88),
+                NumberSequenceKeypoint.new(0.93, 0.55),
+                NumberSequenceKeypoint.new(1,    0.88),
             })
         end
     end
@@ -2482,7 +2518,7 @@ local function PatchRayfieldDOM()
         cyberStroke.Color = GetThemeAccentColor()
     end
 
-    -- 0c. Centered Ambient Halo Styling (Strictly in mainFrame.Parent with ZIndex 0 — 100% behind menu)
+    -- 0c. Ambient Bloom Halo — pure Frame layers in dedicated HaloGui (DisplayOrder -100, always behind Rayfield)
     local legacyShadow = mainFrame:FindFirstChild("GlassShadow")
     if legacyShadow then legacyShadow:Destroy() end
     local legacyAuraOverlay = OverlayGui:FindFirstChild("TASFF_AmbientAura")
@@ -2494,42 +2530,80 @@ local function PatchRayfieldDOM()
     if mainFrame.Parent then
         local legacyAuraParent = mainFrame.Parent:FindFirstChild("TASFF_AmbientAura")
         if legacyAuraParent then legacyAuraParent:Destroy() end
+        -- Also destroy any old ImageLabel halo left in mainFrame.Parent from previous patch
+        local oldParentHalo = mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
+        if oldParentHalo then oldParentHalo:Destroy() end
     end
 
-    -- Create genuine soft ambient bloom halo in mainFrame.Parent (behind menu, ZIndex 0)
-    -- Uses AbsolutePosition for correct centering since Rayfield stores drag as fromOffset
-    local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
-    if not ambientHalo and mainFrame.Parent then
-        ambientHalo = Instance.new("ImageLabel")
-        ambientHalo.Name = "TASFF_AmbientHalo"
-        ambientHalo.BackgroundTransparency = 1
-        ambientHalo.Image = "rbxassetid://5028857084" -- Soft radial blur 9-slice glow
-        ambientHalo.ScaleType = Enum.ScaleType.Slice
-        ambientHalo.SliceCenter = Rect.new(24, 24, 276, 276)
-        ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
-        ambientHalo.ImageColor3 = GetThemeAccentColor()
-        ambientHalo.ImageTransparency = 0.45
-        ambientHalo.ZIndex = 0
-        ambientHalo.Parent = mainFrame.Parent
+    -- Build/rebuild halo in HaloGui (always behind Rayfield's ScreenGui via DisplayOrder -100)
+    -- The halo is a stack of concentric rounded frames that fade outward — no image asset needed
+    local function BuildHaloLayers(container, acc)
+        -- Clear old layers
+        for _, ch in ipairs(container:GetChildren()) do ch:Destroy() end
+        -- Layers: {extra_px_each_side, transparency, corner_radius}
+        local layers = {
+            {160, 0.93, 60},
+            {100, 0.87, 45},
+            {55,  0.78, 30},
+            {22,  0.65, 18},
+        }
+        for _, L in ipairs(layers) do
+            local expand, trans, radius = L[1], L[2], L[3]
+            local lf = Instance.new("Frame", container)
+            lf.Name = "HaloLayer"
+            lf.AnchorPoint = Vector2.new(0.5, 0.5)
+            lf.BackgroundColor3 = acc
+            lf.BackgroundTransparency = trans
+            lf.BorderSizePixel = 0
+            lf.ZIndex = 1
+            -- Size/position are set by UpdateHaloPosition; store expand as a tag
+            lf:SetAttribute("HaloExpand", expand)
+            Instance.new("UICorner", lf).CornerRadius = UDim.new(0, radius)
+        end
     end
 
-    if ambientHalo then
-        ambientHalo.ImageColor3 = GetThemeAccentColor()
-        ambientHalo.ImageTransparency = 0.45
-        ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
-        -- Centre the bloom on the menu using absolute pixel coords
-        -- (mainFrame.Position may be fromOffset; AbsolutePosition is always pixels)
-        local pAbsPos  = (mainFrame.Parent and mainFrame.Parent:IsA("GuiObject"))
-                         and mainFrame.Parent.AbsolutePosition or Vector2.zero
+    local function UpdateHaloPosition(container, acc)
         local mAbsPos  = mainFrame.AbsolutePosition
         local mAbsSize = mainFrame.AbsoluteSize
-        local expand   = 180 -- px expansion each side for a wide soft bloom
-        ambientHalo.Position = UDim2.fromOffset(
-            mAbsPos.X - pAbsPos.X + mAbsSize.X * 0.5,
-            mAbsPos.Y - pAbsPos.Y + mAbsSize.Y * 0.5
-        )
-        ambientHalo.Size = UDim2.fromOffset(mAbsSize.X + expand * 2, mAbsSize.Y + expand * 2)
+        if mAbsSize.X < 20 or mAbsSize.Y < 20 then return end -- not laid out yet
+        local cx = mAbsPos.X + mAbsSize.X * 0.5
+        local cy = mAbsPos.Y + mAbsSize.Y * 0.5
+        for _, lf in ipairs(container:GetChildren()) do
+            if lf:IsA("Frame") and lf.Name == "HaloLayer" then
+                local exp = lf:GetAttribute("HaloExpand") or 80
+                lf.Position = UDim2.fromOffset(cx, cy)
+                lf.Size = UDim2.fromOffset(mAbsSize.X + exp * 2, mAbsSize.Y + exp * 2)
+                if acc then lf.BackgroundColor3 = acc end
+            end
+        end
     end
+
+    -- Retrieve or create the halo container frame inside HaloGui
+    local haloContainer = HaloGui:FindFirstChild("TASFF_AmbientHalo")
+    if not haloContainer then
+        haloContainer = Instance.new("Frame")
+        haloContainer.Name = "TASFF_AmbientHalo"
+        haloContainer.BackgroundTransparency = 1
+        haloContainer.BorderSizePixel = 0
+        haloContainer.Size = UDim2.new(1, 0, 1, 0)
+        haloContainer.Position = UDim2.new(0, 0, 0, 0)
+        haloContainer.ZIndex = 1
+        haloContainer.Parent = HaloGui
+        BuildHaloLayers(haloContainer, GetThemeAccentColor())
+    else
+        -- Recolor existing layers
+        local acc = GetThemeAccentColor()
+        for _, lf in ipairs(haloContainer:GetChildren()) do
+            if lf:IsA("Frame") and lf.Name == "HaloLayer" then
+                lf.BackgroundColor3 = acc
+            end
+        end
+    end
+    UpdateHaloPosition(haloContainer, GetThemeAccentColor())
+
+    -- Store helpers on TASFFEnv for SyncRayfieldFade access
+    TASFFEnv.Theme._HaloContainer = haloContainer
+    TASFFEnv.Theme._UpdateHaloPosition = UpdateHaloPosition
 
     -- 0d. Topbar Clean Accent Line & Notification Center Bell (Shifted clear of Search)
     local topbar = mainFrame:FindFirstChild("Topbar", true)
@@ -3168,24 +3242,24 @@ local function PatchRayfieldDOM()
             topbarLine.BackgroundTransparency = mainTrans
         end
 
-        -- Ambient Halo Sync in mainFrame.Parent (100% strictly BEHIND mainFrame, perfectly centered)
-        local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
-        if ambientHalo then
-            ambientHalo.Visible = (isVis and isExpanded and not isClosing)
-            if ambientHalo.Visible then
-                ambientHalo.ImageColor3 = GetThemeAccentColor()
-                ambientHalo.ImageTransparency = math.clamp(0.45 + mainTrans * 0.55, 0, 1)
-                ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
-                local pAbsPos  = (mainFrame.Parent and mainFrame.Parent:IsA("GuiObject"))
-                                 and mainFrame.Parent.AbsolutePosition or Vector2.zero
-                local mAbsPos  = mainFrame.AbsolutePosition
-                local mAbsSize = mainFrame.AbsoluteSize
-                local expand   = 180
-                ambientHalo.Position = UDim2.fromOffset(
-                    mAbsPos.X - pAbsPos.X + mAbsSize.X * 0.5,
-                    mAbsPos.Y - pAbsPos.Y + mAbsSize.Y * 0.5
-                )
-                ambientHalo.Size = UDim2.fromOffset(mAbsSize.X + expand * 2, mAbsSize.Y + expand * 2)
+        -- Ambient Halo Sync — pure Frame layers in HaloGui (behind all Rayfield UI via DisplayOrder -100)
+        local haloContainer = TASFFEnv.Theme._HaloContainer or HaloGui:FindFirstChild("TASFF_AmbientHalo")
+        if haloContainer then
+            local shouldShow = (isVis and isExpanded and not isClosing)
+            haloContainer.Visible = shouldShow
+            if shouldShow then
+                local acc = GetThemeAccentColor()
+                -- Fade layers with mainTrans so bloom disappears as menu fades
+                for _, lf in ipairs(haloContainer:GetChildren()) do
+                    if lf:IsA("Frame") and lf.Name == "HaloLayer" then
+                        local baseTrans = lf.BackgroundTransparency
+                        -- keep existing trans but push toward 1 as menu fades
+                        lf.BackgroundTransparency = math.clamp(baseTrans + mainTrans * (1 - baseTrans), 0, 1)
+                        lf.BackgroundColor3 = acc
+                    end
+                end
+                local updateFn = TASFFEnv.Theme._UpdateHaloPosition
+                if updateFn then updateFn(haloContainer, acc) end
             end
         end
 
@@ -3300,19 +3374,11 @@ local function PatchRayfieldDOM()
         fHook.Name = "MasterFadeSyncHooked"
         mainFrame:GetPropertyChangedSignal("Visible"):Connect(SyncRayfieldFade)
         mainFrame:GetPropertyChangedSignal("Position"):Connect(function()
-            local ambientHalo = mainFrame.Parent and mainFrame.Parent:FindFirstChild("TASFF_AmbientHalo")
-            if ambientHalo and ambientHalo.Visible then
-                local pAbsPos  = (mainFrame.Parent and mainFrame.Parent:IsA("GuiObject"))
-                                 and mainFrame.Parent.AbsolutePosition or Vector2.zero
-                local mAbsPos  = mainFrame.AbsolutePosition
-                local mAbsSize = mainFrame.AbsoluteSize
-                local expand   = 180
-                ambientHalo.AnchorPoint = Vector2.new(0.5, 0.5)
-                ambientHalo.Position = UDim2.fromOffset(
-                    mAbsPos.X - pAbsPos.X + mAbsSize.X * 0.5,
-                    mAbsPos.Y - pAbsPos.Y + mAbsSize.Y * 0.5
-                )
-                ambientHalo.Size = UDim2.fromOffset(mAbsSize.X + expand * 2, mAbsSize.Y + expand * 2)
+            -- Re-position halo layers on drag (uses SyncRayfieldFade which calls UpdateHaloPosition)
+            local haloContainer = TASFFEnv.Theme._HaloContainer or HaloGui:FindFirstChild("TASFF_AmbientHalo")
+            if haloContainer and haloContainer.Visible then
+                local updateFn = TASFFEnv.Theme._UpdateHaloPosition
+                if updateFn then updateFn(haloContainer, GetThemeAccentColor()) end
             end
             if NotificationDrawer and NotificationDrawer.Visible then UpdateDrawerPosition() end
         end)
@@ -4216,13 +4282,16 @@ local function SyncRayfieldVisibility()
 
     local parent = mainFrame.Parent
     if parent then
-        for _, name in ipairs({"TASFF_AmbientHalo", "TASFF_BottomBar"}) do
+        for _, name in ipairs({"TASFF_BottomBar"}) do
             local external = parent:FindFirstChild(name)
             if external and external:IsA("GuiObject") then
                 external.Visible = isVisible
             end
         end
     end
+    -- Sync halo container visibility
+    local haloContainer = TASFFEnv.Theme._HaloContainer or HaloGui:FindFirstChild("TASFF_AmbientHalo")
+    if haloContainer then haloContainer.Visible = isVisible end
 end
 
 local function BindRayfieldVisibility()
@@ -4257,6 +4326,12 @@ local function DestroyTheme()
         OverlayGui.Enabled = false
         pcall(function() OverlayGui:Destroy() end)
     end
+    if HaloGui then
+        HaloGui.Enabled = false
+        pcall(function() HaloGui:Destroy() end)
+    end
+    TASFFEnv.Theme._HaloContainer = nil
+    TASFFEnv.Theme._UpdateHaloPosition = nil
 
     local parents = {}
     pcall(function()

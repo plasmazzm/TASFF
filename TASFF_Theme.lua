@@ -4088,36 +4088,47 @@ local function PatchRayfieldDOM()
             stepMinus.Size = UDim2.new(0, 16, 0, 16)
             stepMinus.AnchorPoint = Vector2.new(1, 0.5)
             stepMinus.Position = UDim2.new(1, -38, 0.5, 0)
-            stepMinus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
+            stepMinus.BackgroundColor3 = Color3.fromRGB(40, 38, 50)
+            stepMinus.BackgroundTransparency = 0.1
             stepMinus.BorderSizePixel = 0
             stepMinus.Font = Enum.Font.GothamBold
             stepMinus.TextSize = 13
-            stepMinus.TextColor3 = GetThemeAccentColor()
+            stepMinus.TextColor3 = Color3.fromRGB(255, 255, 255)
             stepMinus.Text = "-"
             stepMinus.ZIndex = 50
             Instance.new("UICorner", stepMinus).CornerRadius = UDim.new(0, 3)
             local smStroke = Instance.new("UIStroke", stepMinus)
-            smStroke.Color = GetThemeAccentColor()
+            smStroke.Color = Color3.fromRGB(240, 175, 50)
             smStroke.Thickness = 1
-            smStroke.Transparency = 0.2
+            smStroke.Transparency = 0.1
 
             local stepPlus = Instance.new("TextButton", desc)
             stepPlus.Name = "StepPlus"
             stepPlus.Size = UDim2.new(0, 16, 0, 16)
             stepPlus.AnchorPoint = Vector2.new(1, 0.5)
             stepPlus.Position = UDim2.new(1, -18, 0.5, 0)
-            stepPlus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
+            stepPlus.BackgroundColor3 = Color3.fromRGB(40, 38, 50)
+            stepPlus.BackgroundTransparency = 0.1
             stepPlus.BorderSizePixel = 0
             stepPlus.Font = Enum.Font.GothamBold
             stepPlus.TextSize = 13
-            stepPlus.TextColor3 = GetThemeAccentColor()
+            stepPlus.TextColor3 = Color3.fromRGB(255, 255, 255)
             stepPlus.Text = "+"
             stepPlus.ZIndex = 50
             Instance.new("UICorner", stepPlus).CornerRadius = UDim.new(0, 3)
             local spStroke = Instance.new("UIStroke", stepPlus)
-            spStroke.Color = GetThemeAccentColor()
+            spStroke.Color = Color3.fromRGB(240, 175, 50)
             spStroke.Thickness = 1
-            spStroke.Transparency = 0.2
+            spStroke.Transparency = 0.1
+
+            -- Deferred color refresh so accent is applied after theme fully loads
+            task.defer(function()
+                local acc = GetThemeAccentColor()
+                smStroke.Color = acc
+                spStroke.Color = acc
+                stepMinus.TextColor3 = acc
+                stepPlus.TextColor3 = acc
+            end)
 
             local function AdjustSlider(delta)
                 PlayUISound("stepper")
@@ -4454,36 +4465,47 @@ local function PatchRayfieldDOM()
                     lMinus.Size = UDim2.new(0, 16, 0, 16)
                     lMinus.AnchorPoint = Vector2.new(1, 0.5)
                     lMinus.Position = UDim2.new(1, -38, 0.5, 0)
-                    lMinus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
+                    lMinus.BackgroundColor3 = Color3.fromRGB(40, 38, 50)
+                    lMinus.BackgroundTransparency = 0.1
                     lMinus.BorderSizePixel = 0
                     lMinus.Font = Enum.Font.GothamBold
                     lMinus.TextSize = 13
-                    lMinus.TextColor3 = GetThemeAccentColor()
+                    lMinus.TextColor3 = Color3.fromRGB(255, 255, 255)
                     lMinus.Text = "-"
                     lMinus.ZIndex = 50
                     Instance.new("UICorner", lMinus).CornerRadius = UDim.new(0, 3)
                     local lmStroke = Instance.new("UIStroke", lMinus)
-                    lmStroke.Color = GetThemeAccentColor()
+                    lmStroke.Color = Color3.fromRGB(240, 175, 50)
                     lmStroke.Thickness = 1
-                    lmStroke.Transparency = 0.2
+                    lmStroke.Transparency = 0.1
 
                     local lPlus = Instance.new("TextButton", newDesc)
                     lPlus.Name = "StepPlus"
                     lPlus.Size = UDim2.new(0, 16, 0, 16)
                     lPlus.AnchorPoint = Vector2.new(1, 0.5)
                     lPlus.Position = UDim2.new(1, -18, 0.5, 0)
-                    lPlus.BackgroundColor3 = Color3.fromRGB(30, 32, 44)
+                    lPlus.BackgroundColor3 = Color3.fromRGB(40, 38, 50)
+                    lPlus.BackgroundTransparency = 0.1
                     lPlus.BorderSizePixel = 0
                     lPlus.Font = Enum.Font.GothamBold
                     lPlus.TextSize = 13
-                    lPlus.TextColor3 = GetThemeAccentColor()
+                    lPlus.TextColor3 = Color3.fromRGB(255, 255, 255)
                     lPlus.Text = "+"
                     lPlus.ZIndex = 50
                     Instance.new("UICorner", lPlus).CornerRadius = UDim.new(0, 3)
                     local lpStroke = Instance.new("UIStroke", lPlus)
-                    lpStroke.Color = GetThemeAccentColor()
+                    lpStroke.Color = Color3.fromRGB(240, 175, 50)
                     lpStroke.Thickness = 1
-                    lpStroke.Transparency = 0.2
+                    lpStroke.Transparency = 0.1
+
+                    -- Deferred color refresh so accent is applied after theme fully loads
+                    task.defer(function()
+                        local acc = GetThemeAccentColor()
+                        lmStroke.Color = acc
+                        lpStroke.Color = acc
+                        lMinus.TextColor3 = acc
+                        lPlus.TextColor3 = acc
+                    end)
                 end
             end)
         end)

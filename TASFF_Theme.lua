@@ -3369,12 +3369,11 @@ local function PatchRayfieldDOM()
                     local title = tabBtn:FindFirstChild("Title") or tabBtn:FindFirstChildOfClass("TextLabel")
                     local img = tabBtn:FindFirstChild("Image") or tabBtn:FindFirstChildOfClass("ImageLabel")
 
-                    local targetTextColor = Color3.fromRGB(255, 255, 255)
-                    local targetImgColor  = Color3.fromRGB(255, 255, 255)
                     local targetBg = isActive and Color3.fromRGB(26, 26, 34) or Color3.fromRGB(16, 16, 22)
                     local targetBgTrans = isActive and 0.1 or 0.5
-                    local targetStrokeColor = isActive and accent or Color3.fromRGB(50, 50, 62)
-                    local targetStrokeTrans = isActive and 0 or 0.65
+                    -- Active: accent-colored border | Inactive: dim white border (always visible)
+                    local targetStrokeColor = isActive and accent or Color3.fromRGB(180, 180, 200)
+                    local targetStrokeTrans = isActive and 0 or 0.4
                     local targetStrokeThick = isActive and 1.5 or 1
 
                     tabBtn.BackgroundColor3 = targetBg
@@ -3384,14 +3383,46 @@ local function PatchRayfieldDOM()
                         st.Transparency = targetStrokeTrans
                         st.Thickness = targetStrokeThick
                     end
+                    -- Force text/icon white directly (no tween — prevents race with Rayfield tweens)
                     if title then
-                        -- Direct set only (no tween) to avoid race with Rayfield's concurrent tweens
-                        title.TextColor3 = targetTextColor
+                        title.TextColor3 = Color3.fromRGB(255, 255, 255)
                         title.TextTransparency = 0
                     end
                     if img then
-                        img.ImageColor3 = targetImgColor
+                        img.ImageColor3 = Color3.fromRGB(255, 255, 255)
                         img.ImageTransparency = 0
+                    end
+
+                    -- One-time guard: immediately correct TextColor3/ImageColor3 whenever Rayfield resets them
+                    if not tabBtn:GetAttribute("TASFF_ColorGuarded") then
+                        tabBtn:SetAttribute("TASFF_ColorGuarded", true)
+                        if title then
+                            title:GetPropertyChangedSignal("TextColor3"):Connect(function()
+                                -- Roblox Color3 == comparison is exact; anything not pure white → force white
+                                local c = title.TextColor3
+                                if not (c.R > 0.98 and c.G > 0.98 and c.B > 0.98) then
+                                    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                end
+                            end)
+                            title:GetPropertyChangedSignal("TextTransparency"):Connect(function()
+                                if title.TextTransparency > 0.05 then
+                                    title.TextTransparency = 0
+                                end
+                            end)
+                        end
+                        if img then
+                            img:GetPropertyChangedSignal("ImageColor3"):Connect(function()
+                                local c = img.ImageColor3
+                                if not (c.R > 0.98 and c.G > 0.98 and c.B > 0.98) then
+                                    img.ImageColor3 = Color3.fromRGB(255, 255, 255)
+                                end
+                            end)
+                            img:GetPropertyChangedSignal("ImageTransparency"):Connect(function()
+                                if img.ImageTransparency > 0.05 then
+                                    img.ImageTransparency = 0
+                                end
+                            end)
+                        end
                     end
                 end
             end
@@ -3531,6 +3562,17 @@ local function PatchRayfieldDOM()
         for _, t in ipairs(_sweepTimes) do
             task.delay(t, function() pcall(UpdateTabVisuals) end)
         end
+
+        -- Watch for new tab buttons added after init (e.g. late CreateTab calls)
+        tabList.ChildAdded:Connect(function(newBtn)
+            if newBtn:IsA("GuiObject") and newBtn.Name ~= "Template" and newBtn.Name ~= "Placeholder" then
+                task.defer(function()
+                    pcall(UpdateTabVisuals)
+                    task.delay(0.5, function() pcall(UpdateTabVisuals) end)
+                    task.delay(1.0, function() pcall(UpdateTabVisuals) end)
+                end)
+            end
+        end)
     end
 
     -- Centralized Full Fading & Window State Synchronizer
@@ -4087,51 +4129,50 @@ local function PatchRayfieldDOM()
 
             -- Position steppers at the right end of the card, vertically centered
             -- Using AnchorPoint(1,0.5) so they anchor to the right edge
+            local _stepAccent = Color3.fromRGB(240, 175, 50)   -- fallback; refreshed below
             local stepMinus = Instance.new("TextButton", desc)
             stepMinus.Name = "StepMinus"
             stepMinus.Size = UDim2.new(0, 16, 0, 16)
             stepMinus.AnchorPoint = Vector2.new(1, 0.5)
             stepMinus.Position = UDim2.new(1, -38, 0.5, 0)
-            stepMinus.BackgroundColor3 = Color3.fromRGB(40, 38, 50)
-            stepMinus.BackgroundTransparency = 0.1
+            stepMinus.BackgroundColor3 = Color3.fromRGB(28, 26, 38)
+            stepMinus.BackgroundTransparency = 0
             stepMinus.BorderSizePixel = 0
             stepMinus.Font = Enum.Font.GothamBold
-            stepMinus.TextSize = 13
-            stepMinus.TextColor3 = Color3.fromRGB(255, 255, 255)
+            stepMinus.TextSize = 12
+            stepMinus.TextColor3 = _stepAccent
             stepMinus.Text = "-"
             stepMinus.ZIndex = 50
             Instance.new("UICorner", stepMinus).CornerRadius = UDim.new(0, 3)
             local smStroke = Instance.new("UIStroke", stepMinus)
-            smStroke.Color = Color3.fromRGB(240, 175, 50)
-            smStroke.Thickness = 1
-            smStroke.Transparency = 0.1
+            smStroke.Color = _stepAccent
+            smStroke.Thickness = 1.5
+            smStroke.Transparency = 0
 
             local stepPlus = Instance.new("TextButton", desc)
             stepPlus.Name = "StepPlus"
             stepPlus.Size = UDim2.new(0, 16, 0, 16)
             stepPlus.AnchorPoint = Vector2.new(1, 0.5)
             stepPlus.Position = UDim2.new(1, -18, 0.5, 0)
-            stepPlus.BackgroundColor3 = Color3.fromRGB(40, 38, 50)
-            stepPlus.BackgroundTransparency = 0.1
+            stepPlus.BackgroundColor3 = Color3.fromRGB(28, 26, 38)
+            stepPlus.BackgroundTransparency = 0
             stepPlus.BorderSizePixel = 0
             stepPlus.Font = Enum.Font.GothamBold
-            stepPlus.TextSize = 13
-            stepPlus.TextColor3 = Color3.fromRGB(255, 255, 255)
+            stepPlus.TextSize = 12
+            stepPlus.TextColor3 = _stepAccent
             stepPlus.Text = "+"
             stepPlus.ZIndex = 50
             Instance.new("UICorner", stepPlus).CornerRadius = UDim.new(0, 3)
             local spStroke = Instance.new("UIStroke", stepPlus)
-            spStroke.Color = Color3.fromRGB(240, 175, 50)
-            spStroke.Thickness = 1
-            spStroke.Transparency = 0.1
+            spStroke.Color = _stepAccent
+            spStroke.Thickness = 1.5
+            spStroke.Transparency = 0
 
-            -- Deferred color refresh so accent is applied after theme fully loads
+            -- Refresh accent color once theme is ready (retry at 0.5s, 1.5s, 3s)
             local function _refreshStepperColors()
                 local acc = GetThemeAccentColor()
-                pcall(function() smStroke.Color = acc end)
-                pcall(function() spStroke.Color = acc end)
-                pcall(function() stepMinus.TextColor3 = acc end)
-                pcall(function() stepPlus.TextColor3 = acc end)
+                pcall(function() smStroke.Color = acc; stepMinus.TextColor3 = acc end)
+                pcall(function() spStroke.Color = acc; stepPlus.TextColor3 = acc end)
             end
             task.defer(_refreshStepperColors)
             task.delay(0.5, _refreshStepperColors)
@@ -4468,51 +4509,49 @@ local function PatchRayfieldDOM()
                     newDesc.ClipsDescendants = false
                     local lHook = Instance.new("BoolValue", newDesc)
                     lHook.Name = "StepperHooked"
+                    local _lAccent = Color3.fromRGB(240, 175, 50)
                     local lMinus = Instance.new("TextButton", newDesc)
                     lMinus.Name = "StepMinus"
                     lMinus.Size = UDim2.new(0, 16, 0, 16)
                     lMinus.AnchorPoint = Vector2.new(1, 0.5)
                     lMinus.Position = UDim2.new(1, -38, 0.5, 0)
-                    lMinus.BackgroundColor3 = Color3.fromRGB(40, 38, 50)
-                    lMinus.BackgroundTransparency = 0.1
+                    lMinus.BackgroundColor3 = Color3.fromRGB(28, 26, 38)
+                    lMinus.BackgroundTransparency = 0
                     lMinus.BorderSizePixel = 0
                     lMinus.Font = Enum.Font.GothamBold
-                    lMinus.TextSize = 13
-                    lMinus.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    lMinus.TextSize = 12
+                    lMinus.TextColor3 = _lAccent
                     lMinus.Text = "-"
                     lMinus.ZIndex = 50
                     Instance.new("UICorner", lMinus).CornerRadius = UDim.new(0, 3)
                     local lmStroke = Instance.new("UIStroke", lMinus)
-                    lmStroke.Color = Color3.fromRGB(240, 175, 50)
-                    lmStroke.Thickness = 1
-                    lmStroke.Transparency = 0.1
+                    lmStroke.Color = _lAccent
+                    lmStroke.Thickness = 1.5
+                    lmStroke.Transparency = 0
 
                     local lPlus = Instance.new("TextButton", newDesc)
                     lPlus.Name = "StepPlus"
                     lPlus.Size = UDim2.new(0, 16, 0, 16)
                     lPlus.AnchorPoint = Vector2.new(1, 0.5)
                     lPlus.Position = UDim2.new(1, -18, 0.5, 0)
-                    lPlus.BackgroundColor3 = Color3.fromRGB(40, 38, 50)
-                    lPlus.BackgroundTransparency = 0.1
+                    lPlus.BackgroundColor3 = Color3.fromRGB(28, 26, 38)
+                    lPlus.BackgroundTransparency = 0
                     lPlus.BorderSizePixel = 0
                     lPlus.Font = Enum.Font.GothamBold
-                    lPlus.TextSize = 13
-                    lPlus.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    lPlus.TextSize = 12
+                    lPlus.TextColor3 = _lAccent
                     lPlus.Text = "+"
                     lPlus.ZIndex = 50
                     Instance.new("UICorner", lPlus).CornerRadius = UDim.new(0, 3)
                     local lpStroke = Instance.new("UIStroke", lPlus)
-                    lpStroke.Color = Color3.fromRGB(240, 175, 50)
-                    lpStroke.Thickness = 1
-                    lpStroke.Transparency = 0.1
+                    lpStroke.Color = _lAccent
+                    lpStroke.Thickness = 1.5
+                    lpStroke.Transparency = 0
 
-                    -- Deferred color refresh so accent is applied after theme fully loads
                     local function _refreshLateStepperColors()
                         local acc = GetThemeAccentColor()
-                        pcall(function() lmStroke.Color = acc end)
-                        pcall(function() lpStroke.Color = acc end)
-                        pcall(function() lMinus.TextColor3 = acc end)
-                        pcall(function() lPlus.TextColor3 = acc end)
+                        pcall(function() lmStroke.Color = acc; lMinus.TextColor3 = acc end)
+                        pcall(function() lpStroke.Color = acc; lPlus.TextColor3 = acc end)
                     end
                     task.defer(_refreshLateStepperColors)
                     task.delay(0.5, _refreshLateStepperColors)

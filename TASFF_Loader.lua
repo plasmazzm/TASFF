@@ -350,6 +350,31 @@ local function PatchRayfieldSource(src)
     local r8_inactive_stroke = "tabbtn.UIStroke.Thickness = 1; TweenService:Create(tabbtn.UIStroke, TweenInfo.new(0.3, Enum.EasingStyle.Exponential), {Transparency = 0.65, Color = Color3.fromRGB(50, 50, 62)}):Play()"
     src = PlainReplaceAll(src, t8_inactive_stroke, r8_inactive_stroke)
 
+    -- 9. Patch direct TabButton.Title.TextColor3 and Image.ImageColor3 assignments that bypass tweens
+    -- These direct assignments fire from: CreateTab init, FirstTab logic, and GetPropertyChangedSignal("BackgroundColor3")
+    -- They set TextColor3 = SelectedTheme.SelectedTabTextColor (dark in built-in Rayfield themes) AFTER our tweens run
+    -- Fix: always force white for selected tab, white for inactive tab (TabTextColor path)
+    -- Active tab direct assignments (3-tab indent, 2 occurrences)
+    src = PlainReplaceAll(src,
+        "TabButton.Image.ImageColor3 = SelectedTheme.SelectedTabTextColor\n\t\t\tTabButton.Title.TextColor3 = SelectedTheme.SelectedTabTextColor",
+        "TabButton.Image.ImageColor3 = Color3.fromRGB(255, 255, 255)\n\t\t\tTabButton.Title.TextColor3 = Color3.fromRGB(255, 255, 255)")
+    -- Active tab direct assignments (4-tab indent, 1 occurrence - FirstTab block)
+    src = PlainReplaceAll(src,
+        "TabButton.Image.ImageColor3 = SelectedTheme.SelectedTabTextColor\n\t\t\t\tTabButton.Title.TextColor3 = SelectedTheme.SelectedTabTextColor",
+        "TabButton.Image.ImageColor3 = Color3.fromRGB(255, 255, 255)\n\t\t\t\tTabButton.Title.TextColor3 = Color3.fromRGB(255, 255, 255)")
+    -- Inactive tab direct assignments (3-tab indent, 2 occurrences)
+    src = PlainReplaceAll(src,
+        "TabButton.Image.ImageColor3 = SelectedTheme.TabTextColor\n\t\t\tTabButton.Title.TextColor3 = SelectedTheme.TabTextColor",
+        "TabButton.Image.ImageColor3 = Color3.fromRGB(255, 255, 255)\n\t\t\tTabButton.Title.TextColor3 = Color3.fromRGB(255, 255, 255)")
+    -- Inactive tab direct assignments (4-tab indent, 1 occurrence)
+    src = PlainReplaceAll(src,
+        "TabButton.Image.ImageColor3 = SelectedTheme.TabTextColor\n\t\t\t\tTabButton.Title.TextColor3 = SelectedTheme.TabTextColor",
+        "TabButton.Image.ImageColor3 = Color3.fromRGB(255, 255, 255)\n\t\t\t\tTabButton.Title.TextColor3 = Color3.fromRGB(255, 255, 255)")
+    -- UIStroke color reset: use accent instead of TabStroke (2 occurrences)
+    src = PlainReplaceAll(src,
+        "TabButton.UIStroke.Color = SelectedTheme.TabStroke",
+        "do local _acc = SelectedTheme.SliderProgress or SelectedTheme.ToggleEnabled or SelectedTheme.TabStroke or Color3.fromRGB(240, 175, 50); TabButton.UIStroke.Color = _acc end")
+
     return src
 end
 

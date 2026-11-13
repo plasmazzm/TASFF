@@ -3369,8 +3369,8 @@ local function PatchRayfieldDOM()
                     local title = tabBtn:FindFirstChild("Title") or tabBtn:FindFirstChildOfClass("TextLabel")
                     local img = tabBtn:FindFirstChild("Image") or tabBtn:FindFirstChildOfClass("ImageLabel")
 
-                    local targetTextColor = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(225, 225, 235)
-                    local targetImgColor = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(215, 215, 225)
+                    local targetTextColor = Color3.fromRGB(255, 255, 255)
+                    local targetImgColor  = Color3.fromRGB(255, 255, 255)
                     local targetBg = isActive and Color3.fromRGB(26, 26, 34) or Color3.fromRGB(16, 16, 22)
                     local targetBgTrans = isActive and 0.1 or 0.5
                     local targetStrokeColor = isActive and accent or Color3.fromRGB(50, 50, 62)
@@ -3385,20 +3385,13 @@ local function PatchRayfieldDOM()
                         st.Thickness = targetStrokeThick
                     end
                     if title then
+                        -- Direct set only (no tween) to avoid race with Rayfield's concurrent tweens
                         title.TextColor3 = targetTextColor
                         title.TextTransparency = 0
-                        TweenService:Create(title, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-                            TextColor3 = targetTextColor,
-                            TextTransparency = 0
-                        }):Play()
                     end
                     if img then
                         img.ImageColor3 = targetImgColor
                         img.ImageTransparency = 0
-                        TweenService:Create(img, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-                            ImageColor3 = targetImgColor,
-                            ImageTransparency = 0
-                        }):Play()
                     end
                 end
             end
@@ -3497,8 +3490,11 @@ local function PatchRayfieldDOM()
                         UpdateTabVisuals(tabBtn.Name)
                         task.delay(0.05, function() UpdateTabVisuals(tabBtn.Name) end)
                         task.delay(0.15, function() UpdateTabVisuals(tabBtn.Name) end)
-                        task.delay(0.35, function() UpdateTabVisuals(tabBtn.Name) end)
-                        task.delay(0.72, function() UpdateTabVisuals(tabBtn.Name) end)
+                        task.delay(0.38, function() UpdateTabVisuals(tabBtn.Name) end)
+                        task.delay(0.75, function() UpdateTabVisuals(tabBtn.Name) end)
+                        task.delay(0.85, function() UpdateTabVisuals(tabBtn.Name) end)
+                        task.delay(1.0,  function() UpdateTabVisuals(tabBtn.Name) end)
+                        task.delay(1.5,  function() UpdateTabVisuals(tabBtn.Name) end)
                     end
                     if btn:IsA("GuiButton") then
                         btn.MouseButton1Click:Connect(onActivated)
@@ -3520,13 +3516,21 @@ local function PatchRayfieldDOM()
                     UpdateTabVisuals(cp.Name)
                     task.delay(0.05, function() UpdateTabVisuals(cp.Name) end)
                     task.delay(0.15, function() UpdateTabVisuals(cp.Name) end)
-                    task.delay(0.35, function() UpdateTabVisuals(cp.Name) end)
-                    task.delay(0.72, function() UpdateTabVisuals(cp.Name) end)
+                    task.delay(0.38, function() UpdateTabVisuals(cp.Name) end)
+                    task.delay(0.75, function() UpdateTabVisuals(cp.Name) end)
+                    task.delay(0.85, function() UpdateTabVisuals(cp.Name) end)
+                    task.delay(1.0,  function() UpdateTabVisuals(cp.Name) end)
+                    task.delay(1.5,  function() UpdateTabVisuals(cp.Name) end)
                 end
             end)
         end
 
         UpdateTabVisuals()
+        -- Startup sweep: enforce tab colors repeatedly for the first 12s to outlast all Rayfield init tweens
+        local _sweepTimes = {0.1, 0.3, 0.5, 0.75, 1.0, 1.3, 1.6, 2.0, 2.5, 3.0, 4.0, 5.0, 7.0, 12.0}
+        for _, t in ipairs(_sweepTimes) do
+            task.delay(t, function() pcall(UpdateTabVisuals) end)
+        end
     end
 
     -- Centralized Full Fading & Window State Synchronizer
@@ -4122,13 +4126,17 @@ local function PatchRayfieldDOM()
             spStroke.Transparency = 0.1
 
             -- Deferred color refresh so accent is applied after theme fully loads
-            task.defer(function()
+            local function _refreshStepperColors()
                 local acc = GetThemeAccentColor()
-                smStroke.Color = acc
-                spStroke.Color = acc
-                stepMinus.TextColor3 = acc
-                stepPlus.TextColor3 = acc
-            end)
+                pcall(function() smStroke.Color = acc end)
+                pcall(function() spStroke.Color = acc end)
+                pcall(function() stepMinus.TextColor3 = acc end)
+                pcall(function() stepPlus.TextColor3 = acc end)
+            end
+            task.defer(_refreshStepperColors)
+            task.delay(0.5, _refreshStepperColors)
+            task.delay(1.5, _refreshStepperColors)
+            task.delay(3.0, _refreshStepperColors)
 
             local function AdjustSlider(delta)
                 PlayUISound("stepper")
@@ -4499,13 +4507,17 @@ local function PatchRayfieldDOM()
                     lpStroke.Transparency = 0.1
 
                     -- Deferred color refresh so accent is applied after theme fully loads
-                    task.defer(function()
+                    local function _refreshLateStepperColors()
                         local acc = GetThemeAccentColor()
-                        lmStroke.Color = acc
-                        lpStroke.Color = acc
-                        lMinus.TextColor3 = acc
-                        lPlus.TextColor3 = acc
-                    end)
+                        pcall(function() lmStroke.Color = acc end)
+                        pcall(function() lpStroke.Color = acc end)
+                        pcall(function() lMinus.TextColor3 = acc end)
+                        pcall(function() lPlus.TextColor3 = acc end)
+                    end
+                    task.defer(_refreshLateStepperColors)
+                    task.delay(0.5, _refreshLateStepperColors)
+                    task.delay(1.5, _refreshLateStepperColors)
+                    task.delay(3.0, _refreshLateStepperColors)
                 end
             end)
         end)
